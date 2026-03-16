@@ -222,7 +222,7 @@ export default function Contacts() {
         {filtered.length === 0 ? (
           <div className="empty-state">
             <div className="icon">👥</div>
-            <p>{filter === 'due' ? 'No follow-ups due — you're caught up!' : 'No contacts match this filter'}</p>
+            <p>{filter === 'due' ? "No follow-ups due — you're caught up!" : 'No contacts match this filter'}</p>
           </div>
         ) : (
           filtered.map(c => (
