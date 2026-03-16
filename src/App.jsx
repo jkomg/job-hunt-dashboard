@@ -6,14 +6,14 @@ import Contacts from './components/Contacts.jsx'
 import DailyCheckin from './components/DailyCheckin.jsx'
 
 const NAV = [
-  { id: 'dashboard', label: 'Morning Briefing', icon: '☀️' },
-  { id: 'checkin',   label: 'Daily Check-in',  icon: '✅' },
-  { id: 'pipeline',  label: 'Job Pipeline',    icon: '🎯' },
-  { id: 'contacts',  label: 'Outreach',        icon: '👥' },
+  { id: 'dashboard', label: 'Briefing', icon: '☀️' },
+  { id: 'checkin',   label: 'Check-in', icon: '✅' },
+  { id: 'pipeline',  label: 'Pipeline', icon: '🎯' },
+  { id: 'contacts',  label: 'Outreach', icon: '👥' },
 ]
 
 export default function App() {
-  const [authed, setAuthed] = useState(null) // null=loading, false=logged out, true=logged in
+  const [authed, setAuthed] = useState(null)
   const [view, setView] = useState('dashboard')
 
   useEffect(() => {
@@ -28,12 +28,7 @@ export default function App() {
   }
 
   if (authed === null) {
-    return (
-      <div className="loading">
-        <div className="spin" />
-        Loading…
-      </div>
-    )
+    return <div className="loading"><div className="spin" />Loading…</div>
   }
 
   if (!authed) {
@@ -42,6 +37,7 @@ export default function App() {
 
   return (
     <div className="app">
+      {/* Desktop sidebar */}
       <aside className="sidebar">
         <div className="sidebar-logo">Job Hunt<span>.</span></div>
         <nav>
@@ -63,12 +59,28 @@ export default function App() {
         </div>
       </aside>
 
+      {/* Main content */}
       <main className="main">
         {view === 'dashboard' && <Dashboard onNavigate={setView} />}
         {view === 'checkin'   && <DailyCheckin />}
         {view === 'pipeline'  && <Pipeline />}
         {view === 'contacts'  && <Contacts />}
       </main>
+
+      {/* Mobile bottom nav */}
+      <nav className="bottom-nav">
+        {NAV.map(n => (
+          <button
+            key={n.id}
+            className={`bottom-nav-item${view === n.id ? ' active' : ''}`}
+            onClick={() => setView(n.id)}
+          >
+            <span className="nav-icon">{n.icon}</span>
+            {n.label}
+            {view === n.id && <div className="bnav-dot" />}
+          </button>
+        ))}
+      </nav>
     </div>
   )
 }

@@ -57,6 +57,7 @@ function AddModal({ onClose, onSave }) {
   return (
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="modal">
+        <div className="modal-handle" />
         <div className="modal-header">
           <span className="modal-title">Add to Pipeline</span>
           <button className="modal-close" onClick={onClose}>×</button>
@@ -107,6 +108,7 @@ function CardModal({ card, onClose, onStageChange }) {
   return (
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="modal">
+        <div className="modal-handle" />
         <div className="modal-header">
           <span className="modal-title">{card.Company}</span>
           <button className="modal-close" onClick={onClose}>×</button>
@@ -180,12 +182,12 @@ export default function Pipeline() {
   return (
     <div>
       <div className="page-header">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between pipeline-header-row">
           <div>
             <h1>Job Pipeline</h1>
             <div className="subtitle">{items.length} total · {items.filter(i => !i.Stage?.includes('Closed')).length} active</div>
           </div>
-          <button className="btn btn-primary" onClick={() => setShowAdd(true)}>+ Add</button>
+          <button className="btn btn-primary btn-sm" onClick={() => setShowAdd(true)}>+ Add</button>
         </div>
       </div>
 
@@ -197,6 +199,7 @@ export default function Pipeline() {
         ))}
       </div>
 
+      <div className="kanban-scroll">
       <div className="kanban">
         {STAGES.filter(s => filter === 'all' || (filter === 'active' ? !s.includes('Closed') : s === filter || filter === 'active')).map(stage => {
           const cards = byStage[stage] || []
@@ -224,6 +227,7 @@ export default function Pipeline() {
             </div>
           )
         })}
+      </div>
       </div>
 
       {selected && (

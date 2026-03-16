@@ -49,6 +49,7 @@ function AddModal({ onClose, onSave }) {
   return (
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="modal">
+        <div className="modal-handle" />
         <div className="modal-header">
           <span className="modal-title">Add Contact</span>
           <button className="modal-close" onClick={onClose}>×</button>
@@ -110,6 +111,7 @@ function ContactModal({ contact, onClose, onUpdate }) {
   return (
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="modal">
+        <div className="modal-handle" />
         <div className="modal-header">
           <span className="modal-title">{contact.Name}</span>
           <button className="modal-close" onClick={onClose}>×</button>
@@ -197,25 +199,25 @@ export default function Contacts() {
             <h1>Outreach & Contacts</h1>
             <div className="subtitle">{contacts.length} contacts · {dueCount} follow-ups due</div>
           </div>
-          <button className="btn btn-primary" onClick={() => setShowAdd(true)}>+ Add Contact</button>
+          <button className="btn btn-primary btn-sm" onClick={() => setShowAdd(true)}>+ Add</button>
         </div>
       </div>
 
-      <div className="flex gap-12 mb-16" style={{ flexWrap: 'wrap' }}>
-        <div className="tabs" style={{ marginBottom: 0, borderBottom: 'none', flex: 1 }}>
-          <button className={`tab${filter === 'due' ? ' active' : ''}`} onClick={() => setFilter('due')}>
-            Follow-ups Due {dueCount > 0 && <span style={{ color: 'var(--red)', marginLeft: 4 }}>({dueCount})</span>}
-          </button>
-          <button className={`tab${filter === 'hot' ? ' active' : ''}`} onClick={() => setFilter('hot')}>Hot / Warm</button>
-          <button className={`tab${filter === 'cold' ? ' active' : ''}`} onClick={() => setFilter('cold')}>Cold</button>
-          <button className={`tab${filter === 'all' ? ' active' : ''}`} onClick={() => setFilter('all')}>All</button>
-        </div>
+      <div className="contacts-toolbar mb-16" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         <input
-          style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', padding: '6px 12px', width: 200 }}
-          placeholder="Search…"
+          className="search-input"
+          placeholder="Search contacts…"
           value={search}
           onChange={e => setSearch(e.target.value)}
         />
+        <div className="tabs" style={{ marginBottom: 0 }}>
+          <button className={`tab${filter === 'due' ? ' active' : ''}`} onClick={() => setFilter('due')}>
+            Due {dueCount > 0 && <span style={{ color: 'var(--red)', marginLeft: 3 }}>({dueCount})</span>}
+          </button>
+          <button className={`tab${filter === 'hot' ? ' active' : ''}`} onClick={() => setFilter('hot')}>Hot/Warm</button>
+          <button className={`tab${filter === 'cold' ? ' active' : ''}`} onClick={() => setFilter('cold')}>Cold</button>
+          <button className={`tab${filter === 'all' ? ' active' : ''}`} onClick={() => setFilter('all')}>All</button>
+        </div>
       </div>
 
       <div className="card" style={{ padding: 0 }}>
