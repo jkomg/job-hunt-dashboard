@@ -1,0 +1,18 @@
+#!/bin/sh
+# Block direct pushes to main — use a PR instead
+
+while read local_ref local_sha remote_ref remote_sha; do
+  if echo "$remote_ref" | grep -q "refs/heads/main"; then
+    echo ""
+    echo "  ✋ Direct push to main is not allowed."
+    echo "  Create a feature branch and open a PR:"
+    echo ""
+    echo "    git checkout -b your-branch-name"
+    echo "    git push origin your-branch-name"
+    echo "    gh pr create"
+    echo ""
+    exit 1
+  fi
+done
+
+exit 0
