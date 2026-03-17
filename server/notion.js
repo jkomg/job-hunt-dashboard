@@ -279,8 +279,8 @@ export async function getDashboardData() {
     ['💬 In Conversation', '📞 Interview Scheduled', '🎯 Interviewing'].includes(p.Stage)
   )
 
-  // Week stats from recent logs (client will filter by date, we send all recent)
-  const weekStats = recentLogs.reduce((acc, log) => {
+  // Week stats: 8 logs fetched so client can find yesterday, but only sum 7
+  const weekStats = recentLogs.slice(0, 7).reduce((acc, log) => {
     acc.outreach += log['Outreach Sent'] || 0
     acc.responses += log['Responses Received'] || 0
     acc.applications += log['Applications Submitted'] || 0
