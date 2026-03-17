@@ -4,6 +4,7 @@ import Dashboard from './components/Dashboard.jsx'
 import Pipeline from './components/Pipeline.jsx'
 import Contacts from './components/Contacts.jsx'
 import DailyCheckin from './components/DailyCheckin.jsx'
+import { useTheme, THEMES } from './useTheme.js'
 
 const NAV = [
   { id: 'dashboard', label: 'Briefing', icon: '☀️' },
@@ -15,6 +16,7 @@ const NAV = [
 export default function App() {
   const [authed, setAuthed] = useState(null)
   const [view, setView] = useState('dashboard')
+  const [theme, setTheme] = useTheme()
 
   useEffect(() => {
     fetch('/api/me', { credentials: 'include' })
@@ -53,6 +55,20 @@ export default function App() {
           ))}
         </nav>
         <div className="sidebar-footer">
+          {/* Theme picker */}
+          <div className="theme-picker">
+            {THEMES.map(t => (
+              <button
+                key={t.id}
+                className={`theme-btn${theme === t.id ? ' active' : ''}`}
+                onClick={() => setTheme(t.id)}
+                title={t.label}
+              >
+                <span className="theme-icon">{t.icon}</span>
+                {t.label}
+              </button>
+            ))}
+          </div>
           <button className="logout-btn" onClick={logout}>
             <span>↩</span> Sign out
           </button>
@@ -61,6 +77,19 @@ export default function App() {
 
       {/* Main content */}
       <main className="main">
+        {/* Mobile theme picker — dots in top-right corner */}
+        <div className="theme-picker-mobile">
+          {THEMES.map(t => (
+            <button
+              key={t.id}
+              className={`theme-dot${theme === t.id ? ' active' : ''}`}
+              data-t={t.id}
+              onClick={() => setTheme(t.id)}
+              title={t.label}
+            />
+          ))}
+        </div>
+
         {view === 'dashboard' && <Dashboard onNavigate={setView} />}
         {view === 'checkin'   && <DailyCheckin />}
         {view === 'pipeline'  && <Pipeline />}
