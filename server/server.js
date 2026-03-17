@@ -15,7 +15,7 @@ import {
 import {
   getDashboardData,
   getPipeline, updatePipelineEntry, updatePipelineStage, updatePipelineFollowUp, createPipelineEntry,
-  getContacts, markContacted, updateContactStatus, createContact,
+  getContacts, markContacted, updateContactStatus, createContact, updateContact,
   getDailyLogs, getTodayLog, getRecentLogs, createDailyLog, updateDailyLog
 } from './notion.js'
 
@@ -169,6 +169,15 @@ app.post('/api/contacts/:id/contacted', requireAuth, async (req, res) => {
 app.patch('/api/contacts/:id/status', requireAuth, async (req, res) => {
   try {
     await updateContactStatus(req.params.id, req.body.status)
+    res.json({ ok: true })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+app.patch('/api/contacts/:id', requireAuth, async (req, res) => {
+  try {
+    await updateContact(req.params.id, req.body)
     res.json({ ok: true })
   } catch (e) {
     res.status(500).json({ error: e.message })

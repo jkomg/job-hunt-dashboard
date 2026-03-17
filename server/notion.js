@@ -44,6 +44,9 @@ function pageToRecord(page) {
       case 'phone_number':
         out[key] = val.phone_number || null
         break
+      case 'email':
+        out[key] = val.email || null
+        break
       default:
         out[key] = null
     }
@@ -97,6 +100,7 @@ export async function updatePipelineEntry(pageId, data) {
   if (data['Company Address'] != null) properties['Company Address'] = { rich_text: [{ text: { content: data['Company Address'] || '' } }] }
   if (data['Company Phone'] != null) properties['Company Phone'] = { phone_number: data['Company Phone'] || null }
   if (data.Notes != null) properties.Notes = { rich_text: [{ text: { content: data.Notes || '' } }] }
+  if (data['Research Notes'] != null) properties['Research Notes'] = { rich_text: [{ text: { content: data['Research Notes'] || '' } }] }
   return notion.pages.update({ page_id: pageId, properties })
 }
 
@@ -135,6 +139,7 @@ export async function createPipelineEntry(data) {
   if (data['Company Address']) properties['Company Address'] = { rich_text: [{ text: { content: data['Company Address'] } }] }
   if (data['Company Phone']) properties['Company Phone'] = { phone_number: data['Company Phone'] }
   if (data.Notes) properties.Notes = { rich_text: [{ text: { content: data.Notes } }] }
+  if (data['Research Notes']) properties['Research Notes'] = { rich_text: [{ text: { content: data['Research Notes'] } }] }
 
   return notion.pages.create({ parent: { database_id: DB.pipeline }, properties })
 }
@@ -191,9 +196,29 @@ export async function createContact(data) {
   if (data['How We Know Each Other']) properties['How We Know Each Other'] = { select: { name: data['How We Know Each Other'] } }
   if (data['LinkedIn URL']) properties['LinkedIn URL'] = { url: data['LinkedIn URL'] }
   if (data['Next Follow-Up']) properties['Next Follow-Up'] = { date: { start: data['Next Follow-Up'] } }
+  if (data.Email) properties.Email = { email: data.Email }
+  if (data.Phone) properties.Phone = { phone_number: data.Phone }
+  if (data['Resume Used']) properties['Resume Used'] = { rich_text: [{ text: { content: data['Resume Used'] } }] }
   if (data.Notes) properties.Notes = { rich_text: [{ text: { content: data.Notes } }] }
 
   return notion.pages.create({ parent: { database_id: DB.contacts }, properties })
+}
+
+export async function updateContact(pageId, data) {
+  const properties = {}
+  if (data.Name) properties.Name = { title: [{ text: { content: data.Name } }] }
+  if (data.Title != null) properties.Title = { rich_text: [{ text: { content: data.Title || '' } }] }
+  if (data.Company != null) properties.Company = { rich_text: [{ text: { content: data.Company || '' } }] }
+  if (data.Warmth) properties.Warmth = { select: { name: data.Warmth } }
+  if (data.Status) properties.Status = { select: { name: data.Status } }
+  if (data['How We Know Each Other'] !== undefined) properties['How We Know Each Other'] = data['How We Know Each Other'] ? { select: { name: data['How We Know Each Other'] } } : { select: null }
+  if (data['LinkedIn URL'] != null) properties['LinkedIn URL'] = { url: data['LinkedIn URL'] || null }
+  if (data['Next Follow-Up'] != null) properties['Next Follow-Up'] = data['Next Follow-Up'] ? { date: { start: data['Next Follow-Up'] } } : { date: null }
+  if (data.Email != null) properties.Email = { email: data.Email || null }
+  if (data.Phone != null) properties.Phone = { phone_number: data.Phone || null }
+  if (data['Resume Used'] != null) properties['Resume Used'] = { rich_text: [{ text: { content: data['Resume Used'] || '' } }] }
+  if (data.Notes != null) properties.Notes = { rich_text: [{ text: { content: data.Notes || '' } }] }
+  return notion.pages.update({ page_id: pageId, properties })
 }
 
 // ─── Daily Action Log ──────────────────────────────────────────────────────────

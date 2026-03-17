@@ -36,7 +36,7 @@ function emptyForm(defaults = {}) {
     Company: '', Role: '', Stage: '🔍 Researching', Priority: '', Sector: '',
     'Job URL': '', 'Salary Range': '', 'Date Applied': '', 'Follow-Up Date': '',
     'Contact Name': '', 'Contact Title': '', 'Outreach Method': '', 'Resume Version': '',
-    'Company Address': '', 'Company Phone': '', Notes: '',
+    'Company Address': '', 'Company Phone': '', Notes: '', 'Research Notes': '',
     ...defaults
   }
 }
@@ -62,6 +62,7 @@ function PipelineForm({ form, set }) {
       </div>
       <div className="field"><label>Job URL</label><input value={form['Job URL']} onChange={e => set('Job URL', e.target.value)} placeholder="https://…" /></div>
       <div className="field"><label>Notes</label><textarea value={form.Notes} onChange={e => set('Notes', e.target.value)} /></div>
+      <div className="field"><label>Research Notes</label><textarea value={form['Research Notes']} onChange={e => set('Research Notes', e.target.value)} placeholder="Company background, culture, products, interview prep…" /></div>
     </>
   )
 }
@@ -125,7 +126,8 @@ function CardModal({ card, onClose, onUpdate }) {
     'Resume Version': card['Resume Version'] || '',
     'Company Address': card['Company Address'] || '',
     'Company Phone': card['Company Phone'] || '',
-    Notes: card.Notes || ''
+    Notes: card.Notes || '',
+    'Research Notes': card['Research Notes'] || ''
   }))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')

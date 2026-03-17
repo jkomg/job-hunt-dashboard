@@ -23,8 +23,39 @@ function isOverdue(dateStr) {
   return new Date(dateStr) <= new Date()
 }
 
+function emptyContactForm(defaults = {}) {
+  return {
+    Name: '', Title: '', Company: '', Warmth: '❄️ Cold — no contact yet',
+    Status: 'Need to reach out', 'How We Know Each Other': '',
+    'LinkedIn URL': '', 'Next Follow-Up': '',
+    Email: '', Phone: '', 'Resume Used': '', Notes: '',
+    ...defaults
+  }
+}
+
+function ContactForm({ form, set }) {
+  return (
+    <>
+      <div className="checkin-grid">
+        <div className="field"><label>Name *</label><input value={form.Name} onChange={e => set('Name', e.target.value)} /></div>
+        <div className="field"><label>Title</label><input value={form.Title} onChange={e => set('Title', e.target.value)} /></div>
+        <div className="field"><label>Company</label><input value={form.Company} onChange={e => set('Company', e.target.value)} /></div>
+        <div className="field"><label>Email</label><input type="email" value={form.Email} onChange={e => set('Email', e.target.value)} placeholder="name@company.com" /></div>
+        <div className="field"><label>Phone</label><input type="tel" value={form.Phone} onChange={e => set('Phone', e.target.value)} placeholder="(555) 555-5555" /></div>
+        <div className="field"><label>Warmth</label><select value={form.Warmth} onChange={e => set('Warmth', e.target.value)}>{WARMTH_OPTIONS.map(o => <option key={o}>{o}</option>)}</select></div>
+        <div className="field"><label>Status</label><select value={form.Status} onChange={e => set('Status', e.target.value)}>{STATUS_OPTIONS.map(o => <option key={o}>{o}</option>)}</select></div>
+        <div className="field"><label>How We Know Each Other</label><select value={form['How We Know Each Other']} onChange={e => set('How We Know Each Other', e.target.value)}><option value="">—</option>{HOW_OPTIONS.map(o => <option key={o}>{o}</option>)}</select></div>
+        <div className="field"><label>Next Follow-Up</label><input type="date" value={form['Next Follow-Up']} onChange={e => set('Next Follow-Up', e.target.value)} /></div>
+        <div className="field"><label>LinkedIn URL</label><input value={form['LinkedIn URL']} onChange={e => set('LinkedIn URL', e.target.value)} placeholder="https://linkedin.com/in/…" /></div>
+      </div>
+      <div className="field"><label>Resume / Cover Letter Used</label><input value={form['Resume Used']} onChange={e => set('Resume Used', e.target.value)} placeholder="e.g. CS General + Healthcare tailored CL" /></div>
+      <div className="field"><label>Notes</label><textarea value={form.Notes} onChange={e => set('Notes', e.target.value)} /></div>
+    </>
+  )
+}
+
 function AddModal({ onClose, onSave }) {
-  const [form, setForm] = useState({ Name: '', Title: '', Company: '', Warmth: '❄️ Cold — no contact yet', Status: 'Need to reach out', 'How We Know Each Other': '', 'LinkedIn URL': '', 'Next Follow-Up': '', Notes: '' })
+  const [form, setForm] = useState(emptyContactForm())
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -55,17 +86,7 @@ function AddModal({ onClose, onSave }) {
           <button className="modal-close" onClick={onClose}>×</button>
         </div>
         {error && <div className="error-msg">{error}</div>}
-        <div className="checkin-grid">
-          <div className="field"><label>Name *</label><input value={form.Name} onChange={e => set('Name', e.target.value)} /></div>
-          <div className="field"><label>Title</label><input value={form.Title} onChange={e => set('Title', e.target.value)} /></div>
-          <div className="field"><label>Company</label><input value={form.Company} onChange={e => set('Company', e.target.value)} /></div>
-          <div className="field"><label>Warmth</label><select value={form.Warmth} onChange={e => set('Warmth', e.target.value)}>{WARMTH_OPTIONS.map(o => <option key={o}>{o}</option>)}</select></div>
-          <div className="field"><label>Status</label><select value={form.Status} onChange={e => set('Status', e.target.value)}>{STATUS_OPTIONS.map(o => <option key={o}>{o}</option>)}</select></div>
-          <div className="field"><label>How We Know Each Other</label><select value={form['How We Know Each Other']} onChange={e => set('How We Know Each Other', e.target.value)}><option value="">—</option>{HOW_OPTIONS.map(o => <option key={o}>{o}</option>)}</select></div>
-          <div className="field"><label>Next Follow-Up</label><input type="date" value={form['Next Follow-Up']} onChange={e => set('Next Follow-Up', e.target.value)} /></div>
-          <div className="field"><label>LinkedIn URL</label><input value={form['LinkedIn URL']} onChange={e => set('LinkedIn URL', e.target.value)} placeholder="https://linkedin.com/in/…" /></div>
-        </div>
-        <div className="field"><label>Notes</label><textarea value={form.Notes} onChange={e => set('Notes', e.target.value)} /></div>
+        <ContactForm form={form} set={set} />
         <div className="modal-footer">
           <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
           <button className="btn btn-primary" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Add Contact'}</button>
@@ -76,14 +97,47 @@ function AddModal({ onClose, onSave }) {
 }
 
 function ContactModal({ contact, onClose, onUpdate }) {
-  const [status, setStatus] = useState(contact.Status || '')
-  const [nextFollowUp, setNextFollowUp] = useState('')
+  const [form, setForm] = useState(emptyContactForm({
+    Name: contact.Name || '',
+    Title: contact.Title || '',
+    Company: contact.Company || '',
+    Warmth: contact.Warmth || '❄️ Cold — no contact yet',
+    Status: contact.Status || 'Need to reach out',
+    'How We Know Each Other': contact['How We Know Each Other'] || '',
+    'LinkedIn URL': contact['LinkedIn URL'] || '',
+    'Next Follow-Up': contact['Next Follow-Up'] || '',
+    Email: contact.Email || '',
+    Phone: contact.Phone || '',
+    'Resume Used': contact['Resume Used'] || '',
+    Notes: contact.Notes || ''
+  }))
   const [saving, setSaving] = useState(false)
-  const [msg, setMsg] = useState('')
+  const [saved, setSaved] = useState(false)
+  const [error, setError] = useState('')
+  const [nextFollowUp, setNextFollowUp] = useState('')
+
+  function set(k, v) { setForm(p => ({ ...p, [k]: v })) }
+
+  async function save() {
+    setSaving(true)
+    setError('')
+    try {
+      const r = await fetch(`/api/contacts/${contact.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(form)
+      })
+      if (!r.ok) throw new Error((await r.json()).error)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+      onUpdate()
+    } catch (e) { setError(e.message) }
+    finally { setSaving(false) }
+  }
 
   async function markContacted() {
     setSaving(true)
-    setMsg('')
     await fetch(`/api/contacts/${contact.id}/contacted`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -91,20 +145,6 @@ function ContactModal({ contact, onClose, onUpdate }) {
       body: JSON.stringify({ nextFollowUp: nextFollowUp || undefined })
     })
     setSaving(false)
-    setMsg('Marked as contacted!')
-    onUpdate()
-  }
-
-  async function updateStatus() {
-    setSaving(true)
-    await fetch(`/api/contacts/${contact.id}/status`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ status })
-    })
-    setSaving(false)
-    setMsg('Status updated!')
     onUpdate()
   }
 
@@ -116,20 +156,10 @@ function ContactModal({ contact, onClose, onUpdate }) {
           <span className="modal-title">{contact.Name}</span>
           <button className="modal-close" onClick={onClose}>×</button>
         </div>
-        {msg && <div className="success-msg">{msg}</div>}
+        {error && <div className="error-msg">{error}</div>}
+        {saved && <div className="success-msg">Saved to Notion!</div>}
 
-        <table className="data-table" style={{ marginBottom: 16 }}>
-          <tbody>
-            {contact.Title && <tr><td className="text-muted">Title</td><td>{contact.Title}</td></tr>}
-            {contact.Company && <tr><td className="text-muted">Company</td><td>{contact.Company}</td></tr>}
-            {contact.Warmth && <tr><td className="text-muted">Warmth</td><td><span className={`badge ${warmthColor(contact.Warmth)}`}>{contact.Warmth}</span></td></tr>}
-            {contact['How We Know Each Other'] && <tr><td className="text-muted">Connection</td><td>{contact['How We Know Each Other']}</td></tr>}
-            {contact['Last Contact'] && <tr><td className="text-muted">Last Contact</td><td>{contact['Last Contact']}</td></tr>}
-            {contact['Next Follow-Up'] && <tr><td className="text-muted">Follow-Up Due</td><td style={{ color: isOverdue(contact['Next Follow-Up']) ? 'var(--red)' : 'inherit' }}>{contact['Next Follow-Up']}</td></tr>}
-            {contact['LinkedIn URL'] && <tr><td className="text-muted">LinkedIn</td><td><a href={contact['LinkedIn URL']} target="_blank" rel="noreferrer" style={{ color: 'var(--accent)' }}>View profile →</a></td></tr>}
-            {contact.Notes && <tr><td className="text-muted" style={{ verticalAlign: 'top' }}>Notes</td><td style={{ whiteSpace: 'pre-wrap' }}>{contact.Notes}</td></tr>}
-          </tbody>
-        </table>
+        <ContactForm form={form} set={set} />
 
         <hr className="divider" />
 
@@ -141,18 +171,9 @@ function ContactModal({ contact, onClose, onUpdate }) {
           ✓ Mark Contacted
         </button>
 
-        <div className="field">
-          <label>Update status</label>
-          <select value={status} onChange={e => setStatus(e.target.value)}>
-            {STATUS_OPTIONS.map(o => <option key={o}>{o}</option>)}
-          </select>
-        </div>
-
         <div className="modal-footer">
           <button className="btn btn-ghost" onClick={onClose}>Close</button>
-          <button className="btn btn-primary" onClick={updateStatus} disabled={saving || status === contact.Status}>
-            {saving ? 'Saving…' : 'Update Status'}
-          </button>
+          <button className="btn btn-primary" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save Changes'}</button>
         </div>
       </div>
     </div>
@@ -175,8 +196,6 @@ export default function Contacts() {
   }
 
   useEffect(load, [])
-
-  const today = new Date().toISOString().split('T')[0]
 
   const filtered = contacts.filter(c => {
     const matchSearch = !search || `${c.Name} ${c.Company} ${c.Title}`.toLowerCase().includes(search.toLowerCase())
