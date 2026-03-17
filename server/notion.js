@@ -191,44 +191,33 @@ export async function getDailyLogs(limit = 30) {
   return pages.slice(0, limit).map(pageToRecord)
 }
 
-function localDateStr(date) {
-  // Returns "YYYY-MM-DD" in local time (server timezone = user's Mac timezone)
-  const y = date.getFullYear()
-  const m = String(date.getMonth() + 1).padStart(2, '0')
-  const d = String(date.getDate()).padStart(2, '0')
-  return `${y}-${m}-${d}`
-}
-
-function findLogForDate(pages, targetDateStr) {
-  for (const page of pages) {
-    // Match by last_edited_time date — most recent edit wins for a given day
-    const editedDate = localDateStr(new Date(page.last_edited_time))
-    const createdDate = localDateStr(new Date(page.created_time))
-    if (editedDate === targetDateStr || createdDate === targetDateStr) {
-      return pageToRecord(page)
-    }
-  }
-  return null
-}
-
+// Returns the most recent entry with raw timestamps — client decides if it's "today"
 export async function getTodayLog() {
   const res = await notion.databases.query({
     database_id: DB.daily,
-    sorts: [{ timestamp: 'last_edited_time', direction: 'descending' }],
-    page_size: 10
+    sorts: [{ timestamp: 'created_time', direction: 'descending' }],
+    page_size: 1
   })
-  return findLogForDate(res.results, localDateStr(new Date()))
+  if (!res.results.length) return null
+  const page = res.results[0]
+  const record = pageToRecord(page)
+  record._createdTime = page.created_time       // UTC ISO string — browser converts to local
+  record._lastEditedTime = page.last_edited_time
+  return record
 }
 
-export async function getYesterdayLog() {
-  const yesterday = new Date()
-  yesterday.setDate(yesterday.getDate() - 1)
+// Returns recent logs with raw timestamps so the client can identify yesterday's entry
+export async function getRecentLogs(n = 5) {
   const res = await notion.databases.query({
     database_id: DB.daily,
-    sorts: [{ timestamp: 'last_edited_time', direction: 'descending' }],
-    page_size: 10
+    sorts: [{ timestamp: 'created_time', direction: 'descending' }],
+    page_size: n
   })
-  return findLogForDate(res.results, localDateStr(yesterday))
+  return res.results.map(page => {
+    const record = pageToRecord(page)
+    record._createdTime = page.created_time
+    return record
+  })
 }
 
 export async function createDailyLog(data) {
@@ -280,19 +269,17 @@ export async function updateDailyLog(pageId, data) {
 // ─── Dashboard summary ────────────────────────────────────────────────────────
 
 export async function getDashboardData() {
-  const [overdueContacts, yesterdayLog, recentLogs] = await Promise.all([
+  const [overdueContacts, recentLogs, pipeline] = await Promise.all([
     getOverdueFollowUps(),
-    getYesterdayLog(),
-    getDailyLogs(7)
+    getRecentLogs(8),   // includes timestamps so client finds yesterday
+    getPipeline()
   ])
 
-  // Pipeline items needing attention
-  const pipeline = await getPipeline()
   const activeItems = pipeline.filter(p =>
     ['💬 In Conversation', '📞 Interview Scheduled', '🎯 Interviewing'].includes(p.Stage)
   )
 
-  // This week's stats (last 7 days of logs)
+  // Week stats from recent logs (client will filter by date, we send all recent)
   const weekStats = recentLogs.reduce((acc, log) => {
     acc.outreach += log['Outreach Sent'] || 0
     acc.responses += log['Responses Received'] || 0
@@ -303,11 +290,8 @@ export async function getDashboardData() {
 
   return {
     overdueContacts,
-    yesterdayTop3: yesterdayLog?.["Tomorrow's Top 3"] || null,
+    recentLogs,   // client picks yesterday's Top 3 using its local timezone
     activeItems,
-    weekStats,
-    todayDate: new Date().toLocaleDateString('en-US', {
-      weekday: 'long', month: 'long', day: 'numeric'
-    })
+    weekStats
   }
 }
