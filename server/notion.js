@@ -41,6 +41,9 @@ function pageToRecord(page) {
       case 'url':
         out[key] = val.url || null
         break
+      case 'phone_number':
+        out[key] = val.phone_number || null
+        break
       default:
         out[key] = null
     }
@@ -108,6 +111,8 @@ export async function createPipelineEntry(data) {
   if (data['Contact Title']) properties['Contact Title'] = { rich_text: [{ text: { content: data['Contact Title'] } }] }
   if (data['Outreach Method']) properties['Outreach Method'] = { select: { name: data['Outreach Method'] } }
   if (data['Resume Version']) properties['Resume Version'] = { select: { name: data['Resume Version'] } }
+  if (data['Company Address']) properties['Company Address'] = { rich_text: [{ text: { content: data['Company Address'] } }] }
+  if (data['Company Phone']) properties['Company Phone'] = { phone_number: data['Company Phone'] }
   if (data.Notes) properties.Notes = { rich_text: [{ text: { content: data.Notes } }] }
 
   return notion.pages.create({ parent: { database_id: DB.pipeline }, properties })

@@ -32,7 +32,7 @@ function stageHeaderColor(stage) {
 }
 
 function AddModal({ onClose, onSave }) {
-  const [form, setForm] = useState({ Company: '', Role: '', Stage: '🔍 Researching', Priority: '', Sector: '', 'Job URL': '', 'Salary Range': '', 'Date Applied': '', 'Follow-Up Date': '', 'Contact Name': '', 'Contact Title': '', 'Outreach Method': '', 'Resume Version': '', Notes: '' })
+  const [form, setForm] = useState({ Company: '', Role: '', Stage: '🔍 Researching', Priority: '', Sector: '', 'Job URL': '', 'Salary Range': '', 'Date Applied': '', 'Follow-Up Date': '', 'Contact Name': '', 'Contact Title': '', 'Outreach Method': '', 'Resume Version': '', 'Company Address': '', 'Company Phone': '', Notes: '' })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -78,6 +78,10 @@ function AddModal({ onClose, onSave }) {
           <div className="field"><label>Resume Version</label><select value={form['Resume Version']} onChange={e => set('Resume Version', e.target.value)}><option value="">—</option>{RESUME_VERSIONS.map(v => <option key={v}>{v}</option>)}</select></div>
         </div>
         <div className="field"><label>Job URL</label><input value={form['Job URL']} onChange={e => set('Job URL', e.target.value)} placeholder="https://…" /></div>
+        <div className="checkin-grid">
+          <div className="field"><label>Company Address</label><input value={form['Company Address']} onChange={e => set('Company Address', e.target.value)} placeholder="123 Main St, City, ST 12345" /></div>
+          <div className="field"><label>Company Phone</label><input type="tel" value={form['Company Phone']} onChange={e => set('Company Phone', e.target.value)} placeholder="(555) 555-5555" /></div>
+        </div>
         <div className="field"><label>Notes</label><textarea value={form.Notes} onChange={e => set('Notes', e.target.value)} /></div>
         <div className="modal-footer">
           <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
@@ -125,6 +129,8 @@ function CardModal({ card, onClose, onStageChange }) {
             {card['Outreach Method'] && <tr><td className="text-muted">Outreach</td><td>{card['Outreach Method']}</td></tr>}
             {card['Resume Version'] && <tr><td className="text-muted">Resume</td><td>{card['Resume Version']}</td></tr>}
             {card['Job URL'] && <tr><td className="text-muted">URL</td><td><a href={card['Job URL']} target="_blank" rel="noreferrer" style={{ color: 'var(--accent)' }}>Open posting →</a></td></tr>}
+            {card['Company Address'] && <tr><td className="text-muted">Address</td><td>{card['Company Address']}</td></tr>}
+            {card['Company Phone'] && <tr><td className="text-muted">Phone</td><td><a href={`tel:${card['Company Phone']}`} style={{ color: 'var(--accent)' }}>{card['Company Phone']}</a></td></tr>}
             {card.Notes && <tr><td className="text-muted" style={{ verticalAlign: 'top' }}>Notes</td><td style={{ whiteSpace: 'pre-wrap' }}>{card.Notes}</td></tr>}
           </tbody>
         </table>
