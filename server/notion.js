@@ -79,6 +79,27 @@ export async function getPipeline() {
   ])
 }
 
+export async function updatePipelineEntry(pageId, data) {
+  const properties = {}
+  if (data.Company) properties.Company = { title: [{ text: { content: data.Company } }] }
+  if (data.Role != null) properties.Role = { rich_text: [{ text: { content: data.Role || '' } }] }
+  if (data.Stage) properties.Stage = { select: { name: data.Stage } }
+  if (data.Priority !== undefined) properties.Priority = data.Priority ? { select: { name: data.Priority } } : { select: null }
+  if (data.Sector !== undefined) properties.Sector = data.Sector ? { select: { name: data.Sector } } : { select: null }
+  if (data['Salary Range'] != null) properties['Salary Range'] = { rich_text: [{ text: { content: data['Salary Range'] || '' } }] }
+  if (data['Job URL'] != null) properties['Job URL'] = { url: data['Job URL'] || null }
+  if (data['Date Applied'] != null) properties['Date Applied'] = data['Date Applied'] ? { date: { start: data['Date Applied'] } } : { date: null }
+  if (data['Follow-Up Date'] != null) properties['Follow-Up Date'] = data['Follow-Up Date'] ? { date: { start: data['Follow-Up Date'] } } : { date: null }
+  if (data['Contact Name'] != null) properties['Contact Name'] = { rich_text: [{ text: { content: data['Contact Name'] || '' } }] }
+  if (data['Contact Title'] != null) properties['Contact Title'] = { rich_text: [{ text: { content: data['Contact Title'] || '' } }] }
+  if (data['Outreach Method'] !== undefined) properties['Outreach Method'] = data['Outreach Method'] ? { select: { name: data['Outreach Method'] } } : { select: null }
+  if (data['Resume Version'] !== undefined) properties['Resume Version'] = data['Resume Version'] ? { select: { name: data['Resume Version'] } } : { select: null }
+  if (data['Company Address'] != null) properties['Company Address'] = { rich_text: [{ text: { content: data['Company Address'] || '' } }] }
+  if (data['Company Phone'] != null) properties['Company Phone'] = { phone_number: data['Company Phone'] || null }
+  if (data.Notes != null) properties.Notes = { rich_text: [{ text: { content: data.Notes || '' } }] }
+  return notion.pages.update({ page_id: pageId, properties })
+}
+
 export async function updatePipelineStage(pageId, stage) {
   return notion.pages.update({
     page_id: pageId,
