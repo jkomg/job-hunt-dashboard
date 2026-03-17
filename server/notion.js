@@ -191,35 +191,44 @@ export async function getDailyLogs(limit = 30) {
   return pages.slice(0, limit).map(pageToRecord)
 }
 
+function localDateStr(date) {
+  // Returns "YYYY-MM-DD" in local time (server timezone = user's Mac timezone)
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+function findLogForDate(pages, targetDateStr) {
+  for (const page of pages) {
+    // Match by last_edited_time date — most recent edit wins for a given day
+    const editedDate = localDateStr(new Date(page.last_edited_time))
+    const createdDate = localDateStr(new Date(page.created_time))
+    if (editedDate === targetDateStr || createdDate === targetDateStr) {
+      return pageToRecord(page)
+    }
+  }
+  return null
+}
+
 export async function getTodayLog() {
-  const today = new Date().toLocaleDateString('en-US', {
-    month: 'long', day: 'numeric', year: 'numeric'
-  })
-  // Try to find by title (date string)
   const res = await notion.databases.query({
     database_id: DB.daily,
-    filter: { property: 'Date', title: { contains: today.split(',')[0] } },
-    sorts: [{ property: 'Date', direction: 'descending' }],
-    page_size: 1
+    sorts: [{ timestamp: 'last_edited_time', direction: 'descending' }],
+    page_size: 10
   })
-  if (res.results.length > 0) return pageToRecord(res.results[0])
-  return null
+  return findLogForDate(res.results, localDateStr(new Date()))
 }
 
 export async function getYesterdayLog() {
   const yesterday = new Date()
   yesterday.setDate(yesterday.getDate() - 1)
-  const label = yesterday.toLocaleDateString('en-US', {
-    month: 'long', day: 'numeric', year: 'numeric'
-  })
   const res = await notion.databases.query({
     database_id: DB.daily,
-    filter: { property: 'Date', title: { contains: label.split(',')[0] } },
-    sorts: [{ property: 'Date', direction: 'descending' }],
-    page_size: 1
+    sorts: [{ timestamp: 'last_edited_time', direction: 'descending' }],
+    page_size: 10
   })
-  if (res.results.length > 0) return pageToRecord(res.results[0])
-  return null
+  return findLogForDate(res.results, localDateStr(yesterday))
 }
 
 export async function createDailyLog(data) {
