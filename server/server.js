@@ -16,7 +16,7 @@ import {
   getDashboardData,
   getPipeline, updatePipelineStage, updatePipelineFollowUp, createPipelineEntry,
   getContacts, markContacted, updateContactStatus, createContact,
-  getDailyLogs, getTodayLog, createDailyLog, updateDailyLog
+  getDailyLogs, getTodayLog, getRecentLogs, createDailyLog, updateDailyLog
 } from './notion.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))

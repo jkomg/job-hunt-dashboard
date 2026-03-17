@@ -53,7 +53,17 @@ export default function Dashboard({ onNavigate }) {
   if (loading) return <div className="loading"><div className="spin" />Loading your briefing…</div>
   if (error) return <div className="error-msg">{error}</div>
 
-  const { overdueContacts, yesterdayTop3, activeItems, weekStats, todayDate } = data
+  const { overdueContacts, recentLogs, activeItems, weekStats } = data
+
+  // Find yesterday's entry using the browser's local timezone
+  const todayStr = new Date().toDateString()
+  const yesterdayStr = new Date(Date.now() - 864e5).toDateString()
+  const todayDate = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
+
+  const yesterdayLog = recentLogs?.find(l =>
+    l._createdTime && new Date(l._createdTime).toDateString() === yesterdayStr
+  )
+  const yesterdayTop3 = yesterdayLog?.["Tomorrow's Top 3"] || null
   const top3Lines = yesterdayTop3 ? yesterdayTop3.split('\n').filter(Boolean) : []
 
   return (

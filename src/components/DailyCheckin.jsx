@@ -54,23 +54,31 @@ export default function DailyCheckin() {
       .then(r => r.json())
       .then(d => {
         if (d?.id) {
-          setExistingId(d.id)
-          setForm(prev => ({
-            ...prev,
-            'Mindset (1-10)': d['Mindset (1-10)'] ?? prev['Mindset (1-10)'],
-            'Energy (1-10)': d['Energy (1-10)'] ?? prev['Energy (1-10)'],
-            'Outreach Sent': d['Outreach Sent'] ?? prev['Outreach Sent'],
-            'Responses Received': d['Responses Received'] ?? prev['Responses Received'],
-            'Applications Submitted': d['Applications Submitted'] ?? prev['Applications Submitted'],
-            'Conversations / Calls': d['Conversations / Calls'] ?? prev['Conversations / Calls'],
-            'LinkedIn Posts': d['LinkedIn Posts'] ?? false,
-            'Volunteer Activity': d['Volunteer Activity'] ?? false,
-            'Exercise': d['Exercise'] || '',
-            'Cert Progress': d['Cert Progress'] || '',
-            'Win of the Day': d['Win of the Day'] || '',
-            'Gratitude / Reflection': d['Gratitude / Reflection'] || '',
-            "Tomorrow's Top 3": d["Tomorrow's Top 3"] || ''
-          }))
+          // Browser converts UTC timestamp to local time — correct regardless of server timezone
+          const entryDate = new Date(d._createdTime)
+          const isToday = entryDate.toDateString() === new Date().toDateString()
+
+          if (isToday) {
+            // Resume today's entry
+            setExistingId(d.id)
+            setForm(prev => ({
+              ...prev,
+              'Mindset (1-10)': d['Mindset (1-10)'] ?? prev['Mindset (1-10)'],
+              'Energy (1-10)': d['Energy (1-10)'] ?? prev['Energy (1-10)'],
+              'Outreach Sent': d['Outreach Sent'] ?? prev['Outreach Sent'],
+              'Responses Received': d['Responses Received'] ?? prev['Responses Received'],
+              'Applications Submitted': d['Applications Submitted'] ?? prev['Applications Submitted'],
+              'Conversations / Calls': d['Conversations / Calls'] ?? prev['Conversations / Calls'],
+              'LinkedIn Posts': d['LinkedIn Posts'] ?? false,
+              'Volunteer Activity': d['Volunteer Activity'] ?? false,
+              'Exercise': d['Exercise'] || '',
+              'Cert Progress': d['Cert Progress'] || '',
+              'Win of the Day': d['Win of the Day'] || '',
+              'Gratitude / Reflection': d['Gratitude / Reflection'] || '',
+              "Tomorrow's Top 3": d["Tomorrow's Top 3"] || ''
+            }))
+          }
+          // If not today, leave form blank — fresh start for a new day
         }
         setLoading(false)
       })
