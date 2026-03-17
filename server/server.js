@@ -14,7 +14,7 @@ import {
 
 import {
   getDashboardData,
-  getPipeline, updatePipelineStage, updatePipelineFollowUp, createPipelineEntry,
+  getPipeline, updatePipelineEntry, updatePipelineStage, updatePipelineFollowUp, createPipelineEntry,
   getContacts, markContacted, updateContactStatus, createContact,
   getDailyLogs, getTodayLog, getRecentLogs, createDailyLog, updateDailyLog
 } from './notion.js'
@@ -123,6 +123,15 @@ app.patch('/api/pipeline/:id/stage', requireAuth, async (req, res) => {
 app.patch('/api/pipeline/:id/followup', requireAuth, async (req, res) => {
   try {
     await updatePipelineFollowUp(req.params.id, req.body.date)
+    res.json({ ok: true })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+app.patch('/api/pipeline/:id', requireAuth, async (req, res) => {
+  try {
+    await updatePipelineEntry(req.params.id, req.body)
     res.json({ ok: true })
   } catch (e) {
     res.status(500).json({ error: e.message })
