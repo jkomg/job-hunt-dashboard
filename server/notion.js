@@ -101,6 +101,7 @@ export async function updatePipelineEntry(pageId, data) {
   if (data['Company Phone'] != null) properties['Company Phone'] = { phone_number: data['Company Phone'] || null }
   if (data.Notes != null) properties.Notes = { rich_text: [{ text: { content: data.Notes || '' } }] }
   if (data['Research Notes'] != null) properties['Research Notes'] = { rich_text: [{ text: { content: data['Research Notes'] || '' } }] }
+  if (data['Filed for Unemployment'] != null) properties['Filed for Unemployment'] = { checkbox: !!data['Filed for Unemployment'] }
   return notion.pages.update({ page_id: pageId, properties })
 }
 

@@ -37,6 +37,7 @@ function emptyForm(defaults = {}) {
     'Job URL': '', 'Salary Range': '', 'Date Applied': '', 'Follow-Up Date': '',
     'Contact Name': '', 'Contact Title': '', 'Outreach Method': '', 'Resume Version': '',
     'Company Address': '', 'Company Phone': '', Notes: '', 'Research Notes': '',
+    'Filed for Unemployment': false,
     ...defaults
   }
 }
@@ -63,6 +64,10 @@ function PipelineForm({ form, set }) {
       <div className="field"><label>Job URL</label><input value={form['Job URL']} onChange={e => set('Job URL', e.target.value)} placeholder="https://…" /></div>
       <div className="field"><label>Notes</label><textarea value={form.Notes} onChange={e => set('Notes', e.target.value)} /></div>
       <div className="field"><label>Research Notes</label><textarea value={form['Research Notes']} onChange={e => set('Research Notes', e.target.value)} placeholder="Company background, culture, products, interview prep…" /></div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+        <input type="checkbox" id="filed-ue" checked={!!form['Filed for Unemployment']} onChange={e => set('Filed for Unemployment', e.target.checked)} style={{ width: 16, height: 16, margin: 0, appearance: 'auto', flexShrink: 0 }} />
+        <label htmlFor="filed-ue" style={{ fontSize: 13, color: 'var(--text)', cursor: 'pointer', margin: 0 }}>Filed for Unemployment</label>
+      </div>
     </>
   )
 }
@@ -127,7 +132,8 @@ function CardModal({ card, onClose, onUpdate }) {
     'Company Address': card['Company Address'] || '',
     'Company Phone': card['Company Phone'] || '',
     Notes: card.Notes || '',
-    'Research Notes': card['Research Notes'] || ''
+    'Research Notes': card['Research Notes'] || '',
+    'Filed for Unemployment': card['Filed for Unemployment'] || false
   }))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -304,6 +310,7 @@ export default function Pipeline() {
                     <div className="kanban-card-meta">
                       {card.Priority && <span className={`badge ${priorityColor(card.Priority)}`} style={{ fontSize: 10 }}>{card.Priority}</span>}
                       {card['Follow-Up Date'] && <span className="text-muted text-sm">↩ {card['Follow-Up Date']}</span>}
+                      {card['Filed for Unemployment'] && <span className="badge badge-gray" style={{ fontSize: 10 }}>✓ UE Filed</span>}
                     </div>
                   </div>
                 ))}
