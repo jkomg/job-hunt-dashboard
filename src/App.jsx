@@ -7,6 +7,7 @@ import DailyCheckin from './components/DailyCheckin.jsx'
 import Interviews from './components/Interviews.jsx'
 import Events from './components/Events.jsx'
 import Templates from './components/Templates.jsx'
+import Watchlist from './components/Watchlist.jsx'
 import { useTheme, THEMES } from './useTheme.js'
 
 const NAV = [
@@ -17,6 +18,7 @@ const NAV = [
   { id: 'interviews',  label: 'Interviews', icon: '📞' },
   { id: 'events',      label: 'Events',     icon: '🗓️' },
   { id: 'templates',   label: 'Templates',  icon: '✉️' },
+  { id: 'watchlist',   label: 'Watchlist',  icon: '🔭' },
 ]
 
 export default function App() {
@@ -103,6 +105,7 @@ export default function App() {
         {view === 'interviews' && <Interviews />}
         {view === 'events'     && <Events />}
         {view === 'templates'  && <Templates />}
+        {view === 'watchlist'  && <Watchlist />}
       </main>
 
       {/* Mobile bottom nav */}
