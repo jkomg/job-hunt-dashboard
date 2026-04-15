@@ -27,6 +27,8 @@ A personal job search command center built with React, Node/Express, and Notion 
 
 ### 2. Notion Database Schemas
 
+Create four databases and share each with your integration.
+
 **Job Pipeline** — Properties:
 - `Company` (Title), `Role` (Text), `Stage` (Select), `Priority` (Select), `Sector` (Select)
 - `Salary Range` (Text), `Job URL` (URL), `Date Applied` (Date), `Follow-Up Date` (Date)
@@ -39,6 +41,10 @@ A personal job search command center built with React, Node/Express, and Notion 
 - `Warmth` (Select), `Status` (Select), `How We Know Each Other` (Select)
 - `LinkedIn URL` (URL), `Next Follow-Up` (Date), `Last Contact` (Date)
 - `Resume Used` (Text), `Notes` (Text)
+
+**Interview Tracker** — Properties:
+- `Company` (Title), `Job Title` (Text), `Date` (Date), `Round` (Select), `Format` (Select), `Outcome` (Select)
+- `Interviewer` (Text), `Questions Asked` (Text), `Feedback Received` (Text), `Follow-Up Sent` (Checkbox), `Notes` (Text)
 
 **Daily Action Log** — Properties:
 - `Date` (Title), `Mindset (1-10)` (Number), `Energy (1-10)` (Number)
@@ -60,6 +66,7 @@ NOTION_TOKEN=your_notion_integration_token
 NOTION_PIPELINE_DB=your_pipeline_database_id
 NOTION_CONTACTS_DB=your_contacts_database_id
 NOTION_DAILY_LOG_DB=your_daily_log_database_id
+NOTION_INTERVIEWS_DB=your_interviews_database_id
 SESSION_SECRET=some-long-random-string
 PORT=3001
 ```

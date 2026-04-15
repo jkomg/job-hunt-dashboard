@@ -17,7 +17,9 @@ import {
   getPipeline, updatePipelineEntry, updatePipelineStage, updatePipelineFollowUp, createPipelineEntry,
   getContacts, markContacted, updateContactStatus, createContact, updateContact,
   getDailyLogs, getTodayLog, getRecentLogs, createDailyLog, updateDailyLog,
-  getInterviews, createInterview, updateInterview
+  getInterviews, createInterview, updateInterview,
+  getEvents, createEvent, updateEvent,
+  getTemplates, createTemplate, updateTemplate
 } from './notion.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -220,6 +222,52 @@ app.patch('/api/interviews/:id', requireAuth, async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message })
   }
+})
+
+// ─── Events ────────────────────────────────────────────────────────────────────
+
+app.get('/api/events', requireAuth, async (req, res) => {
+  try {
+    res.json(await getEvents())
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+app.post('/api/events', requireAuth, async (req, res) => {
+  try {
+    const page = await createEvent(req.body)
+    res.json({ ok: true, id: page.id })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+app.patch('/api/events/:id', requireAuth, async (req, res) => {
+  try {
+    await updateEvent(req.params.id, req.body)
+    res.json({ ok: true })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+// ─── Templates ─────────────────────────────────────────────────────────────────
+
+app.get('/api/templates', requireAuth, async (req, res) => {
+  try { res.json(await getTemplates()) } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+app.post('/api/templates', requireAuth, async (req, res) => {
+  try {
+    const page = await createTemplate(req.body)
+    res.json({ ok: true, id: page.id })
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+app.patch('/api/templates/:id', requireAuth, async (req, res) => {
+  try { await updateTemplate(req.params.id, req.body); res.json({ ok: true }) }
+  catch (e) { res.status(500).json({ error: e.message }) }
 })
 
 // ─── Daily Log ─────────────────────────────────────────────────────────────────

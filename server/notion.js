@@ -7,7 +7,9 @@ const DB = {
   pipeline: process.env.NOTION_PIPELINE_DB,
   contacts: process.env.NOTION_CONTACTS_DB,
   daily: process.env.NOTION_DAILY_LOG_DB,
-  interviews: process.env.NOTION_INTERVIEWS_DB
+  interviews: process.env.NOTION_INTERVIEWS_DB,
+  events: process.env.NOTION_EVENTS_DB,
+  templates: process.env.NOTION_TEMPLATES_DB
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -91,6 +93,7 @@ export async function updatePipelineEntry(pageId, data) {
   if (data.Priority !== undefined) properties.Priority = data.Priority ? { select: { name: data.Priority } } : { select: null }
   if (data.Sector !== undefined) properties.Sector = data.Sector ? { select: { name: data.Sector } } : { select: null }
   if (data['Salary Range'] != null) properties['Salary Range'] = { rich_text: [{ text: { content: data['Salary Range'] || '' } }] }
+  if (data['Job Source'] !== undefined) properties['Job Source'] = data['Job Source'] ? { select: { name: data['Job Source'] } } : { select: null }
   if (data['Job URL'] != null) properties['Job URL'] = { url: data['Job URL'] || null }
   if (data['Date Applied'] != null) properties['Date Applied'] = data['Date Applied'] ? { date: { start: data['Date Applied'] } } : { date: null }
   if (data['Follow-Up Date'] != null) properties['Follow-Up Date'] = data['Follow-Up Date'] ? { date: { start: data['Follow-Up Date'] } } : { date: null }
@@ -103,7 +106,7 @@ export async function updatePipelineEntry(pageId, data) {
   if (data.Notes != null) properties.Notes = { rich_text: [{ text: { content: data.Notes || '' } }] }
   if (data['Research Notes'] != null) properties['Research Notes'] = { rich_text: [{ text: { content: data['Research Notes'] || '' } }] }
   if (data['Filed for Unemployment'] != null) properties['Filed for Unemployment'] = { checkbox: !!data['Filed for Unemployment'] }
-  if (data.Outcome !== undefined) properties.Outcome = data.Outcome ? { select: { name: data.Outcome } } : { select: null }
+  if (data.Outcome) properties.Outcome = { select: { name: data.Outcome } }
   return notion.pages.update({ page_id: pageId, properties })
 }
 
@@ -130,6 +133,7 @@ export async function createPipelineEntry(data) {
     Stage: { select: { name: data.Stage || '🔍 Researching' } }
   }
   if (data.Priority) properties.Priority = { select: { name: data.Priority } }
+  if (data['Job Source']) properties['Job Source'] = { select: { name: data['Job Source'] } }
   if (data['Job URL']) properties['Job URL'] = { url: data['Job URL'] }
   if (data.Sector) properties.Sector = { select: { name: data.Sector } }
   if (data['Salary Range']) properties['Salary Range'] = { rich_text: [{ text: { content: data['Salary Range'] } }] }
@@ -143,6 +147,7 @@ export async function createPipelineEntry(data) {
   if (data['Company Phone']) properties['Company Phone'] = { phone_number: data['Company Phone'] }
   if (data.Notes) properties.Notes = { rich_text: [{ text: { content: data.Notes } }] }
   if (data['Research Notes']) properties['Research Notes'] = { rich_text: [{ text: { content: data['Research Notes'] } }] }
+  if (data['Filed for Unemployment']) properties['Filed for Unemployment'] = { checkbox: !!data['Filed for Unemployment'] }
   if (data.Outcome) properties.Outcome = { select: { name: data.Outcome } }
 
   return notion.pages.create({ parent: { database_id: DB.pipeline }, properties })
@@ -321,6 +326,33 @@ export async function updateDailyLog(pageId, data) {
   return notion.pages.update({ page_id: pageId, properties })
 }
 
+// ─── Templates ────────────────────────────────────────────────────────────────
+
+export async function getTemplates() {
+  return queryAll(DB.templates, undefined, [
+    { property: 'Category', direction: 'ascending' }
+  ])
+}
+
+export async function createTemplate(data) {
+  const properties = {
+    Name: { title: [{ text: { content: data.Name || '' } }] }
+  }
+  if (data.Category) properties.Category = { select: { name: data.Category } }
+  if (data.Body) properties.Body = { rich_text: [{ text: { content: data.Body } }] }
+  if (data.Notes) properties.Notes = { rich_text: [{ text: { content: data.Notes } }] }
+  return notion.pages.create({ parent: { database_id: DB.templates }, properties })
+}
+
+export async function updateTemplate(pageId, data) {
+  const properties = {}
+  if (data.Name) properties.Name = { title: [{ text: { content: data.Name } }] }
+  if (data.Category !== undefined) properties.Category = data.Category ? { select: { name: data.Category } } : { select: null }
+  if (data.Body != null) properties.Body = { rich_text: [{ text: { content: data.Body || '' } }] }
+  if (data.Notes != null) properties.Notes = { rich_text: [{ text: { content: data.Notes || '' } }] }
+  return notion.pages.update({ page_id: pageId, properties })
+}
+
 // ─── Interviews ───────────────────────────────────────────────────────────────
 
 export async function getInterviews() {
@@ -358,6 +390,37 @@ export async function updateInterview(pageId, data) {
   if (data['Questions Asked'] != null) properties['Questions Asked'] = { rich_text: [{ text: { content: data['Questions Asked'] || '' } }] }
   if (data['Feedback Received'] != null) properties['Feedback Received'] = { rich_text: [{ text: { content: data['Feedback Received'] || '' } }] }
   if (data['Follow-Up Sent'] != null) properties['Follow-Up Sent'] = { checkbox: !!data['Follow-Up Sent'] }
+  if (data.Notes != null) properties.Notes = { rich_text: [{ text: { content: data.Notes || '' } }] }
+  return notion.pages.update({ page_id: pageId, properties })
+}
+
+// ─── Events ───────────────────────────────────────────────────────────────────
+
+export async function getEvents() {
+  return queryAll(DB.events, undefined, [
+    { property: 'Date', direction: 'ascending' }
+  ])
+}
+
+export async function createEvent(data) {
+  const properties = {
+    Name: { title: [{ text: { content: data.Name || '' } }] }
+  }
+  if (data.Date) properties.Date = { date: { start: data.Date } }
+  if (data.Price) properties.Price = { rich_text: [{ text: { content: data.Price } }] }
+  if (data.Status) properties.Status = { select: { name: data.Status } }
+  if (data['Registration Link']) properties['Registration Link'] = { url: data['Registration Link'] }
+  if (data.Notes) properties.Notes = { rich_text: [{ text: { content: data.Notes } }] }
+  return notion.pages.create({ parent: { database_id: DB.events }, properties })
+}
+
+export async function updateEvent(pageId, data) {
+  const properties = {}
+  if (data.Name) properties.Name = { title: [{ text: { content: data.Name } }] }
+  if (data.Date != null) properties.Date = data.Date ? { date: { start: data.Date } } : { date: null }
+  if (data.Price != null) properties.Price = { rich_text: [{ text: { content: data.Price || '' } }] }
+  if (data.Status) properties.Status = { select: { name: data.Status } }
+  if (data['Registration Link'] != null) properties['Registration Link'] = { url: data['Registration Link'] || null }
   if (data.Notes != null) properties.Notes = { rich_text: [{ text: { content: data.Notes || '' } }] }
   return notion.pages.update({ page_id: pageId, properties })
 }
