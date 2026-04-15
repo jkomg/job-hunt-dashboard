@@ -15,6 +15,7 @@ const OUTCOMES = ['Rejected — No Interview', 'Rejected — After Interview', '
 
 const PRIORITIES = ['🔥 Top Target', '⭐ Strong Fit', '📌 Worth a Shot']
 const SECTORS = ['Healthcare Tech', 'Climate / Clean Energy', 'AI/ML Platform', 'EdTech', 'Social Impact', 'Other']
+const JOB_SOURCES = ['LinkedIn', 'Indeed', 'Company Website', 'Referral', 'Recruiter', 'Glassdoor', 'Wellfound', 'Hacker News', 'Remote.co', 'Other']
 const OUTREACH_METHODS = ['LinkedIn DM', 'Email', 'Referral', 'Cold Application', 'Recruiter']
 const RESUME_VERSIONS = ['CS General', 'Tailored']
 
@@ -36,7 +37,7 @@ function stageHeaderColor(stage) {
 function emptyForm(defaults = {}) {
   return {
     Company: '', Role: '', Stage: '🔍 Researching', Priority: '', Sector: '',
-    'Job URL': '', 'Salary Range': '', 'Date Applied': '', 'Follow-Up Date': '',
+    'Job Source': '', 'Job URL': '', 'Salary Range': '', 'Date Applied': '', 'Follow-Up Date': '',
     'Contact Name': '', 'Contact Title': '', 'Outreach Method': '', 'Resume Version': '',
     'Company Address': '', 'Company Phone': '', Notes: '', 'Research Notes': '',
     'Filed for Unemployment': false, Outcome: '',
@@ -58,6 +59,7 @@ function PipelineForm({ form, set }) {
         <div className="field"><label>Follow-Up Date</label><input type="date" value={form['Follow-Up Date']} onChange={e => set('Follow-Up Date', e.target.value)} /></div>
         <div className="field"><label>Contact Name</label><input value={form['Contact Name']} onChange={e => set('Contact Name', e.target.value)} /></div>
         <div className="field"><label>Contact Title</label><input value={form['Contact Title']} onChange={e => set('Contact Title', e.target.value)} /></div>
+        <div className="field"><label>Job Source</label><select value={form['Job Source']} onChange={e => set('Job Source', e.target.value)}><option value="">—</option>{JOB_SOURCES.map(s => <option key={s}>{s}</option>)}</select></div>
         <div className="field"><label>Outreach Method</label><select value={form['Outreach Method']} onChange={e => set('Outreach Method', e.target.value)}><option value="">—</option>{OUTREACH_METHODS.map(o => <option key={o}>{o}</option>)}</select></div>
         <div className="field"><label>Resume Version</label><select value={form['Resume Version']} onChange={e => set('Resume Version', e.target.value)}><option value="">—</option>{RESUME_VERSIONS.map(v => <option key={v}>{v}</option>)}</select></div>
         <div className="field"><label>Company Address</label><input value={form['Company Address']} onChange={e => set('Company Address', e.target.value)} placeholder="123 Main St, City, ST" /></div>
@@ -132,6 +134,7 @@ function CardModal({ card, onClose, onUpdate }) {
     Stage: card.Stage || '🔍 Researching',
     Priority: card.Priority || '',
     Sector: card.Sector || '',
+    'Job Source': card['Job Source'] || '',
     'Job URL': card['Job URL'] || '',
     'Salary Range': card['Salary Range'] || '',
     'Date Applied': card['Date Applied'] || '',
