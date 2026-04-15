@@ -7,7 +7,8 @@ const DB = {
   pipeline: process.env.NOTION_PIPELINE_DB,
   contacts: process.env.NOTION_CONTACTS_DB,
   daily: process.env.NOTION_DAILY_LOG_DB,
-  interviews: process.env.NOTION_INTERVIEWS_DB
+  interviews: process.env.NOTION_INTERVIEWS_DB,
+  events: process.env.NOTION_EVENTS_DB
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -359,6 +360,37 @@ export async function updateInterview(pageId, data) {
   if (data['Questions Asked'] != null) properties['Questions Asked'] = { rich_text: [{ text: { content: data['Questions Asked'] || '' } }] }
   if (data['Feedback Received'] != null) properties['Feedback Received'] = { rich_text: [{ text: { content: data['Feedback Received'] || '' } }] }
   if (data['Follow-Up Sent'] != null) properties['Follow-Up Sent'] = { checkbox: !!data['Follow-Up Sent'] }
+  if (data.Notes != null) properties.Notes = { rich_text: [{ text: { content: data.Notes || '' } }] }
+  return notion.pages.update({ page_id: pageId, properties })
+}
+
+// ─── Events ───────────────────────────────────────────────────────────────────
+
+export async function getEvents() {
+  return queryAll(DB.events, undefined, [
+    { property: 'Date', direction: 'ascending' }
+  ])
+}
+
+export async function createEvent(data) {
+  const properties = {
+    Name: { title: [{ text: { content: data.Name || '' } }] }
+  }
+  if (data.Date) properties.Date = { date: { start: data.Date } }
+  if (data.Price) properties.Price = { rich_text: [{ text: { content: data.Price } }] }
+  if (data.Status) properties.Status = { select: { name: data.Status } }
+  if (data['Registration Link']) properties['Registration Link'] = { url: data['Registration Link'] }
+  if (data.Notes) properties.Notes = { rich_text: [{ text: { content: data.Notes } }] }
+  return notion.pages.create({ parent: { database_id: DB.events }, properties })
+}
+
+export async function updateEvent(pageId, data) {
+  const properties = {}
+  if (data.Name) properties.Name = { title: [{ text: { content: data.Name } }] }
+  if (data.Date != null) properties.Date = data.Date ? { date: { start: data.Date } } : { date: null }
+  if (data.Price != null) properties.Price = { rich_text: [{ text: { content: data.Price || '' } }] }
+  if (data.Status) properties.Status = { select: { name: data.Status } }
+  if (data['Registration Link'] != null) properties['Registration Link'] = { url: data['Registration Link'] || null }
   if (data.Notes != null) properties.Notes = { rich_text: [{ text: { content: data.Notes || '' } }] }
   return notion.pages.update({ page_id: pageId, properties })
 }

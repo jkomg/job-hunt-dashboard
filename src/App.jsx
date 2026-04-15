@@ -5,6 +5,7 @@ import Pipeline from './components/Pipeline.jsx'
 import Contacts from './components/Contacts.jsx'
 import DailyCheckin from './components/DailyCheckin.jsx'
 import Interviews from './components/Interviews.jsx'
+import Events from './components/Events.jsx'
 import { useTheme, THEMES } from './useTheme.js'
 
 const NAV = [
@@ -13,6 +14,7 @@ const NAV = [
   { id: 'pipeline',    label: 'Pipeline',   icon: '🎯' },
   { id: 'contacts',    label: 'Outreach',   icon: '👥' },
   { id: 'interviews',  label: 'Interviews', icon: '📞' },
+  { id: 'events',      label: 'Events',     icon: '🗓️' },
 ]
 
 export default function App() {
@@ -97,6 +99,7 @@ export default function App() {
         {view === 'pipeline'   && <Pipeline />}
         {view === 'contacts'   && <Contacts />}
         {view === 'interviews' && <Interviews />}
+        {view === 'events'     && <Events />}
       </main>
 
       {/* Mobile bottom nav */}
