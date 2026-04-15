@@ -92,6 +92,7 @@ export async function updatePipelineEntry(pageId, data) {
   if (data.Priority !== undefined) properties.Priority = data.Priority ? { select: { name: data.Priority } } : { select: null }
   if (data.Sector !== undefined) properties.Sector = data.Sector ? { select: { name: data.Sector } } : { select: null }
   if (data['Salary Range'] != null) properties['Salary Range'] = { rich_text: [{ text: { content: data['Salary Range'] || '' } }] }
+  if (data['Job Source'] !== undefined) properties['Job Source'] = data['Job Source'] ? { select: { name: data['Job Source'] } } : { select: null }
   if (data['Job URL'] != null) properties['Job URL'] = { url: data['Job URL'] || null }
   if (data['Date Applied'] != null) properties['Date Applied'] = data['Date Applied'] ? { date: { start: data['Date Applied'] } } : { date: null }
   if (data['Follow-Up Date'] != null) properties['Follow-Up Date'] = data['Follow-Up Date'] ? { date: { start: data['Follow-Up Date'] } } : { date: null }
@@ -104,7 +105,7 @@ export async function updatePipelineEntry(pageId, data) {
   if (data.Notes != null) properties.Notes = { rich_text: [{ text: { content: data.Notes || '' } }] }
   if (data['Research Notes'] != null) properties['Research Notes'] = { rich_text: [{ text: { content: data['Research Notes'] || '' } }] }
   if (data['Filed for Unemployment'] != null) properties['Filed for Unemployment'] = { checkbox: !!data['Filed for Unemployment'] }
-  if (data.Outcome !== undefined) properties.Outcome = data.Outcome ? { select: { name: data.Outcome } } : { select: null }
+  if (data.Outcome) properties.Outcome = { select: { name: data.Outcome } }
   return notion.pages.update({ page_id: pageId, properties })
 }
 
@@ -131,6 +132,7 @@ export async function createPipelineEntry(data) {
     Stage: { select: { name: data.Stage || '🔍 Researching' } }
   }
   if (data.Priority) properties.Priority = { select: { name: data.Priority } }
+  if (data['Job Source']) properties['Job Source'] = { select: { name: data['Job Source'] } }
   if (data['Job URL']) properties['Job URL'] = { url: data['Job URL'] }
   if (data.Sector) properties.Sector = { select: { name: data.Sector } }
   if (data['Salary Range']) properties['Salary Range'] = { rich_text: [{ text: { content: data['Salary Range'] } }] }
