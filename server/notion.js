@@ -105,7 +105,7 @@ export async function updatePipelineEntry(pageId, data) {
   if (data.Notes != null) properties.Notes = { rich_text: [{ text: { content: data.Notes || '' } }] }
   if (data['Research Notes'] != null) properties['Research Notes'] = { rich_text: [{ text: { content: data['Research Notes'] || '' } }] }
   if (data['Filed for Unemployment'] != null) properties['Filed for Unemployment'] = { checkbox: !!data['Filed for Unemployment'] }
-  if (data.Outcome !== undefined) properties.Outcome = data.Outcome ? { select: { name: data.Outcome } } : { select: null }
+  if (data.Outcome) properties.Outcome = { select: { name: data.Outcome } }
   return notion.pages.update({ page_id: pageId, properties })
 }
 
