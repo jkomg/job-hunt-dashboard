@@ -9,7 +9,8 @@ const DB = {
   daily: process.env.NOTION_DAILY_LOG_DB,
   interviews: process.env.NOTION_INTERVIEWS_DB,
   events: process.env.NOTION_EVENTS_DB,
-  templates: process.env.NOTION_TEMPLATES_DB
+  templates: process.env.NOTION_TEMPLATES_DB,
+  watchlist: process.env.NOTION_WATCHLIST_DB
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -349,6 +350,43 @@ export async function updateTemplate(pageId, data) {
   if (data.Name) properties.Name = { title: [{ text: { content: data.Name } }] }
   if (data.Category !== undefined) properties.Category = data.Category ? { select: { name: data.Category } } : { select: null }
   if (data.Body != null) properties.Body = { rich_text: [{ text: { content: data.Body || '' } }] }
+  if (data.Notes != null) properties.Notes = { rich_text: [{ text: { content: data.Notes || '' } }] }
+  return notion.pages.update({ page_id: pageId, properties })
+}
+
+// ─── Watchlist ────────────────────────────────────────────────────────────────
+
+export async function getWatchlist() {
+  return queryAll(DB.watchlist, undefined, [
+    { property: 'Status', direction: 'ascending' }
+  ])
+}
+
+export async function createWatchlistEntry(data) {
+  const properties = {
+    Company: { title: [{ text: { content: data.Company || '' } }] }
+  }
+  if (data.Industry) properties.Industry = { select: { name: data.Industry } }
+  if (data.Website) properties.Website = { url: data.Website }
+  if (data['Connections There']) properties['Connections There'] = { rich_text: [{ text: { content: data['Connections There'] } }] }
+  if (data['Know the Founder'] != null) properties['Know the Founder'] = { checkbox: !!data['Know the Founder'] }
+  if (data['Open Application'] != null) properties['Open Application'] = { checkbox: !!data['Open Application'] }
+  if (data['Follow Up']) properties['Follow Up'] = { date: { start: data['Follow Up'] } }
+  if (data.Status) properties.Status = { select: { name: data.Status } }
+  if (data.Notes) properties.Notes = { rich_text: [{ text: { content: data.Notes } }] }
+  return notion.pages.create({ parent: { database_id: DB.watchlist }, properties })
+}
+
+export async function updateWatchlistEntry(pageId, data) {
+  const properties = {}
+  if (data.Company) properties.Company = { title: [{ text: { content: data.Company } }] }
+  if (data.Industry !== undefined) properties.Industry = data.Industry ? { select: { name: data.Industry } } : { select: null }
+  if (data.Website != null) properties.Website = { url: data.Website || null }
+  if (data['Connections There'] != null) properties['Connections There'] = { rich_text: [{ text: { content: data['Connections There'] || '' } }] }
+  if (data['Know the Founder'] != null) properties['Know the Founder'] = { checkbox: !!data['Know the Founder'] }
+  if (data['Open Application'] != null) properties['Open Application'] = { checkbox: !!data['Open Application'] }
+  if (data['Follow Up'] != null) properties['Follow Up'] = data['Follow Up'] ? { date: { start: data['Follow Up'] } } : { date: null }
+  if (data.Status) properties.Status = { select: { name: data.Status } }
   if (data.Notes != null) properties.Notes = { rich_text: [{ text: { content: data.Notes || '' } }] }
   return notion.pages.update({ page_id: pageId, properties })
 }

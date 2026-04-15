@@ -19,7 +19,8 @@ import {
   getDailyLogs, getTodayLog, getRecentLogs, createDailyLog, updateDailyLog,
   getInterviews, createInterview, updateInterview,
   getEvents, createEvent, updateEvent,
-  getTemplates, createTemplate, updateTemplate
+  getTemplates, createTemplate, updateTemplate,
+  getWatchlist, createWatchlistEntry, updateWatchlistEntry
 } from './notion.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -267,6 +268,24 @@ app.post('/api/templates', requireAuth, async (req, res) => {
 
 app.patch('/api/templates/:id', requireAuth, async (req, res) => {
   try { await updateTemplate(req.params.id, req.body); res.json({ ok: true }) }
+  catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+// ─── Watchlist ─────────────────────────────────────────────────────────────────
+
+app.get('/api/watchlist', requireAuth, async (req, res) => {
+  try { res.json(await getWatchlist()) } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+app.post('/api/watchlist', requireAuth, async (req, res) => {
+  try {
+    const page = await createWatchlistEntry(req.body)
+    res.json({ ok: true, id: page.id })
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+app.patch('/api/watchlist/:id', requireAuth, async (req, res) => {
+  try { await updateWatchlistEntry(req.params.id, req.body); res.json({ ok: true }) }
   catch (e) { res.status(500).json({ error: e.message }) }
 })
 
