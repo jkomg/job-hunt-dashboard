@@ -4,13 +4,15 @@ import Dashboard from './components/Dashboard.jsx'
 import Pipeline from './components/Pipeline.jsx'
 import Contacts from './components/Contacts.jsx'
 import DailyCheckin from './components/DailyCheckin.jsx'
+import Interviews from './components/Interviews.jsx'
 import { useTheme, THEMES } from './useTheme.js'
 
 const NAV = [
-  { id: 'dashboard', label: 'Briefing', icon: '☀️' },
-  { id: 'checkin',   label: 'Check-in', icon: '✅' },
-  { id: 'pipeline',  label: 'Pipeline', icon: '🎯' },
-  { id: 'contacts',  label: 'Outreach', icon: '👥' },
+  { id: 'dashboard',   label: 'Briefing',   icon: '☀️' },
+  { id: 'checkin',     label: 'Check-in',   icon: '✅' },
+  { id: 'pipeline',    label: 'Pipeline',   icon: '🎯' },
+  { id: 'contacts',    label: 'Outreach',   icon: '👥' },
+  { id: 'interviews',  label: 'Interviews', icon: '📞' },
 ]
 
 export default function App() {
@@ -90,10 +92,11 @@ export default function App() {
           ))}
         </div>
 
-        {view === 'dashboard' && <Dashboard onNavigate={setView} />}
-        {view === 'checkin'   && <DailyCheckin />}
-        {view === 'pipeline'  && <Pipeline />}
-        {view === 'contacts'  && <Contacts />}
+        {view === 'dashboard'  && <Dashboard onNavigate={setView} />}
+        {view === 'checkin'    && <DailyCheckin />}
+        {view === 'pipeline'   && <Pipeline />}
+        {view === 'contacts'   && <Contacts />}
+        {view === 'interviews' && <Interviews />}
       </main>
 
       {/* Mobile bottom nav */}

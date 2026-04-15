@@ -16,7 +16,8 @@ import {
   getDashboardData,
   getPipeline, updatePipelineEntry, updatePipelineStage, updatePipelineFollowUp, createPipelineEntry,
   getContacts, markContacted, updateContactStatus, createContact, updateContact,
-  getDailyLogs, getTodayLog, getRecentLogs, createDailyLog, updateDailyLog
+  getDailyLogs, getTodayLog, getRecentLogs, createDailyLog, updateDailyLog,
+  getInterviews, createInterview, updateInterview
 } from './notion.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -188,6 +189,34 @@ app.post('/api/contacts', requireAuth, async (req, res) => {
   try {
     const page = await createContact(req.body)
     res.json({ ok: true, id: page.id })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+// ─── Interviews ────────────────────────────────────────────────────────────────
+
+app.get('/api/interviews', requireAuth, async (req, res) => {
+  try {
+    res.json(await getInterviews())
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+app.post('/api/interviews', requireAuth, async (req, res) => {
+  try {
+    const page = await createInterview(req.body)
+    res.json({ ok: true, id: page.id })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+app.patch('/api/interviews/:id', requireAuth, async (req, res) => {
+  try {
+    await updateInterview(req.params.id, req.body)
+    res.json({ ok: true })
   } catch (e) {
     res.status(500).json({ error: e.message })
   }
