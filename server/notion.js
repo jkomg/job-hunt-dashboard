@@ -8,7 +8,8 @@ const DB = {
   contacts: process.env.NOTION_CONTACTS_DB,
   daily: process.env.NOTION_DAILY_LOG_DB,
   interviews: process.env.NOTION_INTERVIEWS_DB,
-  events: process.env.NOTION_EVENTS_DB
+  events: process.env.NOTION_EVENTS_DB,
+  templates: process.env.NOTION_TEMPLATES_DB
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -322,6 +323,33 @@ export async function updateDailyLog(pageId, data) {
   if (data['Gratitude / Reflection'] != null) properties['Gratitude / Reflection'] = { rich_text: [{ text: { content: data['Gratitude / Reflection'] } }] }
   if (data["Tomorrow's Top 3"] != null) properties["Tomorrow's Top 3"] = { rich_text: [{ text: { content: data["Tomorrow's Top 3"] } }] }
 
+  return notion.pages.update({ page_id: pageId, properties })
+}
+
+// ─── Templates ────────────────────────────────────────────────────────────────
+
+export async function getTemplates() {
+  return queryAll(DB.templates, undefined, [
+    { property: 'Category', direction: 'ascending' }
+  ])
+}
+
+export async function createTemplate(data) {
+  const properties = {
+    Name: { title: [{ text: { content: data.Name || '' } }] }
+  }
+  if (data.Category) properties.Category = { select: { name: data.Category } }
+  if (data.Body) properties.Body = { rich_text: [{ text: { content: data.Body } }] }
+  if (data.Notes) properties.Notes = { rich_text: [{ text: { content: data.Notes } }] }
+  return notion.pages.create({ parent: { database_id: DB.templates }, properties })
+}
+
+export async function updateTemplate(pageId, data) {
+  const properties = {}
+  if (data.Name) properties.Name = { title: [{ text: { content: data.Name } }] }
+  if (data.Category !== undefined) properties.Category = data.Category ? { select: { name: data.Category } } : { select: null }
+  if (data.Body != null) properties.Body = { rich_text: [{ text: { content: data.Body || '' } }] }
+  if (data.Notes != null) properties.Notes = { rich_text: [{ text: { content: data.Notes || '' } }] }
   return notion.pages.update({ page_id: pageId, properties })
 }
 
