@@ -143,6 +143,7 @@ export async function createPipelineEntry(data) {
   if (data['Company Phone']) properties['Company Phone'] = { phone_number: data['Company Phone'] }
   if (data.Notes) properties.Notes = { rich_text: [{ text: { content: data.Notes } }] }
   if (data['Research Notes']) properties['Research Notes'] = { rich_text: [{ text: { content: data['Research Notes'] } }] }
+  if (data['Filed for Unemployment']) properties['Filed for Unemployment'] = { checkbox: !!data['Filed for Unemployment'] }
   if (data.Outcome) properties.Outcome = { select: { name: data.Outcome } }
 
   return notion.pages.create({ parent: { database_id: DB.pipeline }, properties })
