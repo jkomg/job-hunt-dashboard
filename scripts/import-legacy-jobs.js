@@ -21,13 +21,20 @@ function isStruck(richText) {
   return richText.some(t => t.annotations?.strikethrough)
 }
 
-/** "10/15" → "2024-10-15", "1/7" → "2025-01-07" */
+// Override with IMPORT_YEAR env var if your list spans a different year.
+// Default: months after the current month are assumed to be last year.
+const BASE_YEAR = process.env.IMPORT_YEAR
+  ? parseInt(process.env.IMPORT_YEAR, 10)
+  : new Date().getFullYear()
+const CURRENT_MONTH = new Date().getMonth() + 1
+
+/** "10/15" → "2024-10-15", "1/7" → "2025-01-07" (year derived dynamically) */
 function parseDate(str) {
   const m = str.match(/\b(\d{1,2})\/(\d{1,2})\b/)
   if (!m) return null
   const month = parseInt(m[1], 10)
   const day   = parseInt(m[2], 10)
-  const year  = month >= 10 ? 2024 : 2025
+  const year  = month > CURRENT_MONTH ? BASE_YEAR - 1 : BASE_YEAR
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
 }
 

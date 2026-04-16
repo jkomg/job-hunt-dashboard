@@ -34,7 +34,7 @@ Safe to inspect before running — it only creates records, never deletes.
 2. The parser expects a **numbered list** where each item is roughly:
    `Company — Role — URL — Date (M/D)`
 3. Strikethrough items are treated as closed. Adjust the `outcome` logic in `parseEntry()` if your list uses different conventions.
-4. Date inference assumes `month >= 10` = prior year, `month < 10` = current year. Update `parseDate()` if your list spans different years.
+4. Date inference assumes months after the current month belong to last year. If your list spans a different period, override with `IMPORT_YEAR=2024 node scripts/import-legacy-jobs.js`.
 
 ### Limitations
 
