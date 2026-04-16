@@ -40,7 +40,7 @@ function emptyForm(defaults = {}) {
     'Job Source': '', 'Job URL': '', 'Salary Range': '', 'Date Applied': '', 'Follow-Up Date': '',
     'Contact Name': '', 'Contact Title': '', 'Outreach Method': '', 'Resume Version': '',
     'Company Address': '', 'Company Phone': '', Notes: '', 'Research Notes': '',
-    'Filed for Unemployment': false, Outcome: '',
+    'Filed for Unemployment': false, Outcome: '', 'Resume URL': '',
     ...defaults
   }
 }
@@ -62,6 +62,9 @@ function PipelineForm({ form, set }) {
         <div className="field"><label>Job Source</label><select value={form['Job Source']} onChange={e => set('Job Source', e.target.value)}><option value="">—</option>{JOB_SOURCES.map(s => <option key={s}>{s}</option>)}</select></div>
         <div className="field"><label>Outreach Method</label><select value={form['Outreach Method']} onChange={e => set('Outreach Method', e.target.value)}><option value="">—</option>{OUTREACH_METHODS.map(o => <option key={o}>{o}</option>)}</select></div>
         <div className="field"><label>Resume Version</label><select value={form['Resume Version']} onChange={e => set('Resume Version', e.target.value)}><option value="">—</option>{RESUME_VERSIONS.map(v => <option key={v}>{v}</option>)}</select></div>
+        {form['Resume Version'] === 'Tailored' && (
+          <div className="field"><label>Resume URL</label><input value={form['Resume URL']} onChange={e => set('Resume URL', e.target.value)} placeholder="https://docs.google.com/…" /></div>
+        )}
         <div className="field"><label>Company Address</label><input value={form['Company Address']} onChange={e => set('Company Address', e.target.value)} placeholder="123 Main St, City, ST" /></div>
         <div className="field"><label>Company Phone</label><input type="tel" value={form['Company Phone']} onChange={e => set('Company Phone', e.target.value)} placeholder="(555) 555-5555" /></div>
       </div>
@@ -148,7 +151,8 @@ function CardModal({ card, onClose, onUpdate }) {
     Notes: card.Notes || '',
     'Research Notes': card['Research Notes'] || '',
     'Filed for Unemployment': card['Filed for Unemployment'] || false,
-    Outcome: card.Outcome || ''
+    Outcome: card.Outcome || '',
+    'Resume URL': card['Resume URL'] || ''
   }))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -327,6 +331,9 @@ export default function Pipeline() {
                       {card['Follow-Up Date'] && <span className="text-muted text-sm">↩ {card['Follow-Up Date']}</span>}
                       {card['Filed for Unemployment'] && <span className="badge badge-gray" style={{ fontSize: 10 }}>✓ UE Filed</span>}
                       {card.Outcome && <span className={`badge ${card.Outcome.includes('Accepted') ? 'badge-green' : card.Outcome.includes('Withdrew') ? 'badge-gray' : 'badge-red'}`} style={{ fontSize: 10 }}>{card.Outcome}</span>}
+                      {card['Resume Version'] === 'Tailored' && card['Resume URL'] && (
+                        <a href={card['Resume URL']} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ fontSize: 11, color: 'var(--accent)', textDecoration: 'none' }} title="View tailored resume">📄 Resume</a>
+                      )}
                     </div>
                   </div>
                 ))}
