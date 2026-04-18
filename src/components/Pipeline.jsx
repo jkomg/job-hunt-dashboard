@@ -18,6 +18,7 @@ const SECTORS = ['Healthcare Tech', 'Climate / Clean Energy', 'AI/ML Platform', 
 const JOB_SOURCES = ['LinkedIn', 'Indeed', 'Company Website', 'Referral', 'Recruiter', 'Glassdoor', 'Wellfound', 'Hacker News', 'Remote.co', 'Other']
 const OUTREACH_METHODS = ['LinkedIn DM', 'Email', 'Referral', 'Cold Application', 'Recruiter']
 const RESUME_VERSIONS = ['CS General', 'Tailored']
+const WORK_LOCATIONS = ['In-Office', 'Hybrid', 'Remote (State)', 'Remote (Country)', 'Remote-First']
 
 function priorityColor(p) {
   if (p?.includes('Top')) return 'badge-red'
@@ -40,7 +41,7 @@ function emptyForm(defaults = {}) {
     'Job Source': '', 'Job URL': '', 'Salary Range': '', 'Date Applied': '', 'Follow-Up Date': '',
     'Contact Name': '', 'Contact Title': '', 'Outreach Method': '', 'Resume Version': '',
     'Company Address': '', 'Company Phone': '', Notes: '', 'Research Notes': '',
-    'Filed for Unemployment': false, Outcome: '', 'Resume URL': '',
+    'Filed for Unemployment': false, Outcome: '', 'Resume URL': '', 'Work Location': '',
     ...defaults
   }
 }
@@ -59,6 +60,7 @@ function PipelineForm({ form, set }) {
         <div className="field"><label>Follow-Up Date</label><input type="date" value={form['Follow-Up Date']} onChange={e => set('Follow-Up Date', e.target.value)} /></div>
         <div className="field"><label>Contact Name</label><input value={form['Contact Name']} onChange={e => set('Contact Name', e.target.value)} /></div>
         <div className="field"><label>Contact Title</label><input value={form['Contact Title']} onChange={e => set('Contact Title', e.target.value)} /></div>
+        <div className="field"><label>Work Location</label><select value={form['Work Location']} onChange={e => set('Work Location', e.target.value)}><option value="">—</option>{WORK_LOCATIONS.map(l => <option key={l}>{l}</option>)}</select></div>
         <div className="field"><label>Job Source</label><select value={form['Job Source']} onChange={e => set('Job Source', e.target.value)}><option value="">—</option>{JOB_SOURCES.map(s => <option key={s}>{s}</option>)}</select></div>
         <div className="field"><label>Outreach Method</label><select value={form['Outreach Method']} onChange={e => set('Outreach Method', e.target.value)}><option value="">—</option>{OUTREACH_METHODS.map(o => <option key={o}>{o}</option>)}</select></div>
         <div className="field"><label>Resume Version</label><select value={form['Resume Version']} onChange={e => set('Resume Version', e.target.value)}><option value="">—</option>{RESUME_VERSIONS.map(v => <option key={v}>{v}</option>)}</select></div>
@@ -152,7 +154,8 @@ function CardModal({ card, onClose, onUpdate }) {
     'Research Notes': card['Research Notes'] || '',
     'Filed for Unemployment': card['Filed for Unemployment'] || false,
     Outcome: card.Outcome || '',
-    'Resume URL': card['Resume URL'] || ''
+    'Resume URL': card['Resume URL'] || '',
+    'Work Location': card['Work Location'] || ''
   }))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -331,6 +334,7 @@ export default function Pipeline() {
                       {card['Follow-Up Date'] && <span className="text-muted text-sm">↩ {card['Follow-Up Date']}</span>}
                       {card['Filed for Unemployment'] && <span className="badge badge-gray" style={{ fontSize: 10 }}>✓ UE Filed</span>}
                       {card.Outcome && <span className={`badge ${card.Outcome.includes('Accepted') ? 'badge-green' : card.Outcome.includes('Withdrew') ? 'badge-gray' : 'badge-red'}`} style={{ fontSize: 10 }}>{card.Outcome}</span>}
+                      {card['Work Location'] && <span className={`badge ${card['Work Location'].startsWith('Remote') ? 'badge-green' : 'badge-gray'}`} style={{ fontSize: 10 }}>{card['Work Location']}</span>}
                       {card['Resume Version'] === 'Tailored' && card['Resume URL'] && (
                         <a href={card['Resume URL']} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ fontSize: 11, color: 'var(--accent)', textDecoration: 'none' }} title="View tailored resume">📄 Resume</a>
                       )}

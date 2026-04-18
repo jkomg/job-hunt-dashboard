@@ -109,6 +109,7 @@ export async function updatePipelineEntry(pageId, data) {
   if (data['Filed for Unemployment'] != null) properties['Filed for Unemployment'] = { checkbox: !!data['Filed for Unemployment'] }
   if (data.Outcome) properties.Outcome = { select: { name: data.Outcome } }
   if (data['Resume URL'] != null) properties['Resume URL'] = { url: data['Resume URL'] || null }
+  if (data['Work Location'] !== undefined) properties['Work Location'] = data['Work Location'] ? { select: { name: data['Work Location'] } } : { select: null }
   return notion.pages.update({ page_id: pageId, properties })
 }
 
@@ -150,6 +151,7 @@ export async function createPipelineEntry(data) {
   if (data.Notes) properties.Notes = { rich_text: [{ text: { content: data.Notes } }] }
   if (data['Research Notes']) properties['Research Notes'] = { rich_text: [{ text: { content: data['Research Notes'] } }] }
   if (data['Resume URL']) properties['Resume URL'] = { url: data['Resume URL'] }
+  if (data['Work Location']) properties['Work Location'] = { select: { name: data['Work Location'] } }
   if (data['Filed for Unemployment']) properties['Filed for Unemployment'] = { checkbox: !!data['Filed for Unemployment'] }
   if (data.Outcome) properties.Outcome = { select: { name: data.Outcome } }
 
