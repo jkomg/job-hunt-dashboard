@@ -1,6 +1,6 @@
 # Job Hunt Dashboard
 
-A personal job search command center built with React, Node/Express, and Notion as the database. Tracks your pipeline, networking contacts, and daily activity — all synced to Notion so your data lives somewhere useful.
+A personal job search command center built with React, Node/Express, Notion, and Turso-ready app persistence. Tracks your pipeline, networking contacts, and daily activity, with optional bi-directional Google Sheets sync.
 
 ## Features
 
@@ -8,14 +8,16 @@ A personal job search command center built with React, Node/Express, and Notion 
 - **Job Pipeline** — kanban board with drag-and-drop stage management across 8 stages (Researching → Offer/Closed)
 - **Outreach & Contacts** — follow-up queue with overdue alerts, warmth tracking, and one-click mark-as-contacted
 - **Daily Check-in** — EOD form tracking mindset, energy, activity numbers, exercise, cert progress, and tomorrow's Top 3
+- **Google Sheets Sync (bi-directional)** — pull opportunities from shared tabs and push app-owned status/follow-up/notes updates back
 - Docker-ready for self-hosting
 
 ## Stack
 
 - **Frontend**: React 18 + Vite
 - **Backend**: Node.js + Express
-- **Database**: Notion (via official API) — all real data lives there
-- **Auth**: SQLite + bcrypt sessions (httpOnly cookies)
+- **App Persistence**: Turso/libSQL (`DATABASE_URL`) with local file fallback for dev
+- **Business Data Store**: Notion (via official API)
+- **Auth**: DB-backed bcrypt sessions (httpOnly cookies) or Google IAP identity headers (`AUTH_MODE=iap`)
 
 ## Setup
 
@@ -67,8 +69,21 @@ NOTION_PIPELINE_DB=your_pipeline_database_id
 NOTION_CONTACTS_DB=your_contacts_database_id
 NOTION_DAILY_LOG_DB=your_daily_log_database_id
 NOTION_INTERVIEWS_DB=your_interviews_database_id
+NOTION_EVENTS_DB=your_events_database_id
+NOTION_TEMPLATES_DB=your_templates_database_id
+NOTION_WATCHLIST_DB=your_watchlist_database_id
+
+DATABASE_URL=libsql://your-db.turso.io
+TURSO_AUTH_TOKEN=your_turso_auth_token
+
+GOOGLE_SHEETS_ID=your_google_sheet_id
+GOOGLE_SHEETS_SYNC_TABS=Jobs & Applications,Found
+GOOGLE_SHEETS_CREDENTIALS_JSON={"type":"service_account",...}
+
 SESSION_SECRET=some-long-random-string
 PORT=3001
+AUTH_MODE=session
+ADMIN_EMAILS=kennjason@gmail.com
 ```
 
 To find a database ID: open the database in Notion, copy the URL — the ID is the 32-character string before the `?`.
@@ -83,10 +98,64 @@ npm run dev
 
 App runs at `http://localhost:3000`. Default login: `jason` / `jobhunt2026` — change your password after first login.
 
+Auth modes:
+- `AUTH_MODE=session` (default): local username/password login form.
+- `AUTH_MODE=iap`: trust Google IAP headers and auto-provision users by email.
+- `AUTH_MODE=hybrid`: allow IAP first, fallback to local session login.
+
+Admins:
+- `ADMIN_EMAILS` is a comma-separated list of emails treated as app admins when logging in through IAP.
+
 **Production (Docker):**
 ```bash
 docker compose up --build
 ```
+
+### 5. Run Sheets Sync
+
+Manual sync endpoint (requires login cookie):
+
+```bash
+curl -X POST http://localhost:3001/api/sheets/sync \
+  --cookie "session=YOUR_SESSION_COOKIE"
+```
+
+Recent run history:
+
+```bash
+curl http://localhost:3001/api/sheets/sync/runs \
+  --cookie "session=YOUR_SESSION_COOKIE"
+```
+
+### 6. Cloud Run Deploy (Secrets-First)
+
+```bash
+# 1) sync .env values into Secret Manager
+./setup-secrets.sh
+
+# 2) build + push + deploy Cloud Run
+./deploy.sh
+```
+
+To deploy with IAP mode and a specific admin email:
+
+```bash
+AUTH_MODE=iap ADMIN_EMAILS=kennjason@gmail.com ./deploy.sh
+```
+
+To configure HTTPS Load Balancer + IAP for `hunt.jkomg.us`:
+
+```bash
+chmod +x ./scripts/setup-iap-lb.sh
+PROJECT_ID=job-hunt-dashboard-494012 \
+DOMAIN=hunt.jkomg.us \
+IAP_USER_EMAIL=kennjason@gmail.com \
+./scripts/setup-iap-lb.sh
+```
+
+After script output, update DNS:
+- remove CNAME for `hunt.jkomg.us`
+- add `A` record pointing to the script's printed global LB IP
 
 ## Select Field Values
 

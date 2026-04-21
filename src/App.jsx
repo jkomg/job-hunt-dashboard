@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import Login from './components/Login.jsx'
+import ForcePasswordChange from './components/ForcePasswordChange.jsx'
 import Dashboard from './components/Dashboard.jsx'
 import Pipeline from './components/Pipeline.jsx'
 import Contacts from './components/Contacts.jsx'
@@ -23,18 +24,35 @@ const NAV = [
 
 export default function App() {
   const [authed, setAuthed] = useState(null)
+  const [me, setMe] = useState(null)
   const [view, setView] = useState('dashboard')
   const [theme, setTheme] = useTheme()
 
+  async function refreshMe() {
+    try {
+      const r = await fetch('/api/me', { credentials: 'include' })
+      if (!r.ok) {
+        setAuthed(false)
+        setMe(null)
+        return
+      }
+      const data = await r.json()
+      setMe(data)
+      setAuthed(true)
+    } catch {
+      setAuthed(false)
+      setMe(null)
+    }
+  }
+
   useEffect(() => {
-    fetch('/api/me', { credentials: 'include' })
-      .then(r => setAuthed(r.ok))
-      .catch(() => setAuthed(false))
+    refreshMe()
   }, [])
 
   async function logout() {
     await fetch('/api/logout', { method: 'POST', credentials: 'include' })
     setAuthed(false)
+    setMe(null)
   }
 
   if (authed === null) {
@@ -42,7 +60,11 @@ export default function App() {
   }
 
   if (!authed) {
-    return <Login onLogin={() => setAuthed(true)} />
+    return <Login onLogin={refreshMe} />
+  }
+
+  if (me?.mustChangePassword) {
+    return <ForcePasswordChange onDone={refreshMe} onLogout={logout} />
   }
 
   return (
