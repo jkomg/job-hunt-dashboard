@@ -9,7 +9,9 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 
 import {
-  getUserByUsername, createSession, getSession, deleteSession, updatePassword
+  initDb,
+  getUserByUsername, getUserByEmail, getUserById, ensureUserByEmail,
+  createSession, getSession, deleteSession, updatePassword, getRecentSheetSyncRuns
 } from './db.js'
 
 import {
@@ -22,11 +24,20 @@ import {
   getTemplates, createTemplate, updateTemplate,
   getWatchlist, createWatchlistEntry, updateWatchlistEntry
 } from './notion.js'
+import { runSheetsSync } from './sheetsSync.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
 const PORT = process.env.PORT || 3001
 const isProd = existsSync(path.join(__dirname, '../dist'))
+const AUTH_MODE = (process.env.AUTH_MODE || 'session').toLowerCase()
+const ADMIN_EMAILS = new Set(
+  (process.env.ADMIN_EMAILS || '')
+    .split(',')
+    .map(s => s.trim().toLowerCase())
+    .filter(Boolean)
+)
+const PASSWORD_CHANGE_ALLOWED_PATHS = new Set(['/api/me', '/api/change-password', '/api/logout'])
 
 app.use(express.json())
 app.use(cookieParser())
@@ -37,22 +48,64 @@ app.use(cors({
 
 // ─── Auth middleware ───────────────────────────────────────────────────────────
 
-function requireAuth(req, res, next) {
+function extractIapEmail(req) {
+  const raw = req.headers['x-goog-authenticated-user-email']
+  if (!raw || Array.isArray(raw)) return null
+  const value = String(raw).trim()
+  const email = value.includes(':') ? value.split(':').pop() : value
+  if (!email || !email.includes('@')) return null
+  return email.toLowerCase()
+}
+
+async function requireAuth(req, res, next) {
+  if (AUTH_MODE === 'iap' || AUTH_MODE === 'hybrid') {
+    const iapEmail = extractIapEmail(req)
+    if (iapEmail) {
+      const user = await ensureUserByEmail(iapEmail, { isAdmin: ADMIN_EMAILS.has(iapEmail) })
+      req.userId = user.id
+      req.userEmail = user.email
+      req.isAdmin = !!user.isAdmin
+      req.mustChangePassword = false
+      req.authMode = 'iap'
+      return next()
+    }
+
+    if (AUTH_MODE === 'iap') {
+      return res.status(401).json({ error: 'IAP identity required' })
+    }
+  }
+
   const token = req.cookies?.session
   if (!token) return res.status(401).json({ error: 'Unauthorized' })
-  const session = getSession(token)
+  const session = await getSession(token)
   if (!session) return res.status(401).json({ error: 'Unauthorized' })
   req.userId = session.user_id
+  const user = await getUserById(session.user_id)
+  req.userEmail = user?.email || null
+  req.isAdmin = !!user?.isAdmin
+  req.mustChangePassword = !!user?.mustChangePassword
+  req.authMode = 'session'
+
+  if (req.mustChangePassword && !PASSWORD_CHANGE_ALLOWED_PATHS.has(req.path)) {
+    return res.status(403).json({ error: 'Password change required', code: 'PASSWORD_CHANGE_REQUIRED' })
+  }
   next()
 }
 
 // ─── Auth routes ───────────────────────────────────────────────────────────────
 
-app.post('/api/login', (req, res) => {
+app.post('/api/login', async (req, res) => {
+  if (AUTH_MODE === 'iap') {
+    return res.status(400).json({ error: 'Local login disabled (IAP mode)' })
+  }
+
   const { username, password } = req.body
   if (!username || !password) return res.status(400).json({ error: 'Missing fields' })
 
-  const user = getUserByUsername(username)
+  let user = await getUserByUsername(username)
+  if (!user && username.includes('@')) {
+    user = await getUserByEmail(username)
+  }
   if (!user) return res.status(401).json({ error: 'Invalid credentials' })
 
   if (!bcrypt.compareSync(password, user.password_hash)) {
@@ -60,7 +113,7 @@ app.post('/api/login', (req, res) => {
   }
 
   const token = crypto.randomBytes(32).toString('hex')
-  createSession(token, user.id)
+  await createSession(token, user.id)
 
   res.cookie('session', token, {
     httpOnly: true,
@@ -68,28 +121,46 @@ app.post('/api/login', (req, res) => {
     maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
   })
 
-  res.json({ ok: true, username: user.username })
+  res.json({
+    ok: true,
+    username: user.username,
+    mustChangePassword: !!user.mustChangePassword
+  })
 })
 
-app.post('/api/logout', (req, res) => {
+app.post('/api/logout', async (req, res) => {
   const token = req.cookies?.session
-  if (token) deleteSession(token)
+  if (token) await deleteSession(token)
   res.clearCookie('session')
   res.json({ ok: true })
 })
 
 app.get('/api/me', requireAuth, (req, res) => {
-  res.json({ ok: true })
+  res.json({
+    ok: true,
+    authMode: req.authMode,
+    email: req.userEmail || null,
+    isAdmin: !!req.isAdmin,
+    mustChangePassword: !!req.mustChangePassword
+  })
 })
 
-app.post('/api/change-password', requireAuth, (req, res) => {
+app.post('/api/change-password', requireAuth, async (req, res) => {
+  if (req.authMode === 'iap') {
+    return res.status(400).json({ error: 'Password changes are disabled in IAP mode' })
+  }
+
   const { currentPassword, newPassword } = req.body
-  const user = getUserByUsername('jason')
+  if (!newPassword || String(newPassword).length < 10) {
+    return res.status(400).json({ error: 'New password must be at least 10 characters' })
+  }
+  const user = await getUserById(req.userId)
+  if (!user) return res.status(404).json({ error: 'User not found' })
   if (!bcrypt.compareSync(currentPassword, user.password_hash)) {
     return res.status(401).json({ error: 'Current password incorrect' })
   }
   const hash = bcrypt.hashSync(newPassword, 10)
-  updatePassword(req.userId, hash)
+  await updatePassword(req.userId, hash)
   res.json({ ok: true })
 })
 
@@ -325,6 +396,25 @@ app.patch('/api/daily/:id', requireAuth, async (req, res) => {
   }
 })
 
+// ─── Sheets Sync ──────────────────────────────────────────────────────────────
+
+app.post('/api/sheets/sync', requireAuth, async (req, res) => {
+  try {
+    const result = await runSheetsSync()
+    res.json(result)
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+app.get('/api/sheets/sync/runs', requireAuth, async (req, res) => {
+  try {
+    res.json(await getRecentSheetSyncRuns(25))
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
 // ─── Serve frontend in prod ────────────────────────────────────────────────────
 
 if (isProd) {
@@ -334,6 +424,8 @@ if (isProd) {
     res.sendFile(path.join(distPath, 'index.html'))
   })
 }
+
+await initDb()
 
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`)
