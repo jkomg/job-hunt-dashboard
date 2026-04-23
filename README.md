@@ -106,6 +106,22 @@ docker compose restart
 
 3. Run sync manually from app/API (`POST /api/sheets/sync`) or configure daily scheduler in cloud mode.
 
+## Sync Troubleshooting (In-App)
+
+Use `Settings` in the app sidebar:
+- `Save Settings` to update sheet ID/tab mappings.
+- `Test Connection` to validate credentials, sharing, and tab names.
+- `Run Sync Now` to force a sync and see immediate result.
+
+Common errors and fixes:
+- `MISSING_SHEET_ID`: add Sheet URL/ID in Settings and save.
+- `MISSING_CREDENTIALS`: set `GOOGLE_SHEETS_CREDENTIALS_JSON`, restart app.
+- `INVALID_CREDENTIALS`: regenerate service-account JSON key and update env.
+- `SHEET_PERMISSION_DENIED`: share the sheet with service-account email as Editor.
+- `TAB_NOT_FOUND`: fix tab names in Settings to match exact sheet tab titles.
+- `GOOGLE_API_DISABLED`: enable Google Sheets API in Google Cloud project.
+- `GOOGLE_TEMPORARY`: retry later (rate-limit/outage/timeout).
+
 ## Screenshot Plan
 
 Store install screenshots in `docs/images/install/` and keep both this README and the handout pointing to the same image files.

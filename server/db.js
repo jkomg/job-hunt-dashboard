@@ -103,6 +103,13 @@ export async function initDb() {
       )
     `,
     `
+      CREATE TABLE IF NOT EXISTS app_settings (
+        key TEXT PRIMARY KEY,
+        value TEXT,
+        updated_at INTEGER NOT NULL
+      )
+    `,
+    `
       CREATE TABLE IF NOT EXISTS entity_sheet_sync_links (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         sheet_id TEXT NOT NULL,
@@ -680,6 +687,61 @@ export async function getRecentSheetSyncRuns(limit = 20) {
   })
 
   return toPlainRows(res)
+}
+
+export async function getAppSetting(key) {
+  const settingKey = String(key || '').trim()
+  if (!settingKey) return null
+
+  const res = await db.execute({
+    sql: `
+      SELECT value FROM app_settings
+      WHERE key = ?
+      LIMIT 1
+    `,
+    args: [settingKey]
+  })
+
+  const row = firstRow(res)
+  return row?.value == null ? null : String(row.value)
+}
+
+export async function getAppSettings(keys = []) {
+  const cleanKeys = [...new Set((keys || []).map(k => String(k || '').trim()).filter(Boolean))]
+  if (!cleanKeys.length) return {}
+
+  const placeholders = cleanKeys.map(() => '?').join(', ')
+  const res = await db.execute({
+    sql: `
+      SELECT key, value FROM app_settings
+      WHERE key IN (${placeholders})
+    `,
+    args: cleanKeys
+  })
+
+  const out = {}
+  for (const row of res.rows || []) {
+    out[String(row.key)] = row.value == null ? null : String(row.value)
+  }
+  return out
+}
+
+export async function setAppSetting(key, value) {
+  const settingKey = String(key || '').trim()
+  if (!settingKey) {
+    throw new Error('app setting key is required')
+  }
+
+  await db.execute({
+    sql: `
+      INSERT INTO app_settings (key, value, updated_at)
+      VALUES (?, ?, ?)
+      ON CONFLICT(key) DO UPDATE SET
+        value = excluded.value,
+        updated_at = excluded.updated_at
+    `,
+    args: [settingKey, value == null ? null : String(value), now()]
+  })
 }
 
 function todayLabel() {

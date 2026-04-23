@@ -140,6 +140,10 @@ docker compose up -d
 
 - Check the main project guide: `README.md`
 - Check scripts usage: `scripts/README.md`
+- In the app, open `Settings` to:
+  - update sheet ID/tabs
+  - run `Test Connection`
+  - run `Run Sync Now`
 
 ## Screenshot Placeholders
 
