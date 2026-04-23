@@ -27,7 +27,9 @@ Ship a stable release that non-technical users can run locally with Docker and l
 ## Cut Release
 
 ```bash
-git tag -a v1.0.0 -m \"v1.0.0\"\n+git push origin v1.0.0\n+```
+git tag -a v1.0.0 -m "v1.0.0"
+git push origin v1.0.0
+```
 
 Create a GitHub Release with:
 
