@@ -121,6 +121,7 @@ Requires optional `NOTION_*` vars in `.env`.
 ## Docs
 
 - Additional scripts and usage notes: [scripts/README.md](./scripts/README.md)
+- Shareable one-page beginner guide: [docs/REMOTE_REBELLION_HANDOUT.md](./docs/REMOTE_REBELLION_HANDOUT.md)
 - Deployment helpers: `deploy.sh`, `setup-secrets.sh`, `scripts/setup-iap-lb.sh`, `scripts/setup-daily-sheets-sync.sh`
 
 ## License
