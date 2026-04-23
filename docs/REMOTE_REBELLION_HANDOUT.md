@@ -11,29 +11,37 @@ Free personal job-hunt tracker (no paid tools required for local use).
 
 ## Before You Start
 
-- Install Docker Desktop
+- Install Docker Desktop [get it here](https://docs.docker.com/get-started/introduction/get-docker-desktop/)
 - Make sure Docker Desktop is running
 - No GitHub account is required
 
 ## Install (Mac/Linux)
 
+Open a terminal (Applications/Utilities/Terminal)
+If you don't have a Projects directory I recommend you make one; an open terminal will be sitting at /Users/[yourusername] - to organize it.
+
 ```bash
+(if Projects doesn't exist): mkdir Projects
+cd Projects
 git clone https://github.com/jkomg/job-hunt-dashboard.git
 cd job-hunt-dashboard
 ./scripts/start-local-docker.sh
 ```
 
-If `git` is not installed, use the ZIP method below.
+If you don't have `git` installed, use the ZIP install method below.
 
 ## Install (Windows PowerShell)
+If you don't have a Projects directory I recommend you make one; an open terminal will be sitting at /Users/[yourusername] - to organize it.
 
 ```powershell
+(if Projects doesn't exist): mkdir Projects
+cd Projects
 git clone https://github.com/jkomg/job-hunt-dashboard.git
 cd job-hunt-dashboard
 powershell -ExecutionPolicy Bypass -File .\scripts\start-local-docker.ps1
 ```
 
-If `git` is not installed, use the ZIP method below.
+If you don't have `git` installed, use the ZIP install method below.
 
 ## Install (No Git / No GitHub Account Needed)
 
