@@ -38,7 +38,7 @@ function StatCard({ label, value, target, color }) {
   )
 }
 
-export default function Dashboard({ onNavigate }) {
+export default function Dashboard({ onNavigate, me }) {
   const [data, setData] = useState(null)
   const [syncStatus, setSyncStatus] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -74,7 +74,7 @@ export default function Dashboard({ onNavigate }) {
 
   return (
     <div>
-      <div className="morning-greeting">Good morning, Jason.</div>
+      <div className="morning-greeting">Good morning, {me?.displayName || 'there'}.</div>
       <div className="today-date">{todayDate}</div>
 
       {syncStatus?.health && (

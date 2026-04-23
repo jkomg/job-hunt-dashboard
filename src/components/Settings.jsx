@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 function tabsToText(tabs) {
   return (tabs || []).join(', ')
@@ -61,15 +61,20 @@ function ErrorCallout({ error }) {
   )
 }
 
-export default function Settings() {
+export default function Settings({ me, onProfileUpdated }) {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [savingProfile, setSavingProfile] = useState(false)
   const [testing, setTesting] = useState(false)
   const [syncing, setSyncing] = useState(false)
+  const [exportingBackup, setExportingBackup] = useState(false)
+  const [restoringBackup, setRestoringBackup] = useState(false)
   const [status, setStatus] = useState(null)
   const [runs, setRuns] = useState([])
   const [error, setError] = useState(null)
   const [success, setSuccess] = useState('')
+  const [displayName, setDisplayName] = useState(me?.displayName || '')
+  const backupFileInputRef = useRef(null)
 
   const [enabled, setEnabled] = useState(true)
   const [sheetId, setSheetId] = useState('')
@@ -114,6 +119,10 @@ export default function Settings() {
     load()
   }, [])
 
+  useEffect(() => {
+    setDisplayName(me?.displayName || '')
+  }, [me?.displayName])
+
   async function saveSettings() {
     setSaving(true)
     setError(null)
@@ -137,6 +146,28 @@ export default function Settings() {
       setError(e.payload || { error: e.message })
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function saveProfile() {
+    setSavingProfile(true)
+    setError(null)
+    setSuccess('')
+    try {
+      if (!displayName.trim()) {
+        throw new Error('Display name cannot be empty')
+      }
+      await api('/api/setup/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ displayName: displayName.trim() })
+      })
+      setSuccess('Profile updated.')
+      if (typeof onProfileUpdated === 'function') onProfileUpdated()
+    } catch (e) {
+      setError(e.payload || { error: e.message })
+    } finally {
+      setSavingProfile(false)
     }
   }
 
@@ -171,6 +202,59 @@ export default function Settings() {
     }
   }
 
+  async function exportBackup() {
+    setExportingBackup(true)
+    setError(null)
+    setSuccess('')
+    try {
+      const snapshot = await api('/api/admin/backup/export')
+      const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `job-hunt-backup-${new Date().toISOString().replace(/[:.]/g, '-')}.json`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+      setSuccess('Backup exported.')
+    } catch (e) {
+      setError(e.payload || { error: e.message })
+    } finally {
+      setExportingBackup(false)
+    }
+  }
+
+  function chooseBackupFile() {
+    backupFileInputRef.current?.click()
+  }
+
+  async function restoreBackupFromFile(evt) {
+    const file = evt.target.files?.[0]
+    evt.target.value = ''
+    if (!file) return
+
+    setRestoringBackup(true)
+    setError(null)
+    setSuccess('')
+    try {
+      const text = await file.text()
+      const snapshot = JSON.parse(text)
+      await api('/api/admin/backup/restore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ snapshot })
+      })
+      setSuccess('Backup restored. Refreshing status…')
+      await load()
+      if (typeof onProfileUpdated === 'function') onProfileUpdated()
+    } catch (e) {
+      setError(e.payload || { error: e.message || 'Invalid backup file' })
+    } finally {
+      setRestoringBackup(false)
+    }
+  }
+
   if (loading) {
     return <div className="loading"><div className="spin" />Loading settings…</div>
   }
@@ -184,6 +268,27 @@ export default function Settings() {
 
       {success && <div className="success-msg">{success}</div>}
       <ErrorCallout error={error} />
+
+      <div className="card mb-16">
+        <div className="card-title">Profile</div>
+        <div className="field">
+          <label>Display Name</label>
+          <input
+            type="text"
+            value={displayName}
+            onChange={e => setDisplayName(e.target.value)}
+            placeholder="How your name appears on the dashboard"
+          />
+        </div>
+        <div className="quick-actions">
+          <button className="btn btn-primary" onClick={saveProfile} disabled={savingProfile}>
+            {savingProfile ? 'Saving…' : 'Save Profile'}
+          </button>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', alignSelf: 'center' }}>
+            Admin: {me?.isAdmin ? 'Yes' : 'No'}
+          </div>
+        </div>
+      </div>
 
       <div className="card mb-16">
         <div className="card-title">Sync Health</div>
@@ -266,6 +371,33 @@ export default function Settings() {
       </div>
 
       <div className="card">
+        <div className="card-title">Backup & Restore</div>
+        <div style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 10 }}>
+          Export your current app data to a JSON file and restore it later.
+        </div>
+        <div className="quick-actions" style={{ marginBottom: 14 }}>
+          <button className="btn btn-primary" onClick={exportBackup} disabled={exportingBackup || !me?.isAdmin}>
+            {exportingBackup ? 'Exporting…' : 'Export Backup'}
+          </button>
+          <button className="btn btn-ghost" onClick={chooseBackupFile} disabled={restoringBackup || !me?.isAdmin}>
+            {restoringBackup ? 'Restoring…' : 'Restore Backup'}
+          </button>
+          <input
+            ref={backupFileInputRef}
+            type="file"
+            accept=".json,application/json"
+            style={{ display: 'none' }}
+            onChange={restoreBackupFromFile}
+          />
+        </div>
+        {!me?.isAdmin && (
+          <div style={{ color: 'var(--text-muted)', fontSize: 12, marginBottom: 10 }}>
+            Backup and restore are available to admin users only.
+          </div>
+        )}
+      </div>
+
+      <div className="card" style={{ marginTop: 16 }}>
         <div className="card-title">Recent Sync Runs</div>
         {!runs.length && <div style={{ color: 'var(--text-muted)' }}>No sync runs yet.</div>}
         {runs.slice(0, 20).map(run => (

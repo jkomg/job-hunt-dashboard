@@ -19,6 +19,20 @@ function now() {
   return Date.now()
 }
 
+const BACKUP_TABLES = [
+  'app_settings',
+  'daily_logs',
+  'pipeline_entries',
+  'contacts',
+  'interviews',
+  'events',
+  'templates',
+  'watchlist',
+  'sheet_sync_links',
+  'entity_sheet_sync_links',
+  'sheet_sync_runs'
+]
+
 function normalizeEmail(email) {
   return (email || '').trim().toLowerCase()
 }
@@ -742,6 +756,58 @@ export async function setAppSetting(key, value) {
     `,
     args: [settingKey, value == null ? null : String(value), now()]
   })
+}
+
+async function getTableColumns(tableName) {
+  const res = await db.execute(`PRAGMA table_info(${tableName})`)
+  return (res.rows || []).map(r => String(r.name))
+}
+
+export async function exportBackupSnapshot() {
+  const tables = {}
+  for (const tableName of BACKUP_TABLES) {
+    const res = await db.execute(`SELECT * FROM ${tableName}`)
+    tables[tableName] = toPlainRows(res)
+  }
+
+  return {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    databaseUrl: DATABASE_URL,
+    tables
+  }
+}
+
+export async function restoreBackupSnapshot(snapshot) {
+  const payload = snapshot && typeof snapshot === 'object' ? snapshot : null
+  if (!payload || typeof payload !== 'object') {
+    throw new Error('Invalid backup payload')
+  }
+  if (!payload.tables || typeof payload.tables !== 'object') {
+    throw new Error('Backup payload is missing tables')
+  }
+
+  for (const tableName of BACKUP_TABLES) {
+    await db.execute(`DELETE FROM ${tableName}`)
+  }
+
+  for (const tableName of BACKUP_TABLES) {
+    const rows = Array.isArray(payload.tables[tableName]) ? payload.tables[tableName] : []
+    if (!rows.length) continue
+
+    const columns = await getTableColumns(tableName)
+    for (const rawRow of rows) {
+      const row = rawRow && typeof rawRow === 'object' ? rawRow : {}
+      const keys = columns.filter(c => Object.prototype.hasOwnProperty.call(row, c))
+      if (!keys.length) continue
+      const placeholders = keys.map(() => '?').join(', ')
+      const args = keys.map(k => row[k])
+      await db.execute({
+        sql: `INSERT INTO ${tableName} (${keys.join(', ')}) VALUES (${placeholders})`,
+        args
+      })
+    }
+  }
 }
 
 function todayLabel() {
