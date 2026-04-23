@@ -12,7 +12,7 @@ import {
   initDb,
   getUserByUsername, getUserByEmail, getUserById,
   createSession, getSession, deleteSession, updatePassword, getRecentSheetSyncRuns,
-  getAppSettings, setAppSetting,
+  getAppSettings, setAppSetting, exportBackupSnapshot, restoreBackupSnapshot,
   getDashboardData,
   getContacts, markContacted, updateContactStatus, createContact, updateContact,
   getInterviews, createInterview, updateInterview,
@@ -45,6 +45,20 @@ const SHEET_SETTINGS_KEYS = {
   interviewsTabs: 'sheets.interviews_tabs',
   eventsTabs: 'sheets.events_tabs'
 }
+const APP_SETTINGS_KEYS = {
+  onboardingComplete: 'app.onboarding.completed',
+  displayName: 'app.profile.display_name'
+}
+const RATE_LIMIT_WINDOW_MS = 60 * 1000
+const API_RATE_LIMIT = Number(process.env.API_RATE_LIMIT || 400)
+const LOGIN_RATE_LIMIT = Number(process.env.LOGIN_RATE_LIMIT || 20)
+const LOGIN_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000
+const rateBuckets = new Map()
+const CSRF_EXEMPT_PATHS = new Set([
+  '/api/login',
+  '/api/health',
+  '/api/internal/sheets/sync'
+])
 
 function parseBool(value, fallback = false) {
   if (value == null) return fallback
@@ -58,6 +72,57 @@ function splitTabs(raw) {
     .split(',')
     .map(t => t.trim())
     .filter(Boolean)
+}
+
+function getClientIp(req) {
+  const xfwd = String(req.headers['x-forwarded-for'] || '').trim()
+  if (xfwd) return xfwd.split(',')[0].trim()
+  return req.ip || req.connection?.remoteAddress || 'unknown'
+}
+
+function checkRateLimit(req, { scope, limit, windowMs }) {
+  const ip = getClientIp(req)
+  const key = `${scope}:${ip}`
+  const ts = Date.now()
+  const bucket = rateBuckets.get(key) || { count: 0, resetAt: ts + windowMs }
+
+  if (ts > bucket.resetAt) {
+    bucket.count = 0
+    bucket.resetAt = ts + windowMs
+  }
+
+  bucket.count += 1
+  rateBuckets.set(key, bucket)
+  return {
+    allowed: bucket.count <= limit,
+    remaining: Math.max(0, limit - bucket.count),
+    resetAt: bucket.resetAt
+  }
+}
+
+function generateCsrfToken() {
+  return crypto.randomBytes(24).toString('hex')
+}
+
+function setCsrfCookie(res, token) {
+  res.cookie('csrf_token', token, {
+    httpOnly: false,
+    sameSite: 'lax',
+    secure: isProd,
+    maxAge: 7 * 24 * 60 * 60 * 1000
+  })
+}
+
+function isMutatingMethod(method) {
+  return ['POST', 'PUT', 'PATCH', 'DELETE'].includes(String(method || '').toUpperCase())
+}
+
+async function getOnboardingStatus() {
+  const settings = await getAppSettings([APP_SETTINGS_KEYS.onboardingComplete, APP_SETTINGS_KEYS.displayName])
+  return {
+    onboardingComplete: parseBool(settings[APP_SETTINGS_KEYS.onboardingComplete], false),
+    displayName: (settings[APP_SETTINGS_KEYS.displayName] || 'there').trim() || 'there'
+  }
 }
 
 async function getSheetsConfigOverrides() {
@@ -114,6 +179,31 @@ app.use('/api', (req, res, next) => {
   res.setHeader('Cache-Control', 'no-store')
   next()
 })
+app.use('/api', (req, res, next) => {
+  const rule = req.path === '/login'
+    ? { scope: 'login', limit: LOGIN_RATE_LIMIT, windowMs: LOGIN_RATE_LIMIT_WINDOW_MS }
+    : { scope: 'api', limit: API_RATE_LIMIT, windowMs: RATE_LIMIT_WINDOW_MS }
+  const result = checkRateLimit(req, rule)
+  if (!result.allowed) {
+    return res.status(429).json({ error: 'Too many requests. Please wait and try again.' })
+  }
+  next()
+})
+app.use('/api', (req, res, next) => {
+  if (!isMutatingMethod(req.method)) return next()
+  const fullPath = `/api${req.path}`
+  if (CSRF_EXEMPT_PATHS.has(fullPath)) return next()
+
+  const sessionToken = req.cookies?.session
+  if (!sessionToken) return next()
+
+  const csrfCookie = String(req.cookies?.csrf_token || '')
+  const csrfHeader = String(req.headers['x-csrf-token'] || '')
+  if (!csrfCookie || !csrfHeader || csrfCookie !== csrfHeader) {
+    return res.status(403).json({ error: 'Security check failed. Refresh and try again.', code: 'CSRF_INVALID' })
+  }
+  next()
+})
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true, authMode: AUTH_MODE, now: new Date().toISOString() })
 })
@@ -126,6 +216,11 @@ function isValidCronToken(req) {
   const b = Buffer.from(SHEETS_SYNC_CRON_TOKEN, 'utf8')
   if (a.length !== b.length) return false
   return crypto.timingSafeEqual(a, b)
+}
+
+function requireAdmin(req, res, next) {
+  if (!req.isAdmin) return res.status(403).json({ error: 'Admin access required' })
+  next()
 }
 
 // ─── Auth middleware ───────────────────────────────────────────────────────────
@@ -201,12 +296,15 @@ app.post('/api/login', async (req, res) => {
 
   const token = crypto.randomBytes(32).toString('hex')
   await createSession(token, user.id)
+  const csrfToken = generateCsrfToken()
 
   res.cookie('session', token, {
     httpOnly: true,
     sameSite: 'lax',
+    secure: isProd,
     maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
   })
+  setCsrfCookie(res, csrfToken)
 
   res.json({
     ok: true,
@@ -219,17 +317,57 @@ app.post('/api/logout', async (req, res) => {
   const token = req.cookies?.session
   if (token) await deleteSession(token)
   res.clearCookie('session')
+  res.clearCookie('csrf_token')
   res.json({ ok: true })
 })
 
-app.get('/api/me', requireAuth, (req, res) => {
-  res.json({
-    ok: true,
-    authMode: req.authMode,
-    email: req.userEmail || null,
-    isAdmin: !!req.isAdmin,
-    mustChangePassword: !!req.mustChangePassword
-  })
+app.get('/api/me', requireAuth, async (req, res) => {
+  try {
+    const onboarding = await getOnboardingStatus()
+    res.json({
+      ok: true,
+      authMode: req.authMode,
+      email: req.userEmail || null,
+      isAdmin: !!req.isAdmin,
+      mustChangePassword: !!req.mustChangePassword,
+      onboardingComplete: onboarding.onboardingComplete,
+      displayName: onboarding.displayName
+    })
+  } catch (e) {
+    console.error('me failed', e)
+    res.status(500).json({ error: 'Could not load profile' })
+  }
+})
+
+app.get('/api/csrf', requireAuth, (_req, res) => {
+  const token = generateCsrfToken()
+  setCsrfCookie(res, token)
+  res.json({ ok: true, token })
+})
+
+app.get('/api/setup/status', requireAuth, async (_req, res) => {
+  try {
+    const onboarding = await getOnboardingStatus()
+    res.json({ ok: true, ...onboarding })
+  } catch (e) {
+    console.error('setup.status failed', e)
+    res.status(500).json({ error: 'Could not load setup status' })
+  }
+})
+
+app.post('/api/setup/complete', requireAuth, async (req, res) => {
+  try {
+    const displayName = String(req.body?.displayName || '').trim()
+    if (!displayName) {
+      return res.status(400).json({ error: 'Display name is required' })
+    }
+    await setAppSetting(APP_SETTINGS_KEYS.displayName, displayName)
+    await setAppSetting(APP_SETTINGS_KEYS.onboardingComplete, 'true')
+    res.json({ ok: true, onboardingComplete: true, displayName })
+  } catch (e) {
+    console.error('setup.complete failed', e)
+    res.status(500).json({ error: 'Could not complete setup' })
+  }
 })
 
 app.post('/api/change-password', requireAuth, async (req, res) => {
@@ -629,6 +767,29 @@ app.get('/api/sheets/status', requireAuth, async (_req, res) => {
   } catch (e) {
     console.error('sheets.status failed', e)
     res.status(500).json({ error: 'Could not load sync status' })
+  }
+})
+
+// ─── Admin Backup ─────────────────────────────────────────────────────────────
+
+app.get('/api/admin/backup/export', requireAuth, requireAdmin, async (_req, res) => {
+  try {
+    const snapshot = await exportBackupSnapshot()
+    res.json(snapshot)
+  } catch (e) {
+    console.error('backup.export failed', e)
+    res.status(500).json({ error: 'Could not export backup' })
+  }
+})
+
+app.post('/api/admin/backup/restore', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const snapshot = req.body?.snapshot ?? req.body
+    await restoreBackupSnapshot(snapshot)
+    res.json({ ok: true })
+  } catch (e) {
+    console.error('backup.restore failed', e)
+    res.status(400).json({ error: e.message || 'Could not restore backup' })
   }
 })
 

@@ -41,6 +41,7 @@ Default login (session mode):
 
 - username: whatever you chose during setup (default is `jason`)
 - password: `jobhunt2026`
+- first login opens a quick setup wizard to choose dashboard display name
 
 ### Install + Run (Windows PowerShell)
 
@@ -62,6 +63,7 @@ Default login (session mode):
 
 - username: whatever you chose during setup (default is `jason`)
 - password: `jobhunt2026`
+- first login opens a quick setup wizard to choose dashboard display name
 
 ### Local Data Storage
 
@@ -136,6 +138,16 @@ Recommended filenames:
 - `google-sheet-share-service-account.png`
 - `first-login-screen.png`
 
+## Backup & Restore
+
+Admin users can use in-app `Settings`:
+- `Export Backup` downloads a full JSON snapshot of app data/settings
+- `Restore Backup` imports a previously exported JSON snapshot
+
+Recommended:
+- export a backup before major upgrades
+- keep at least one weekly backup copy
+
 ## Alternative Install Paths
 
 ### Local Dev (for contributors)
@@ -173,6 +185,9 @@ Requires optional `NOTION_*` vars in `.env`.
   - `session` (default local)
   - `iap` (cloud)
   - `hybrid`
+- Session mode now includes:
+  - CSRF protection for mutating API calls
+  - built-in API/login rate limiting
 
 ## Docs
 

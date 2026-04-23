@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import Login from './components/Login.jsx'
 import ForcePasswordChange from './components/ForcePasswordChange.jsx'
+import SetupWizard from './components/SetupWizard.jsx'
 import Dashboard from './components/Dashboard.jsx'
 import Pipeline from './components/Pipeline.jsx'
 import Contacts from './components/Contacts.jsx'
@@ -69,6 +70,10 @@ export default function App() {
     return <ForcePasswordChange onDone={refreshMe} onLogout={logout} />
   }
 
+  if (!me?.onboardingComplete) {
+    return <SetupWizard me={me} onComplete={refreshMe} onLogout={logout} />
+  }
+
   return (
     <div className="app">
       {/* Desktop sidebar */}
@@ -122,7 +127,7 @@ export default function App() {
           ))}
         </div>
 
-        {view === 'dashboard'  && <Dashboard onNavigate={setView} />}
+        {view === 'dashboard'  && <Dashboard onNavigate={setView} me={me} />}
         {view === 'checkin'    && <DailyCheckin />}
         {view === 'pipeline'   && <Pipeline />}
         {view === 'contacts'   && <Contacts />}
@@ -130,7 +135,7 @@ export default function App() {
         {view === 'events'     && <Events />}
         {view === 'templates'  && <Templates />}
         {view === 'watchlist'  && <Watchlist />}
-        {view === 'settings'   && <Settings />}
+        {view === 'settings'   && <Settings me={me} onProfileUpdated={refreshMe} />}
       </main>
 
       {/* Mobile bottom nav */}
