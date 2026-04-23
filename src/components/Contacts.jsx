@@ -45,7 +45,11 @@ function ContactForm({ form, set }) {
         <div className="field"><label>Warmth</label><select value={form.Warmth} onChange={e => set('Warmth', e.target.value)}>{WARMTH_OPTIONS.map(o => <option key={o}>{o}</option>)}</select></div>
         <div className="field"><label>Status</label><select value={form.Status} onChange={e => set('Status', e.target.value)}>{STATUS_OPTIONS.map(o => <option key={o}>{o}</option>)}</select></div>
         <div className="field"><label>How We Know Each Other</label><select value={form['How We Know Each Other']} onChange={e => set('How We Know Each Other', e.target.value)}><option value="">—</option>{HOW_OPTIONS.map(o => <option key={o}>{o}</option>)}</select></div>
-        <div className="field"><label>Next Follow-Up</label><input type="date" value={form['Next Follow-Up']} onChange={e => set('Next Follow-Up', e.target.value)} /></div>
+        <div className="field">
+          <label>Next Follow-Up</label>
+          <input type="date" value={form['Next Follow-Up']} onChange={e => set('Next Follow-Up', e.target.value)} />
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>Set this so the contact appears in “Due” when it’s time.</div>
+        </div>
         <div className="field"><label>LinkedIn URL</label><input value={form['LinkedIn URL']} onChange={e => set('LinkedIn URL', e.target.value)} placeholder="https://linkedin.com/in/…" /></div>
       </div>
       <div className="field"><label>Resume / Cover Letter Used</label><input value={form['Resume Used']} onChange={e => set('Resume Used', e.target.value)} placeholder="e.g. CS General + Healthcare tailored CL" /></div>
@@ -238,6 +242,16 @@ export default function Contacts() {
           <button className={`tab${filter === 'all' ? ' active' : ''}`} onClick={() => setFilter('all')}>All</button>
         </div>
       </div>
+
+      {contacts.length === 0 && (
+        <div className="card mb-16">
+          <div className="card-title">Build Your Network Tracker</div>
+          <div style={{ color: 'var(--text-muted)', marginBottom: 10 }}>
+            Add people you can contact for referrals, warm intros, and follow-ups.
+          </div>
+          <button className="btn btn-primary btn-sm" onClick={() => setShowAdd(true)}>+ Add First Contact</button>
+        </div>
+      )}
 
       <div className="card" style={{ padding: 0 }}>
         {filtered.length === 0 ? (

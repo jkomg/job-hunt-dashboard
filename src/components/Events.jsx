@@ -28,7 +28,11 @@ function EventForm({ form, set }) {
       <div className="checkin-grid">
         <div className="field"><label>Event Name *</label><input value={form.Name} onChange={e => set('Name', e.target.value)} /></div>
         <div className="field"><label>Date</label><input type="date" value={form.Date} onChange={e => set('Date', e.target.value)} /></div>
-        <div className="field"><label>Status</label><select value={form.Status} onChange={e => set('Status', e.target.value)}>{STATUSES.map(s => <option key={s}>{s}</option>)}</select></div>
+        <div className="field">
+          <label>Status</label>
+          <select value={form.Status} onChange={e => set('Status', e.target.value)}>{STATUSES.map(s => <option key={s}>{s}</option>)}</select>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>Use “Registered” to keep this in your active event list.</div>
+        </div>
         <div className="field"><label>Price</label><input value={form.Price} onChange={e => set('Price', e.target.value)} placeholder="e.g. Free, $25, $150" /></div>
       </div>
       <div className="field"><label>Registration Link</label><input value={form['Registration Link']} onChange={e => set('Registration Link', e.target.value)} placeholder="https://…" /></div>
@@ -177,6 +181,16 @@ export default function Events() {
         <button className={`tab${filter === 'registered' ? ' active' : ''}`} onClick={() => setFilter('registered')}>Registered</button>
         <button className={`tab${filter === 'all' ? ' active' : ''}`} onClick={() => setFilter('all')}>All</button>
       </div>
+
+      {items.length === 0 && (
+        <div className="card mb-16">
+          <div className="card-title">Capture Job-Search Events</div>
+          <div style={{ color: 'var(--text-muted)', marginBottom: 10 }}>
+            Track meetups, webinars, and fairs so opportunities do not slip.
+          </div>
+          <button className="btn btn-primary btn-sm" onClick={() => setShowAdd(true)}>+ Add First Event</button>
+        </div>
+      )}
 
       <div className="card" style={{ padding: 0 }}>
         {filtered.length === 0 ? (

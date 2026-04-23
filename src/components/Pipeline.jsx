@@ -52,12 +52,20 @@ function PipelineForm({ form, set }) {
       <div className="checkin-grid">
         <div className="field"><label>Company *</label><input value={form.Company} onChange={e => set('Company', e.target.value)} /></div>
         <div className="field"><label>Role</label><input value={form.Role} onChange={e => set('Role', e.target.value)} /></div>
-        <div className="field"><label>Stage</label><select value={form.Stage} onChange={e => set('Stage', e.target.value)}>{STAGES.map(s => <option key={s}>{s}</option>)}</select></div>
+        <div className="field">
+          <label>Stage</label>
+          <select value={form.Stage} onChange={e => set('Stage', e.target.value)}>{STAGES.map(s => <option key={s}>{s}</option>)}</select>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>Tip: move to “Closed” only when this role is done.</div>
+        </div>
         <div className="field"><label>Priority</label><select value={form.Priority} onChange={e => set('Priority', e.target.value)}><option value="">—</option>{PRIORITIES.map(p => <option key={p}>{p}</option>)}</select></div>
         <div className="field"><label>Sector</label><select value={form.Sector} onChange={e => set('Sector', e.target.value)}><option value="">—</option>{SECTORS.map(s => <option key={s}>{s}</option>)}</select></div>
         <div className="field"><label>Salary Range</label><input value={form['Salary Range']} onChange={e => set('Salary Range', e.target.value)} placeholder="e.g. $130k–$160k" /></div>
         <div className="field"><label>Date Applied</label><input type="date" value={form['Date Applied']} onChange={e => set('Date Applied', e.target.value)} /></div>
-        <div className="field"><label>Follow-Up Date</label><input type="date" value={form['Follow-Up Date']} onChange={e => set('Follow-Up Date', e.target.value)} /></div>
+        <div className="field">
+          <label>Follow-Up Date</label>
+          <input type="date" value={form['Follow-Up Date']} onChange={e => set('Follow-Up Date', e.target.value)} />
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>Use this to surface reminders in your briefing.</div>
+        </div>
         <div className="field"><label>Contact Name</label><input value={form['Contact Name']} onChange={e => set('Contact Name', e.target.value)} /></div>
         <div className="field"><label>Contact Title</label><input value={form['Contact Title']} onChange={e => set('Contact Title', e.target.value)} /></div>
         <div className="field"><label>Work Location</label><select value={form['Work Location']} onChange={e => set('Work Location', e.target.value)}><option value="">—</option>{WORK_LOCATIONS.map(l => <option key={l}>{l}</option>)}</select></div>
@@ -294,6 +302,16 @@ export default function Pipeline() {
           <button key={s} className={`tab${filter === s ? ' active' : ''}`} onClick={() => setFilter(s)}>{s}</button>
         ))}
       </div>
+
+      {items.length === 0 && (
+        <div className="card mb-16">
+          <div className="card-title">Start Your Pipeline</div>
+          <div style={{ color: 'var(--text-muted)', marginBottom: 10 }}>
+            Add your first role to track status, notes, and follow-up dates.
+          </div>
+          <button className="btn btn-primary btn-sm" onClick={() => setShowAdd(true)}>+ Add First Role</button>
+        </div>
+      )}
 
       <div className="kanban-scroll">
         <div className="kanban">
