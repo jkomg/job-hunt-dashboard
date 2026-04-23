@@ -11,6 +11,14 @@ Recommended end-user setup script (non-technical friendly).
 - Creates `.env` from `.env.example` if missing
 - Ensures `SESSION_SECRET` is set
 - Ensures local DB mode (`DATABASE_URL=file:./data/app.db`)
+- Prompts for app username and writes `DEFAULT_USERNAME`
+- Optionally prompts for Google Sheets linkage and writes:
+  - `GOOGLE_SHEETS_ID`
+  - `GOOGLE_SHEETS_SYNC_TABS`
+  - `GOOGLE_SHEETS_CONTACTS_SYNC_TABS`
+  - `GOOGLE_SHEETS_INTERVIEWS_SYNC_TABS`
+  - `GOOGLE_SHEETS_EVENTS_SYNC_TABS`
+  - `GOOGLE_SHEETS_CREDENTIALS_JSON` (base64 from service-account JSON file)
 - Starts Docker stack with build (`docker compose up --build -d`)
 
 ### Running
@@ -18,6 +26,12 @@ Recommended end-user setup script (non-technical friendly).
 ```bash
 ./scripts/start-local-docker.sh
 ```
+
+Optional non-interactive presets:
+- `DEFAULT_USERNAME`
+- `ENABLE_SHEETS_SYNC` (`y/yes/true/1`)
+- `SHEET_INPUT` (sheet URL or ID)
+- `SHEET_CREDS_PATH` (path to service-account JSON)
 
 ## start-local-docker.ps1
 
@@ -28,6 +42,12 @@ Windows PowerShell equivalent of `start-local-docker.sh`.
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\start-local-docker.ps1
 ```
+
+Optional non-interactive presets:
+- `DEFAULT_USERNAME`
+- `ENABLE_SHEETS_SYNC` (`y/yes/true/1`)
+- `SHEET_INPUT` (sheet URL or ID)
+- `SHEET_CREDS_PATH` (path to service-account JSON)
 
 ## bootstrap-local.sh
 

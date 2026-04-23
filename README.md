@@ -24,31 +24,43 @@ This path is intended to feel as close to "install app and use it" as possible.
 ### Install + Run (macOS/Linux)
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/jkomg/job-hunt-dashboard.git
 cd job-hunt-dashboard
 ./scripts/start-local-docker.sh
 ```
 
-Then open [http://localhost:8080](http://localhost:8080)
+What this does:
+- downloads the app
+- asks you for a username
+- optionally links your Google Sheet for sync
+- starts the app locally in Docker
+
+Then open [http://localhost:8080](http://localhost:8080).
 
 Default login (session mode):
 
-- username: `jason`
+- username: whatever you chose during setup (default is `jason`)
 - password: `jobhunt2026`
 
 ### Install + Run (Windows PowerShell)
 
 ```powershell
-git clone <your-repo-url>
+git clone https://github.com/jkomg/job-hunt-dashboard.git
 cd job-hunt-dashboard
 powershell -ExecutionPolicy Bypass -File .\scripts\start-local-docker.ps1
 ```
 
-Then open [http://localhost:8080](http://localhost:8080)
+What this does:
+- downloads the app
+- asks you for a username
+- optionally links your Google Sheet for sync
+- starts the app locally in Docker
+
+Then open [http://localhost:8080](http://localhost:8080).
 
 Default login (session mode):
 
-- username: `jason`
+- username: whatever you chose during setup (default is `jason`)
 - password: `jobhunt2026`
 
 ### Local Data Storage
@@ -60,6 +72,20 @@ Default login (session mode):
 ## Optional: Google Sheets Sync
 
 If you want to sync with a shared sheet (for example, Remote Rebellion workflows):
+
+### Non-Technical Setup (Service Account + Sharing)
+
+1. Open [Google Cloud Console](https://console.cloud.google.com/), then create or select a project.
+2. Enable `Google Sheets API`.
+3. Go to `APIs & Services` -> `Credentials` -> `Create Credentials` -> `Service account`.
+4. Open the new service account, then `Keys` -> `Add key` -> `Create new key` -> `JSON`.
+5. Save the downloaded JSON file on your machine.
+6. Open your Google Sheet, click `Share`, and add the service-account email as `Editor`.
+7. Copy your sheet URL (or sheet ID).
+
+Notes:
+- Service-account email looks like `name@project-id.iam.gserviceaccount.com`.
+- If the sheet is not shared with that email, sync will fail.
 
 1. Put these values in `.env`:
 
@@ -79,6 +105,20 @@ docker compose restart
 ```
 
 3. Run sync manually from app/API (`POST /api/sheets/sync`) or configure daily scheduler in cloud mode.
+
+## Screenshot Plan
+
+Store install screenshots in `docs/images/install/` and keep both this README and the handout pointing to the same image files.
+
+Recommended filenames:
+- `mac-terminal-run-script.png`
+- `windows-powershell-run-script.png`
+- `installer-username-prompt.png`
+- `installer-google-sync-prompts.png`
+- `google-cloud-create-service-account.png`
+- `google-cloud-download-json-key.png`
+- `google-sheet-share-service-account.png`
+- `first-login-screen.png`
 
 ## Alternative Install Paths
 
