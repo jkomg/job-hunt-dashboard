@@ -502,6 +502,7 @@ app.get('/api/sheets/config', requireAuth, async (_req, res) => {
 
 app.put('/api/sheets/config', requireAuth, async (req, res) => {
   try {
+    const existingOverrides = await getSheetsConfigOverrides()
     const body = req.body || {}
     const updates = {}
 
@@ -512,7 +513,8 @@ app.put('/api/sheets/config', requireAuth, async (req, res) => {
     if (body.interviewsTabs != null) updates.interviewsTabs = Array.isArray(body.interviewsTabs) ? body.interviewsTabs : splitTabs(body.interviewsTabs)
     if (body.eventsTabs != null) updates.eventsTabs = Array.isArray(body.eventsTabs) ? body.eventsTabs : splitTabs(body.eventsTabs)
 
-    if (updates.sheetId != null && !updates.sheetId) {
+    const nextEnabled = updates.enabled != null ? updates.enabled : (existingOverrides.enabled ?? true)
+    if (nextEnabled && updates.sheetId != null && !updates.sheetId) {
       return res.status(400).json({ error: 'Sheet ID cannot be empty.' })
     }
 
@@ -605,21 +607,22 @@ app.get('/api/sheets/status', requireAuth, async (_req, res) => {
     const config = await getSheetsSyncStatus(overrides)
     const runs = await getRecentSheetSyncRuns(25)
     const formattedRuns = runs.map(formatSyncRun)
-    const lastSuccess = formattedRuns.find(r => r.status === 'ok') || null
-    const lastError = formattedRuns.find(r => r.status === 'error') || null
+    const latestRun = formattedRuns[0] || null
+    const latestSuccess = latestRun?.status === 'ok' ? latestRun : null
+    const latestError = latestRun?.status === 'error' ? latestRun : null
     const hasConfigIssue = config?.ok === false
 
     res.json({
       ok: true,
       config,
       health: {
-        status: (hasConfigIssue || lastError) ? 'needs_attention' : 'healthy',
-        lastSuccessAt: lastSuccess?.createdAt || null,
-        lastErrorAt: lastError?.createdAt || null,
+        status: (hasConfigIssue || latestError) ? 'needs_attention' : 'healthy',
+        lastSuccessAt: latestSuccess?.createdAt || null,
+        lastErrorAt: latestError?.createdAt || null,
         lastError: hasConfigIssue
           ? { direction: 'config', details: config?.error?.userMessage || 'Configuration issue' }
-          : lastError
-            ? { direction: lastError.direction, details: lastError.errorText }
+          : latestError
+            ? { direction: latestError.direction, details: latestError.errorText }
             : null
       }
     })
