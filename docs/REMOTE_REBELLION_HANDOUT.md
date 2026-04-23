@@ -11,7 +11,7 @@ Free personal job-hunt tracker (no paid tools required for local use).
 
 ## Before You Start
 
-- Install Docker Desktop
+- Install Docker Desktop [get it here](https://docs.docker.com/get-started/introduction/get-docker-desktop/)
 - Make sure Docker Desktop is running
 
 ## Install (Mac/Linux)
