@@ -121,7 +121,7 @@ function EditModal({ event, onClose, onUpdate }) {
           <button className="modal-close" onClick={onClose}>×</button>
         </div>
         {error && <div className="error-msg">{error}</div>}
-        {saved && <div className="success-msg">Saved to Notion!</div>}
+        {saved && <div className="success-msg">Saved!</div>}
         <EventForm form={form} set={set} />
         <div className="modal-footer">
           <button className="btn btn-ghost" onClick={onClose}>Close</button>

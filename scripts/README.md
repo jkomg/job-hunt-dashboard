@@ -2,7 +2,50 @@
 
 One-off utility scripts for the Job Hunt Dashboard. These are not part of the app — run them locally as needed.
 
-## import-legacy-jobs.js
+## start-local-docker.sh
+
+Recommended end-user setup script (non-technical friendly).
+
+### What it does
+
+- Creates `.env` from `.env.example` if missing
+- Ensures `SESSION_SECRET` is set
+- Ensures local DB mode (`DATABASE_URL=file:./data/app.db`)
+- Starts Docker stack with build (`docker compose up --build -d`)
+
+### Running
+
+```bash
+./scripts/start-local-docker.sh
+```
+
+## start-local-docker.ps1
+
+Windows PowerShell equivalent of `start-local-docker.sh`.
+
+### Running
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\start-local-docker.ps1
+```
+
+## bootstrap-local.sh
+
+Local onboarding helper for new users/contributors.
+
+### What it does
+
+- Creates `.env` from `.env.example` if missing
+- Ensures `SESSION_SECRET` is set to a secure random value
+- Installs dependencies (`npm install`)
+
+### Running
+
+```bash
+./scripts/bootstrap-local.sh
+```
+
+## import-legacy-jobs.js (legacy)
 
 Bulk-imports a legacy Notion page of job applications into the pipeline database.
 
@@ -41,3 +84,41 @@ Safe to inspect before running — it only creates records, never deletes.
 - Role extraction is best-effort on free-form text — some entries may need manual cleanup after import
 - Does not deduplicate: running twice will create duplicate entries
 - Only processes top-level numbered list items (not sub-pages or nested lists)
+
+## migrate-notion-to-turso.mjs
+
+One-time migration helper to copy legacy Notion data into Turso tables.
+
+### Running
+
+```bash
+node scripts/migrate-notion-to-turso.mjs
+```
+
+### Notes
+
+- Requires `NOTION_TOKEN` and the relevant `NOTION_*_DB` values in `.env`.
+- Skips each entity if the destination Turso table already contains rows.
+- Intended for cutover; runtime app no longer depends on Notion.
+
+## setup-daily-sheets-sync.sh
+
+Creates/updates a Cloud Scheduler HTTP job that runs Sheets sync once per day.
+
+### What it does
+
+- Creates a dedicated scheduler service account (`jobhunt-scheduler-invoker`)
+- Grants it `roles/run.invoker` on the Cloud Run service
+- Creates or updates job `job-hunt-daily-sheets-sync`
+- Calls `/api/internal/sheets/sync` with:
+  - OIDC auth to Cloud Run
+  - `x-sync-token` header (must match `SHEETS_SYNC_CRON_TOKEN`)
+
+### Running
+
+```bash
+chmod +x ./scripts/setup-daily-sheets-sync.sh
+CRON_TOKEN="$(grep '^SHEETS_SYNC_CRON_TOKEN=' .env | cut -d'=' -f2-)" \
+DOMAIN="hunt.jkomg.us" \
+./scripts/setup-daily-sheets-sync.sh
+```

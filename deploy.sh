@@ -29,24 +29,29 @@ docker push "$IMAGE"
 
 SECRET_ARGS=(
   --set-secrets SESSION_SECRET=jobhunt-session-secret:latest
-  --set-secrets NOTION_TOKEN=jobhunt-notion-token:latest
-  --set-secrets NOTION_PIPELINE_DB=jobhunt-notion-pipeline-db:latest
-  --set-secrets NOTION_CONTACTS_DB=jobhunt-notion-contacts-db:latest
-  --set-secrets NOTION_DAILY_LOG_DB=jobhunt-notion-daily-db:latest
-  --set-secrets NOTION_INTERVIEWS_DB=jobhunt-notion-interviews-db:latest
-  --set-secrets NOTION_EVENTS_DB=jobhunt-notion-events-db:latest
-  --set-secrets NOTION_TEMPLATES_DB=jobhunt-notion-templates-db:latest
-  --set-secrets NOTION_WATCHLIST_DB=jobhunt-notion-watchlist-db:latest
   --set-secrets GOOGLE_SHEETS_ID=jobhunt-google-sheets-id:latest
   --set-secrets GOOGLE_SHEETS_SYNC_TABS=jobhunt-google-sheets-tabs:latest
   --set-secrets GOOGLE_SHEETS_CREDENTIALS_JSON=jobhunt-google-sheets-creds:latest
 )
+
+if gcloud secrets describe jobhunt-google-sheets-contacts-tabs --project "$PROJECT_ID" >/dev/null 2>&1; then
+  SECRET_ARGS+=(--set-secrets GOOGLE_SHEETS_CONTACTS_SYNC_TABS=jobhunt-google-sheets-contacts-tabs:latest)
+fi
+if gcloud secrets describe jobhunt-google-sheets-interviews-tabs --project "$PROJECT_ID" >/dev/null 2>&1; then
+  SECRET_ARGS+=(--set-secrets GOOGLE_SHEETS_INTERVIEWS_SYNC_TABS=jobhunt-google-sheets-interviews-tabs:latest)
+fi
+if gcloud secrets describe jobhunt-google-sheets-events-tabs --project "$PROJECT_ID" >/dev/null 2>&1; then
+  SECRET_ARGS+=(--set-secrets GOOGLE_SHEETS_EVENTS_SYNC_TABS=jobhunt-google-sheets-events-tabs:latest)
+fi
 
 if gcloud secrets describe jobhunt-database-url --project "$PROJECT_ID" >/dev/null 2>&1; then
   SECRET_ARGS+=(--set-secrets DATABASE_URL=jobhunt-database-url:latest)
 fi
 if gcloud secrets describe jobhunt-turso-auth-token --project "$PROJECT_ID" >/dev/null 2>&1; then
   SECRET_ARGS+=(--set-secrets TURSO_AUTH_TOKEN=jobhunt-turso-auth-token:latest)
+fi
+if gcloud secrets describe jobhunt-sheets-sync-cron-token --project "$PROJECT_ID" >/dev/null 2>&1; then
+  SECRET_ARGS+=(--set-secrets SHEETS_SYNC_CRON_TOKEN=jobhunt-sheets-sync-cron-token:latest)
 fi
 
 gcloud run deploy "$SERVICE_NAME" \

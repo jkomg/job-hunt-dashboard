@@ -10,20 +10,17 @@ import { fileURLToPath } from 'url'
 
 import {
   initDb,
-  getUserByUsername, getUserByEmail, getUserById, ensureUserByEmail,
-  createSession, getSession, deleteSession, updatePassword, getRecentSheetSyncRuns
-} from './db.js'
-
-import {
+  getUserByUsername, getUserByEmail, getUserById,
+  createSession, getSession, deleteSession, updatePassword, getRecentSheetSyncRuns,
   getDashboardData,
-  getPipeline, updatePipelineEntry, updatePipelineStage, updatePipelineFollowUp, createPipelineEntry,
   getContacts, markContacted, updateContactStatus, createContact, updateContact,
-  getDailyLogs, getTodayLog, getRecentLogs, createDailyLog, updateDailyLog,
   getInterviews, createInterview, updateInterview,
   getEvents, createEvent, updateEvent,
   getTemplates, createTemplate, updateTemplate,
-  getWatchlist, createWatchlistEntry, updateWatchlistEntry
-} from './notion.js'
+  getWatchlist, createWatchlistEntry, updateWatchlistEntry,
+  getDailyLogs, getTodayLog, createDailyLog, updateDailyLog,
+  getPipeline, updatePipelineEntry, updatePipelineStage, updatePipelineFollowUp, createPipelineEntry
+} from './db.js'
 import { runSheetsSync } from './sheetsSync.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -38,6 +35,7 @@ const ADMIN_EMAILS = new Set(
     .filter(Boolean)
 )
 const PASSWORD_CHANGE_ALLOWED_PATHS = new Set(['/api/me', '/api/change-password', '/api/logout'])
+const SHEETS_SYNC_CRON_TOKEN = String(process.env.SHEETS_SYNC_CRON_TOKEN || '').trim()
 
 app.use(express.json())
 app.use(cookieParser())
@@ -45,6 +43,23 @@ app.use(cors({
   origin: isProd ? false : 'http://localhost:3000',
   credentials: true
 }))
+app.use('/api', (req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store')
+  next()
+})
+app.get('/api/health', (_req, res) => {
+  res.json({ ok: true, authMode: AUTH_MODE, now: new Date().toISOString() })
+})
+
+function isValidCronToken(req) {
+  const provided = String(req.headers['x-sync-token'] || '').trim()
+  if (!provided || !SHEETS_SYNC_CRON_TOKEN) return false
+
+  const a = Buffer.from(provided, 'utf8')
+  const b = Buffer.from(SHEETS_SYNC_CRON_TOKEN, 'utf8')
+  if (a.length !== b.length) return false
+  return crypto.timingSafeEqual(a, b)
+}
 
 // ─── Auth middleware ───────────────────────────────────────────────────────────
 
@@ -58,38 +73,43 @@ function extractIapEmail(req) {
 }
 
 async function requireAuth(req, res, next) {
-  if (AUTH_MODE === 'iap' || AUTH_MODE === 'hybrid') {
-    const iapEmail = extractIapEmail(req)
-    if (iapEmail) {
-      const user = await ensureUserByEmail(iapEmail, { isAdmin: ADMIN_EMAILS.has(iapEmail) })
-      req.userId = user.id
-      req.userEmail = user.email
-      req.isAdmin = !!user.isAdmin
-      req.mustChangePassword = false
-      req.authMode = 'iap'
-      return next()
+  try {
+    if (AUTH_MODE === 'iap' || AUTH_MODE === 'hybrid') {
+      const iapEmail = extractIapEmail(req)
+      if (iapEmail) {
+        // In IAP mode, trust IAP identity headers directly to avoid per-request DB dependency.
+        req.userId = null
+        req.userEmail = iapEmail
+        req.isAdmin = ADMIN_EMAILS.has(iapEmail)
+        req.mustChangePassword = false
+        req.authMode = 'iap'
+        return next()
+      }
+
+      if (AUTH_MODE === 'iap') {
+        return res.status(401).json({ error: 'IAP identity required' })
+      }
     }
 
-    if (AUTH_MODE === 'iap') {
-      return res.status(401).json({ error: 'IAP identity required' })
+    const token = req.cookies?.session
+    if (!token) return res.status(401).json({ error: 'Unauthorized' })
+    const session = await getSession(token)
+    if (!session) return res.status(401).json({ error: 'Unauthorized' })
+    req.userId = session.user_id
+    const user = await getUserById(session.user_id)
+    req.userEmail = user?.email || null
+    req.isAdmin = !!user?.isAdmin
+    req.mustChangePassword = !!user?.mustChangePassword
+    req.authMode = 'session'
+
+    if (req.mustChangePassword && !PASSWORD_CHANGE_ALLOWED_PATHS.has(req.path)) {
+      return res.status(403).json({ error: 'Password change required', code: 'PASSWORD_CHANGE_REQUIRED' })
     }
+    next()
+  } catch (e) {
+    console.error('requireAuth failed', e)
+    res.status(503).json({ error: 'Auth backend unavailable. Please retry.' })
   }
-
-  const token = req.cookies?.session
-  if (!token) return res.status(401).json({ error: 'Unauthorized' })
-  const session = await getSession(token)
-  if (!session) return res.status(401).json({ error: 'Unauthorized' })
-  req.userId = session.user_id
-  const user = await getUserById(session.user_id)
-  req.userEmail = user?.email || null
-  req.isAdmin = !!user?.isAdmin
-  req.mustChangePassword = !!user?.mustChangePassword
-  req.authMode = 'session'
-
-  if (req.mustChangePassword && !PASSWORD_CHANGE_ALLOWED_PATHS.has(req.path)) {
-    return res.status(403).json({ error: 'Password change required', code: 'PASSWORD_CHANGE_REQUIRED' })
-  }
-  next()
 }
 
 // ─── Auth routes ───────────────────────────────────────────────────────────────
@@ -372,8 +392,10 @@ app.get('/api/daily', requireAuth, async (req, res) => {
 
 app.get('/api/daily/today', requireAuth, async (req, res) => {
   try {
-    res.json(await getTodayLog())
+    const dateLabel = typeof req.query?.date_label === 'string' ? req.query.date_label : undefined
+    res.json(await getTodayLog(dateLabel))
   } catch (e) {
+    console.error('daily.today failed', e)
     res.status(500).json({ error: e.message })
   }
 })
@@ -383,6 +405,7 @@ app.post('/api/daily', requireAuth, async (req, res) => {
     const page = await createDailyLog(req.body)
     res.json({ ok: true, id: page.id })
   } catch (e) {
+    console.error('daily.create failed', e)
     res.status(500).json({ error: e.message })
   }
 })
@@ -392,6 +415,7 @@ app.patch('/api/daily/:id', requireAuth, async (req, res) => {
     await updateDailyLog(req.params.id, req.body)
     res.json({ ok: true })
   } catch (e) {
+    console.error('daily.update failed', e)
     res.status(500).json({ error: e.message })
   }
 })
@@ -403,6 +427,23 @@ app.post('/api/sheets/sync', requireAuth, async (req, res) => {
     const result = await runSheetsSync()
     res.json(result)
   } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+app.post('/api/internal/sheets/sync', async (req, res) => {
+  if (!SHEETS_SYNC_CRON_TOKEN) {
+    return res.status(503).json({ error: 'SHEETS_SYNC_CRON_TOKEN is not configured' })
+  }
+  if (!isValidCronToken(req)) {
+    return res.status(401).json({ error: 'Invalid sync token' })
+  }
+
+  try {
+    const result = await runSheetsSync()
+    res.json(result)
+  } catch (e) {
+    console.error('internal.sheets.sync failed', e)
     res.status(500).json({ error: e.message })
   }
 })
@@ -419,13 +460,40 @@ app.get('/api/sheets/sync/runs', requireAuth, async (req, res) => {
 
 if (isProd) {
   const distPath = path.join(__dirname, '../dist')
-  app.use(express.static(distPath))
+  app.use('/assets', express.static(path.join(distPath, 'assets'), {
+    immutable: true,
+    maxAge: '1y'
+  }))
+  app.use(express.static(distPath, { index: false }))
   app.get('*', (req, res) => {
+    res.setHeader('Cache-Control', 'no-store')
     res.sendFile(path.join(distPath, 'index.html'))
   })
 }
 
-await initDb()
+async function initDbWithRetry(maxAttempts = 3) {
+  let lastError = null
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      await initDb()
+      return
+    } catch (e) {
+      lastError = e
+      console.error(`initDb failed (attempt ${attempt}/${maxAttempts})`, e)
+      if (attempt < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, attempt * 750))
+      }
+    }
+  }
+  throw lastError
+}
+
+try {
+  await initDbWithRetry(3)
+} catch (e) {
+  // Keep the service online; request handlers will surface backend-unavailable errors.
+  console.error('DB bootstrap failed; starting server in degraded mode', e)
+}
 
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`)

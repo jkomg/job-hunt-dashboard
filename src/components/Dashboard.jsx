@@ -56,13 +56,13 @@ export default function Dashboard({ onNavigate }) {
   const { overdueContacts, recentLogs, activeItems, weekStats } = data
 
   // Find yesterday's entry using the browser's local timezone
-  const todayStr = new Date().toDateString()
-  const yesterdayStr = new Date(Date.now() - 864e5).toDateString()
+  const yesterdayLabel = new Date(Date.now() - 864e5).toLocaleDateString('en-US', {
+    weekday: 'long', month: 'long', day: 'numeric', year: 'numeric'
+  })
   const todayDate = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
 
-  const yesterdayLog = recentLogs?.find(l =>
-    l._createdTime && new Date(l._createdTime).toDateString() === yesterdayStr
-  )
+  const yesterdayLog = recentLogs?.find(l => (l.Date || '').trim() === yesterdayLabel) ||
+    recentLogs?.find(l => l._createdTime && new Date(l._createdTime).toDateString() === new Date(Date.now() - 864e5).toDateString())
   const yesterdayTop3 = yesterdayLog?.["Tomorrow's Top 3"] || null
   const top3Lines = yesterdayTop3 ? yesterdayTop3.split('\n').filter(Boolean) : []
 
