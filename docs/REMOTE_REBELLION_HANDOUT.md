@@ -16,6 +16,7 @@ Free personal job-hunt tracker (no paid tools required for local use).
 - No GitHub account is required
 
 ## Install (Mac/Linux)
+
 Open a terminal (Applications/Utilities/Terminal)
 If you don't have a Projects directory I recommend you make one; an open terminal will be sitting at /Users/[yourusername] - to organize it.
 
