@@ -40,6 +40,7 @@ function StatCard({ label, value, target, color }) {
 
 export default function Dashboard({ onNavigate }) {
   const [data, setData] = useState(null)
+  const [syncStatus, setSyncStatus] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -48,6 +49,11 @@ export default function Dashboard({ onNavigate }) {
       .then(r => r.json())
       .then(d => { setData(d); setLoading(false) })
       .catch(() => { setError('Failed to load dashboard'); setLoading(false) })
+
+    fetch('/api/sheets/status', { credentials: 'include' })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => setSyncStatus(d))
+      .catch(() => setSyncStatus(null))
   }, [])
 
   if (loading) return <div className="loading"><div className="spin" />Loading your briefing…</div>
@@ -70,6 +76,30 @@ export default function Dashboard({ onNavigate }) {
     <div>
       <div className="morning-greeting">Good morning, Jason.</div>
       <div className="today-date">{todayDate}</div>
+
+      {syncStatus?.health && (
+        <div
+          className="card mb-16"
+          style={{ borderColor: syncStatus.health.status === 'needs_attention' ? 'var(--yellow)' : 'var(--green)' }}
+        >
+          <div className="card-title">
+            {syncStatus.health.status === 'needs_attention' ? '⚠️ Sync Needs Attention' : '✅ Sync Healthy'}
+          </div>
+          <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>
+            Last success: {syncStatus.health.lastSuccessAt ? new Date(syncStatus.health.lastSuccessAt).toLocaleString() : 'Never'}
+          </div>
+          {syncStatus.health.lastError?.details && (
+            <div style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 6 }}>
+              Last issue: {syncStatus.health.lastError.details}
+            </div>
+          )}
+          <div style={{ marginTop: 10 }}>
+            <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('settings')}>
+              Open sync settings →
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Yesterday's Top 3 */}
       <div className="card mb-16">

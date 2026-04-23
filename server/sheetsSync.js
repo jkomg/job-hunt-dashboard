@@ -48,19 +48,16 @@ const STAGE_TO_SHEET_STATUS = new Map([
   ['❌ Closed', 'Closed']
 ])
 
-function requiredEnv(name) {
-  const value = process.env[name]
-  if (!value) throw new Error(`Missing required env var: ${name}`)
-  return value
-}
+const DEFAULT_PIPELINE_TABS = 'Jobs & Applications,Found'
+const DEFAULT_CONTACTS_TABS = 'Networking Tracker'
+const DEFAULT_INTERVIEWS_TABS = 'Interview Tracker'
+const DEFAULT_EVENTS_TABS = 'Events'
 
-function getSheetId() {
-  return requiredEnv('GOOGLE_SHEETS_ID')
-}
-
-function getSyncTabs() {
-  const raw = process.env.GOOGLE_SHEETS_SYNC_TABS || 'Jobs & Applications,Found'
-  return raw.split(',').map(t => t.trim()).filter(Boolean)
+function parseBool(value, fallback = false) {
+  if (value == null) return fallback
+  const v = String(value).trim().toLowerCase()
+  if (!v) return fallback
+  return ['1', 'true', 'yes', 'y', 'on'].includes(v)
 }
 
 function parseTabs(raw, fallback = '') {
@@ -68,22 +65,64 @@ function parseTabs(raw, fallback = '') {
   return source.split(',').map(t => t.trim()).filter(Boolean)
 }
 
-function getContactsSyncTabs() {
-  return parseTabs(process.env.GOOGLE_SHEETS_CONTACTS_SYNC_TABS, 'Networking Tracker')
+function normalizeSheetId(input) {
+  const value = String(input || '').trim()
+  if (!value) return ''
+  const match = value.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/)
+  if (match?.[1]) return match[1]
+  return value
 }
 
-function getInterviewsSyncTabs() {
-  return parseTabs(process.env.GOOGLE_SHEETS_INTERVIEWS_SYNC_TABS, 'Interview Tracker')
+export function resolveSheetsSyncConfig(overrides = {}) {
+  const fromEnv = {
+    enabled: parseBool(process.env.GOOGLE_SHEETS_SYNC_ENABLED, true),
+    sheetId: (process.env.GOOGLE_SHEETS_ID || '').trim(),
+    pipelineTabs: parseTabs(process.env.GOOGLE_SHEETS_SYNC_TABS, DEFAULT_PIPELINE_TABS),
+    contactsTabs: parseTabs(process.env.GOOGLE_SHEETS_CONTACTS_SYNC_TABS, DEFAULT_CONTACTS_TABS),
+    interviewsTabs: parseTabs(process.env.GOOGLE_SHEETS_INTERVIEWS_SYNC_TABS, DEFAULT_INTERVIEWS_TABS),
+    eventsTabs: parseTabs(process.env.GOOGLE_SHEETS_EVENTS_SYNC_TABS, DEFAULT_EVENTS_TABS),
+    credentialsRaw: process.env.GOOGLE_SHEETS_CREDENTIALS_JSON || process.env.GOOGLE_CREDENTIALS_JSON || ''
+  }
+
+  const config = {
+    enabled: overrides.enabled == null ? fromEnv.enabled : parseBool(overrides.enabled, fromEnv.enabled),
+    sheetId: normalizeSheetId(overrides.sheetId == null ? fromEnv.sheetId : String(overrides.sheetId)),
+    pipelineTabs: Array.isArray(overrides.pipelineTabs)
+      ? overrides.pipelineTabs.map(t => String(t).trim()).filter(Boolean)
+      : parseTabs(overrides.pipelineTabs, fromEnv.pipelineTabs.join(',')),
+    contactsTabs: Array.isArray(overrides.contactsTabs)
+      ? overrides.contactsTabs.map(t => String(t).trim()).filter(Boolean)
+      : parseTabs(overrides.contactsTabs, fromEnv.contactsTabs.join(',')),
+    interviewsTabs: Array.isArray(overrides.interviewsTabs)
+      ? overrides.interviewsTabs.map(t => String(t).trim()).filter(Boolean)
+      : parseTabs(overrides.interviewsTabs, fromEnv.interviewsTabs.join(',')),
+    eventsTabs: Array.isArray(overrides.eventsTabs)
+      ? overrides.eventsTabs.map(t => String(t).trim()).filter(Boolean)
+      : parseTabs(overrides.eventsTabs, fromEnv.eventsTabs.join(',')),
+    credentialsRaw: overrides.credentialsRaw == null ? fromEnv.credentialsRaw : String(overrides.credentialsRaw)
+  }
+
+  return config
 }
 
-function getEventsSyncTabs() {
-  return parseTabs(process.env.GOOGLE_SHEETS_EVENTS_SYNC_TABS, 'Events')
+function validateSheetsSyncConfig(config) {
+  if (!config.enabled) {
+    return { ok: false, code: 'SYNC_DISABLED', message: 'Google Sheets sync is disabled.' }
+  }
+  if (!config.sheetId) {
+    return { ok: false, code: 'MISSING_SHEET_ID', message: 'Google Sheet ID is missing.' }
+  }
+  if (!config.credentialsRaw) {
+    return { ok: false, code: 'MISSING_CREDENTIALS', message: 'Google Sheets credentials are missing.' }
+  }
+  return { ok: true }
 }
 
-function parseCredentials() {
-  const raw = process.env.GOOGLE_SHEETS_CREDENTIALS_JSON || process.env.GOOGLE_CREDENTIALS_JSON
+function parseCredentials(raw) {
   if (!raw) {
-    throw new Error('Missing GOOGLE_SHEETS_CREDENTIALS_JSON or GOOGLE_CREDENTIALS_JSON')
+    const err = new Error('Missing GOOGLE_SHEETS_CREDENTIALS_JSON or GOOGLE_CREDENTIALS_JSON')
+    err.code = 'MISSING_CREDENTIALS'
+    throw err
   }
 
   try {
@@ -92,19 +131,121 @@ function parseCredentials() {
     try {
       return JSON.parse(Buffer.from(raw, 'base64').toString('utf8'))
     } catch {
-      throw new Error('Google credentials JSON is invalid (plain or base64)')
+      const err = new Error('Google credentials JSON is invalid (plain or base64)')
+      err.code = 'INVALID_CREDENTIALS'
+      throw err
     }
   }
 }
 
-async function getSheetsClient() {
-  const credentials = parseCredentials()
+function credentialsServiceAccountEmail(credentials) {
+  const email = String(credentials?.client_email || '').trim()
+  return email || null
+}
+
+async function getSheetsClient(credentials) {
   const auth = new google.auth.GoogleAuth({
     credentials,
     scopes: ['https://www.googleapis.com/auth/spreadsheets']
   })
 
   return google.sheets({ version: 'v4', auth })
+}
+
+function withStatus(error, status) {
+  const e = error instanceof Error ? error : new Error(String(error || 'Unknown sync error'))
+  e.status = status
+  return e
+}
+
+export function normalizeSheetsSyncError(error) {
+  const message = String(error?.message || 'Unknown sync error')
+  const lower = message.toLowerCase()
+  const status = Number(error?.status || error?.code || 500)
+
+  const normalized = {
+    code: 'SYNC_UNKNOWN',
+    status: Number.isFinite(status) ? status : 500,
+    retryable: false,
+    userMessage: 'Google Sheets sync failed.',
+    fixSteps: ['Open Settings and run "Test connection" to see what needs to be fixed.'],
+    details: message
+  }
+
+  if (lower.includes('sync is disabled') || error?.code === 'SYNC_DISABLED') {
+    normalized.code = 'SYNC_DISABLED'
+    normalized.status = 400
+    normalized.userMessage = 'Google Sheets sync is turned off.'
+    normalized.fixSteps = ['Open Settings.', 'Turn on Google Sheets sync.', 'Run "Test connection".']
+    return normalized
+  }
+
+  if (lower.includes('missing') && lower.includes('sheet id') || error?.code === 'MISSING_SHEET_ID') {
+    normalized.code = 'MISSING_SHEET_ID'
+    normalized.status = 400
+    normalized.userMessage = 'No Google Sheet is configured.'
+    normalized.fixSteps = ['Open Settings.', 'Paste your Google Sheet URL or ID.', 'Save settings, then run "Test connection".']
+    return normalized
+  }
+
+  if (lower.includes('missing google_sheets_credentials_json') || error?.code === 'MISSING_CREDENTIALS') {
+    normalized.code = 'MISSING_CREDENTIALS'
+    normalized.status = 400
+    normalized.userMessage = 'Google credentials are missing.'
+    normalized.fixSteps = ['Set GOOGLE_SHEETS_CREDENTIALS_JSON in your environment.', 'Restart the app.', 'Run "Test connection".']
+    return normalized
+  }
+
+  if (lower.includes('credentials json is invalid') || error?.code === 'INVALID_CREDENTIALS') {
+    normalized.code = 'INVALID_CREDENTIALS'
+    normalized.status = 400
+    normalized.userMessage = 'Google credentials are invalid.'
+    normalized.fixSteps = ['Regenerate a service-account JSON key in Google Cloud.', 'Update GOOGLE_SHEETS_CREDENTIALS_JSON.', 'Restart and re-test connection.']
+    return normalized
+  }
+
+  if (status === 403 || lower.includes('permission')) {
+    normalized.code = 'SHEET_PERMISSION_DENIED'
+    normalized.status = 403
+    normalized.userMessage = 'Google denied access to this sheet.'
+    normalized.fixSteps = ['Open the Google Sheet and click Share.', 'Add the service-account email as Editor.', 'Run "Test connection" again.']
+    return normalized
+  }
+
+  if (status === 404 || lower.includes('requested entity was not found')) {
+    normalized.code = 'SHEET_NOT_FOUND'
+    normalized.status = 404
+    normalized.userMessage = 'The configured Google Sheet could not be found.'
+    normalized.fixSteps = ['Confirm the Sheet URL or ID in Settings.', 'Make sure the sheet still exists.', 'Save and test again.']
+    return normalized
+  }
+
+  if (lower.includes('unable to parse range') || lower.includes('cannot find range') || error?.code === 'TAB_NOT_FOUND') {
+    normalized.code = 'TAB_NOT_FOUND'
+    normalized.status = 400
+    normalized.userMessage = 'One or more configured tab names were not found in the sheet.'
+    normalized.fixSteps = ['Open Settings.', 'Verify tab names exactly match the sheet tabs.', 'Save and run sync again.']
+    return normalized
+  }
+
+  if (lower.includes('google sheets api has not been used') || lower.includes('api has not been used')) {
+    normalized.code = 'GOOGLE_API_DISABLED'
+    normalized.status = 400
+    normalized.userMessage = 'Google Sheets API is not enabled for the Google Cloud project.'
+    normalized.fixSteps = ['Open Google Cloud Console.', 'Enable Google Sheets API for the project used by the service account.', 'Retry in a minute.']
+    return normalized
+  }
+
+  if (status === 429 || status === 503 || status === 504 || lower.includes('quota') || lower.includes('timeout')) {
+    normalized.code = 'GOOGLE_TEMPORARY'
+    normalized.status = 503
+    normalized.retryable = true
+    normalized.userMessage = 'Google Sheets is temporarily unavailable or rate-limited.'
+    normalized.fixSteps = ['Wait a minute and try again.', 'If this repeats, reduce sync frequency.']
+    return normalized
+  }
+
+  return normalized
 }
 
 function normalizeHeader(name) {
@@ -892,13 +1033,97 @@ async function runEventsSync({ sheets, spreadsheetId, tabs }) {
   return { inbound, outbound }
 }
 
-export async function runSheetsSync() {
-  const spreadsheetId = getSheetId()
-  const tabs = getSyncTabs()
-  const contactsTabs = getContactsSyncTabs()
-  const interviewsTabs = getInterviewsSyncTabs()
-  const eventsTabs = getEventsSyncTabs()
-  const sheets = await getSheetsClient()
+function buildSyncContext(configOverrides = {}) {
+  const config = resolveSheetsSyncConfig(configOverrides)
+  const valid = validateSheetsSyncConfig(config)
+  if (!valid.ok) {
+    const err = new Error(valid.message)
+    err.code = valid.code
+    throw withStatus(err, 400)
+  }
+
+  const credentials = parseCredentials(config.credentialsRaw)
+  return {
+    config,
+    credentials,
+    spreadsheetId: config.sheetId,
+    tabs: config.pipelineTabs,
+    contactsTabs: config.contactsTabs,
+    interviewsTabs: config.interviewsTabs,
+    eventsTabs: config.eventsTabs
+  }
+}
+
+export async function getSheetsSyncStatus(configOverrides = {}) {
+  const rawConfig = resolveSheetsSyncConfig(configOverrides)
+  try {
+    const { config, credentials } = buildSyncContext(configOverrides)
+    return {
+      ok: true,
+      enabled: true,
+      sheetId: config.sheetId,
+      pipelineTabs: config.pipelineTabs,
+      contactsTabs: config.contactsTabs,
+      interviewsTabs: config.interviewsTabs,
+      eventsTabs: config.eventsTabs,
+      serviceAccountEmail: credentialsServiceAccountEmail(credentials),
+      credentialConfigured: true
+    }
+  } catch (error) {
+    const normalized = normalizeSheetsSyncError(error)
+    return {
+      ok: false,
+      enabled: rawConfig.enabled,
+      sheetId: rawConfig.sheetId,
+      pipelineTabs: rawConfig.pipelineTabs,
+      contactsTabs: rawConfig.contactsTabs,
+      interviewsTabs: rawConfig.interviewsTabs,
+      eventsTabs: rawConfig.eventsTabs,
+      error: normalized,
+      credentialConfigured: normalized.code !== 'MISSING_CREDENTIALS',
+      serviceAccountEmail: null
+    }
+  }
+}
+
+export async function testSheetsConnection(configOverrides = {}) {
+  const { config, credentials, spreadsheetId } = buildSyncContext(configOverrides)
+  const sheets = await getSheetsClient(credentials)
+  const meta = await sheets.spreadsheets.get({
+    spreadsheetId,
+    fields: 'properties.title,sheets.properties.title'
+  })
+
+  const availableTabs = (meta.data.sheets || [])
+    .map(s => String(s?.properties?.title || '').trim())
+    .filter(Boolean)
+  const requiredTabs = [
+    ...config.pipelineTabs,
+    ...config.contactsTabs,
+    ...config.interviewsTabs,
+    ...config.eventsTabs
+  ]
+  const missingTabs = requiredTabs.filter(tab => !availableTabs.includes(tab))
+
+  if (missingTabs.length) {
+    const err = new Error(`Missing tabs in sheet: ${missingTabs.join(', ')}`)
+    err.code = 'TAB_NOT_FOUND'
+    throw withStatus(err, 400)
+  }
+
+  return {
+    ok: true,
+    spreadsheetId,
+    spreadsheetTitle: meta.data?.properties?.title || '',
+    serviceAccountEmail: credentialsServiceAccountEmail(credentials),
+    availableTabs,
+    requiredTabs
+  }
+}
+
+export async function runSheetsSync(configOverrides = {}) {
+  const { credentials, spreadsheetId, tabs, contactsTabs, interviewsTabs, eventsTabs } = buildSyncContext(configOverrides)
+  const sheets = await getSheetsClient(credentials)
 
   try {
     const inbound = await runInboundSync({ sheets, spreadsheetId, tabs })
@@ -918,7 +1143,11 @@ export async function runSheetsSync() {
 
     return { ok: true, pipeline: { inbound, outbound }, contacts, interviews, events }
   } catch (error) {
-    await createSheetSyncRun('combined', 'error', null, error.message)
-    throw error
+    const normalized = normalizeSheetsSyncError(error)
+    await createSheetSyncRun('combined', 'error', { code: normalized.code, retryable: normalized.retryable }, normalized.details)
+    const e = new Error(normalized.userMessage)
+    e.normalized = normalized
+    e.status = normalized.status
+    throw e
   }
 }

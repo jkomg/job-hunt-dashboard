@@ -12,6 +12,7 @@ import {
   initDb,
   getUserByUsername, getUserByEmail, getUserById,
   createSession, getSession, deleteSession, updatePassword, getRecentSheetSyncRuns,
+  getAppSettings, setAppSetting,
   getDashboardData,
   getContacts, markContacted, updateContactStatus, createContact, updateContact,
   getInterviews, createInterview, updateInterview,
@@ -21,7 +22,7 @@ import {
   getDailyLogs, getTodayLog, createDailyLog, updateDailyLog,
   getPipeline, updatePipelineEntry, updatePipelineStage, updatePipelineFollowUp, createPipelineEntry
 } from './db.js'
-import { runSheetsSync } from './sheetsSync.js'
+import { runSheetsSync, testSheetsConnection, getSheetsSyncStatus, normalizeSheetsSyncError } from './sheetsSync.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -36,6 +37,72 @@ const ADMIN_EMAILS = new Set(
 )
 const PASSWORD_CHANGE_ALLOWED_PATHS = new Set(['/api/me', '/api/change-password', '/api/logout'])
 const SHEETS_SYNC_CRON_TOKEN = String(process.env.SHEETS_SYNC_CRON_TOKEN || '').trim()
+const SHEET_SETTINGS_KEYS = {
+  enabled: 'sheets.sync.enabled',
+  sheetId: 'sheets.sheet_id',
+  pipelineTabs: 'sheets.pipeline_tabs',
+  contactsTabs: 'sheets.contacts_tabs',
+  interviewsTabs: 'sheets.interviews_tabs',
+  eventsTabs: 'sheets.events_tabs'
+}
+
+function parseBool(value, fallback = false) {
+  if (value == null) return fallback
+  const v = String(value).trim().toLowerCase()
+  if (!v) return fallback
+  return ['1', 'true', 'yes', 'y', 'on'].includes(v)
+}
+
+function splitTabs(raw) {
+  return String(raw || '')
+    .split(',')
+    .map(t => t.trim())
+    .filter(Boolean)
+}
+
+async function getSheetsConfigOverrides() {
+  const settings = await getAppSettings(Object.values(SHEET_SETTINGS_KEYS))
+  const overrides = {}
+
+  if (settings[SHEET_SETTINGS_KEYS.enabled] != null) {
+    overrides.enabled = parseBool(settings[SHEET_SETTINGS_KEYS.enabled], true)
+  }
+  if (settings[SHEET_SETTINGS_KEYS.sheetId]) {
+    overrides.sheetId = settings[SHEET_SETTINGS_KEYS.sheetId]
+  }
+  if (settings[SHEET_SETTINGS_KEYS.pipelineTabs]) {
+    overrides.pipelineTabs = splitTabs(settings[SHEET_SETTINGS_KEYS.pipelineTabs])
+  }
+  if (settings[SHEET_SETTINGS_KEYS.contactsTabs]) {
+    overrides.contactsTabs = splitTabs(settings[SHEET_SETTINGS_KEYS.contactsTabs])
+  }
+  if (settings[SHEET_SETTINGS_KEYS.interviewsTabs]) {
+    overrides.interviewsTabs = splitTabs(settings[SHEET_SETTINGS_KEYS.interviewsTabs])
+  }
+  if (settings[SHEET_SETTINGS_KEYS.eventsTabs]) {
+    overrides.eventsTabs = splitTabs(settings[SHEET_SETTINGS_KEYS.eventsTabs])
+  }
+
+  return overrides
+}
+
+function formatSyncRun(row) {
+  let summary = null
+  try {
+    summary = row.summary_json ? JSON.parse(String(row.summary_json)) : null
+  } catch {
+    summary = null
+  }
+
+  return {
+    id: row.id,
+    direction: row.direction,
+    status: row.status,
+    createdAt: new Date(Number(row.created_at)).toISOString(),
+    summary,
+    errorText: row.error_text || null
+  }
+}
 
 app.use(express.json())
 app.use(cookieParser())
@@ -422,12 +489,80 @@ app.patch('/api/daily/:id', requireAuth, async (req, res) => {
 
 // ─── Sheets Sync ──────────────────────────────────────────────────────────────
 
-app.post('/api/sheets/sync', requireAuth, async (req, res) => {
+app.get('/api/sheets/config', requireAuth, async (_req, res) => {
   try {
-    const result = await runSheetsSync()
+    const overrides = await getSheetsConfigOverrides()
+    const status = await getSheetsSyncStatus(overrides)
+    res.json({ ok: true, config: status })
+  } catch (e) {
+    console.error('sheets.config.get failed', e)
+    res.status(500).json({ error: 'Could not load sheet settings' })
+  }
+})
+
+app.put('/api/sheets/config', requireAuth, async (req, res) => {
+  try {
+    const body = req.body || {}
+    const updates = {}
+
+    if (body.enabled != null) updates.enabled = parseBool(body.enabled, true)
+    if (body.sheetId != null) updates.sheetId = String(body.sheetId || '').trim()
+    if (body.pipelineTabs != null) updates.pipelineTabs = Array.isArray(body.pipelineTabs) ? body.pipelineTabs : splitTabs(body.pipelineTabs)
+    if (body.contactsTabs != null) updates.contactsTabs = Array.isArray(body.contactsTabs) ? body.contactsTabs : splitTabs(body.contactsTabs)
+    if (body.interviewsTabs != null) updates.interviewsTabs = Array.isArray(body.interviewsTabs) ? body.interviewsTabs : splitTabs(body.interviewsTabs)
+    if (body.eventsTabs != null) updates.eventsTabs = Array.isArray(body.eventsTabs) ? body.eventsTabs : splitTabs(body.eventsTabs)
+
+    if (updates.sheetId != null && !updates.sheetId) {
+      return res.status(400).json({ error: 'Sheet ID cannot be empty.' })
+    }
+
+    if (updates.enabled != null) await setAppSetting(SHEET_SETTINGS_KEYS.enabled, updates.enabled ? 'true' : 'false')
+    if (updates.sheetId != null) await setAppSetting(SHEET_SETTINGS_KEYS.sheetId, updates.sheetId)
+    if (updates.pipelineTabs != null) await setAppSetting(SHEET_SETTINGS_KEYS.pipelineTabs, updates.pipelineTabs.join(','))
+    if (updates.contactsTabs != null) await setAppSetting(SHEET_SETTINGS_KEYS.contactsTabs, updates.contactsTabs.join(','))
+    if (updates.interviewsTabs != null) await setAppSetting(SHEET_SETTINGS_KEYS.interviewsTabs, updates.interviewsTabs.join(','))
+    if (updates.eventsTabs != null) await setAppSetting(SHEET_SETTINGS_KEYS.eventsTabs, updates.eventsTabs.join(','))
+
+    const overrides = await getSheetsConfigOverrides()
+    const status = await getSheetsSyncStatus(overrides)
+    res.json({ ok: true, config: status })
+  } catch (e) {
+    console.error('sheets.config.update failed', e)
+    res.status(500).json({ error: 'Could not save sheet settings' })
+  }
+})
+
+app.post('/api/sheets/test-connection', requireAuth, async (_req, res) => {
+  try {
+    const overrides = await getSheetsConfigOverrides()
+    const result = await testSheetsConnection(overrides)
     res.json(result)
   } catch (e) {
-    res.status(500).json({ error: e.message })
+    const normalized = e?.normalized || normalizeSheetsSyncError(e)
+    res.status(normalized.status || 500).json({
+      error: normalized.userMessage,
+      code: normalized.code,
+      fixSteps: normalized.fixSteps,
+      retryable: normalized.retryable,
+      details: normalized.details
+    })
+  }
+})
+
+app.post('/api/sheets/sync', requireAuth, async (req, res) => {
+  try {
+    const overrides = await getSheetsConfigOverrides()
+    const result = await runSheetsSync(overrides)
+    res.json(result)
+  } catch (e) {
+    const normalized = e?.normalized || normalizeSheetsSyncError(e)
+    res.status(normalized.status || 500).json({
+      error: normalized.userMessage,
+      code: normalized.code,
+      fixSteps: normalized.fixSteps,
+      retryable: normalized.retryable,
+      details: normalized.details
+    })
   }
 })
 
@@ -440,19 +575,57 @@ app.post('/api/internal/sheets/sync', async (req, res) => {
   }
 
   try {
-    const result = await runSheetsSync()
+    const overrides = await getSheetsConfigOverrides()
+    const result = await runSheetsSync(overrides)
     res.json(result)
   } catch (e) {
     console.error('internal.sheets.sync failed', e)
-    res.status(500).json({ error: e.message })
+    const normalized = e?.normalized || normalizeSheetsSyncError(e)
+    res.status(normalized.status || 500).json({
+      error: normalized.userMessage,
+      code: normalized.code,
+      retryable: normalized.retryable,
+      details: normalized.details
+    })
   }
 })
 
 app.get('/api/sheets/sync/runs', requireAuth, async (req, res) => {
   try {
-    res.json(await getRecentSheetSyncRuns(25))
+    const runs = await getRecentSheetSyncRuns(25)
+    res.json(runs.map(formatSyncRun))
   } catch (e) {
     res.status(500).json({ error: e.message })
+  }
+})
+
+app.get('/api/sheets/status', requireAuth, async (_req, res) => {
+  try {
+    const overrides = await getSheetsConfigOverrides()
+    const config = await getSheetsSyncStatus(overrides)
+    const runs = await getRecentSheetSyncRuns(25)
+    const formattedRuns = runs.map(formatSyncRun)
+    const lastSuccess = formattedRuns.find(r => r.status === 'ok') || null
+    const lastError = formattedRuns.find(r => r.status === 'error') || null
+    const hasConfigIssue = config?.ok === false
+
+    res.json({
+      ok: true,
+      config,
+      health: {
+        status: (hasConfigIssue || lastError) ? 'needs_attention' : 'healthy',
+        lastSuccessAt: lastSuccess?.createdAt || null,
+        lastErrorAt: lastError?.createdAt || null,
+        lastError: hasConfigIssue
+          ? { direction: 'config', details: config?.error?.userMessage || 'Configuration issue' }
+          : lastError
+            ? { direction: lastError.direction, details: lastError.errorText }
+            : null
+      }
+    })
+  } catch (e) {
+    console.error('sheets.status failed', e)
+    res.status(500).json({ error: 'Could not load sync status' })
   }
 })
 
