@@ -251,14 +251,17 @@ export async function initDb() {
 
   await ensureUserSchema()
 
-  const existing = await getUserByUsername('jason')
-  if (!existing) {
+  const seedUsername = String(process.env.DEFAULT_USERNAME || 'jason').trim().toLowerCase() || 'jason'
+  const userCountRes = await db.execute('SELECT COUNT(*) AS count FROM users')
+  const userCount = Number(firstRow(userCountRes)?.count || 0)
+
+  if (userCount === 0) {
     const hash = bcrypt.hashSync('jobhunt2026', 10)
     await db.execute({
       sql: 'INSERT INTO users (username, password_hash, is_admin, must_change_password) VALUES (?, ?, ?, ?)',
-      args: ['jason', hash, 1, 0]
+      args: [seedUsername, hash, 1, 0]
     })
-    console.log('Default user created: jason / jobhunt2026')
+    console.log(`Default user created: ${seedUsername} / jobhunt2026`)
   }
 
   initialized = true

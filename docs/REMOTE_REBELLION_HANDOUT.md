@@ -16,30 +16,40 @@ Free personal job-hunt tracker (no paid tools required for local use).
 - No GitHub account is required
 
 ## Install (Mac/Linux)
-
-Open a terminal (Applications/Utilities/Terminal)
-If you don't have a Projects directory I recommend you make one; an open terminal will be sitting at /Users/[yourusername] - to organize it.
+Open Terminal (`Applications` -> `Utilities` -> `Terminal`)
 
 ```bash
-(if Projects doesn't exist): mkdir Projects
-cd Projects
+mkdir -p ~/Projects
+cd ~/Projects
 git clone https://github.com/jkomg/job-hunt-dashboard.git
 cd job-hunt-dashboard
 ./scripts/start-local-docker.sh
 ```
 
+What this does:
+- creates a `Projects` folder if needed
+- downloads the app
+- starts guided setup (username + optional Google Sheet link)
+- starts the app in Docker
+
 If you don't have `git` installed, use the ZIP install method below.
 
 ## Install (Windows PowerShell)
-If you don't have a Projects directory I recommend you make one; an open terminal will be sitting at /Users/[yourusername] - to organize it.
+Open PowerShell.
 
 ```powershell
-(if Projects doesn't exist): mkdir Projects
-cd Projects
+mkdir "$HOME\Projects" -Force
+cd "$HOME\Projects"
 git clone https://github.com/jkomg/job-hunt-dashboard.git
 cd job-hunt-dashboard
 powershell -ExecutionPolicy Bypass -File .\scripts\start-local-docker.ps1
 ```
+
+What this does:
+- creates a `Projects` folder if needed
+- downloads the app
+- starts guided setup (username + optional Google Sheet link)
+- starts the app in Docker
 
 If you don't have `git` installed, use the ZIP install method below.
 
@@ -65,7 +75,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start-local-docker.ps1
 
 - Go to: `http://localhost:8080`
 - Sign in:
-  - username: `jason`
+  - username: the one you chose in setup (default `jason`)
   - password: `jobhunt2026`
 
 ## Where Your Data Lives
@@ -84,6 +94,24 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start-local-docker.ps1
 ## Optional: Sync With Shared Google Sheet
 
 This is optional for team workflows.
+
+### Step-by-step (first time only)
+
+1. Open [Google Cloud Console](https://console.cloud.google.com/) and create/select a project.
+2. Enable `Google Sheets API`.
+3. Go to `APIs & Services` -> `Credentials` -> `Create Credentials` -> `Service account`.
+4. Open that service account and create a JSON key:
+   - `Keys` -> `Add key` -> `Create new key` -> `JSON`
+5. Save the downloaded `.json` file somewhere easy to find.
+6. Open your Google Sheet and click `Share`.
+7. Add the service-account email as `Editor`.
+8. Re-run install script and choose Google Sheets sync when prompted.
+
+Notes:
+- Service-account email usually looks like `name@project-id.iam.gserviceaccount.com`.
+- If you skip sharing the sheet with this email, sync will fail.
+
+### Manual `.env` setup (optional)
 
 1. Add Google Sheets values in `.env`.
 2. Restart app:
@@ -112,3 +140,15 @@ docker compose up -d
 
 - Check the main project guide: `README.md`
 - Check scripts usage: `scripts/README.md`
+
+## Screenshot Placeholders
+
+Put screenshots in `docs/images/install/`:
+- `mac-terminal-run-script.png`
+- `windows-powershell-run-script.png`
+- `installer-username-prompt.png`
+- `installer-google-sync-prompts.png`
+- `google-cloud-create-service-account.png`
+- `google-cloud-download-json-key.png`
+- `google-sheet-share-service-account.png`
+- `first-login-screen.png`
