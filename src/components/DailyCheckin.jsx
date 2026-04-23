@@ -50,35 +50,31 @@ export default function DailyCheckin() {
   })
 
   useEffect(() => {
-    fetch('/api/daily/today', { credentials: 'include' })
+    const todayLabel = new Date().toLocaleDateString('en-US', {
+      weekday: 'long', month: 'long', day: 'numeric', year: 'numeric'
+    })
+    const qs = new URLSearchParams({ date_label: todayLabel }).toString()
+    fetch(`/api/daily/today?${qs}`, { credentials: 'include' })
       .then(r => r.json())
       .then(d => {
         if (d?.id) {
-          // Browser converts UTC timestamp to local time — correct regardless of server timezone
-          const entryDate = new Date(d._createdTime)
-          const isToday = entryDate.toDateString() === new Date().toDateString()
-
-          if (isToday) {
-            // Resume today's entry
-            setExistingId(d.id)
-            setForm(prev => ({
-              ...prev,
-              'Mindset (1-10)': d['Mindset (1-10)'] ?? prev['Mindset (1-10)'],
-              'Energy (1-10)': d['Energy (1-10)'] ?? prev['Energy (1-10)'],
-              'Outreach Sent': d['Outreach Sent'] ?? prev['Outreach Sent'],
-              'Responses Received': d['Responses Received'] ?? prev['Responses Received'],
-              'Applications Submitted': d['Applications Submitted'] ?? prev['Applications Submitted'],
-              'Conversations / Calls': d['Conversations / Calls'] ?? prev['Conversations / Calls'],
-              'LinkedIn Posts': d['LinkedIn Posts'] ?? false,
-              'Volunteer Activity': d['Volunteer Activity'] ?? false,
-              'Exercise': d['Exercise'] || '',
-              'Cert Progress': d['Cert Progress'] || '',
-              'Win of the Day': d['Win of the Day'] || '',
-              'Gratitude / Reflection': d['Gratitude / Reflection'] || '',
-              "Tomorrow's Top 3": d["Tomorrow's Top 3"] || ''
-            }))
-          }
-          // If not today, leave form blank — fresh start for a new day
+          setExistingId(d.id)
+          setForm(prev => ({
+            ...prev,
+            'Mindset (1-10)': d['Mindset (1-10)'] ?? prev['Mindset (1-10)'],
+            'Energy (1-10)': d['Energy (1-10)'] ?? prev['Energy (1-10)'],
+            'Outreach Sent': d['Outreach Sent'] ?? prev['Outreach Sent'],
+            'Responses Received': d['Responses Received'] ?? prev['Responses Received'],
+            'Applications Submitted': d['Applications Submitted'] ?? prev['Applications Submitted'],
+            'Conversations / Calls': d['Conversations / Calls'] ?? prev['Conversations / Calls'],
+            'LinkedIn Posts': d['LinkedIn Posts'] ?? false,
+            'Volunteer Activity': d['Volunteer Activity'] ?? false,
+            'Exercise': d['Exercise'] || '',
+            'Cert Progress': d['Cert Progress'] || '',
+            'Win of the Day': d['Win of the Day'] || '',
+            'Gratitude / Reflection': d['Gratitude / Reflection'] || '',
+            "Tomorrow's Top 3": d["Tomorrow's Top 3"] || ''
+          }))
         }
         setLoading(false)
       })
@@ -101,7 +97,10 @@ export default function DailyCheckin() {
           credentials: 'include',
           body: JSON.stringify(form)
         })
-        if (!r.ok) throw new Error((await r.json()).error)
+        if (!r.ok) {
+          const data = await r.json().catch(() => ({}))
+          throw new Error(data.error || `Save failed (${r.status})`)
+        }
       } else {
         const r = await fetch('/api/daily', {
           method: 'POST',
@@ -109,14 +108,21 @@ export default function DailyCheckin() {
           credentials: 'include',
           body: JSON.stringify(form)
         })
-        if (!r.ok) throw new Error((await r.json()).error)
+        if (!r.ok) {
+          const data = await r.json().catch(() => ({}))
+          throw new Error(data.error || `Save failed (${r.status})`)
+        }
         const d = await r.json()
         setExistingId(d.id)
       }
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)
     } catch (e) {
-      setError(e.message)
+      if (e?.message === 'Failed to fetch') {
+        setError('Network/auth issue while saving. Refresh the page and sign in again, then retry.')
+      } else {
+        setError(e.message)
+      }
     } finally {
       setSaving(false)
     }
@@ -125,14 +131,14 @@ export default function DailyCheckin() {
   if (loading) return <div className="loading"><div className="spin" /> Loading today's log…</div>
 
   return (
-    <div>
+    <form onSubmit={(e) => { e.preventDefault(); if (!saving) save() }}>
       <div className="page-header">
         <h1>Daily Check-in</h1>
         <div className="subtitle">{today} {existingId ? '— updating existing entry' : '— new entry'}</div>
       </div>
 
       {error && <div className="error-msg">{error}</div>}
-      {saved && <div className="success-msg">Saved to Notion!</div>}
+      {saved && <div className="success-msg">Saved!</div>}
 
       {/* Mindset & energy */}
       <div className="checkin-section">
@@ -241,9 +247,9 @@ export default function DailyCheckin() {
         </div>
       </div>
 
-      <button className="btn btn-primary" onClick={save} disabled={saving}>
-        {saving ? 'Saving…' : existingId ? 'Update Notion' : 'Save to Notion'}
+      <button className="btn btn-primary btn-full" type="submit" disabled={saving}>
+        {saving ? 'Saving…' : existingId ? 'Update' : 'Save'}
       </button>
-    </div>
+    </form>
   )
 }

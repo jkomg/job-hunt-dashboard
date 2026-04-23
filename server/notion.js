@@ -1,5 +1,7 @@
 import { Client } from '@notionhq/client'
 import 'dotenv/config'
+import { getRecentLogs as getRecentLogsFromDb } from './db.js'
+import { getPipeline as getPipelineFromDb } from './db.js'
 
 const notion = new Client({ auth: process.env.NOTION_TOKEN })
 
@@ -472,8 +474,8 @@ export async function updateEvent(pageId, data) {
 export async function getDashboardData() {
   const [overdueContacts, recentLogs, pipeline] = await Promise.all([
     getOverdueFollowUps(),
-    getRecentLogs(8),   // includes timestamps so client finds yesterday
-    getPipeline()
+    getRecentLogsFromDb(8),   // includes timestamps so client finds yesterday
+    getPipelineFromDb()
   ])
 
   const activeItems = pipeline.filter(p =>

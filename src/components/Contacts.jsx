@@ -157,7 +157,7 @@ function ContactModal({ contact, onClose, onUpdate }) {
           <button className="modal-close" onClick={onClose}>×</button>
         </div>
         {error && <div className="error-msg">{error}</div>}
-        {saved && <div className="success-msg">Saved to Notion!</div>}
+        {saved && <div className="success-msg">Saved!</div>}
 
         <ContactForm form={form} set={set} />
 

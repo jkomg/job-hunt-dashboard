@@ -38,19 +38,15 @@ gcloud config set project "$PROJECT_ID" >/dev/null
 gcloud services enable secretmanager.googleapis.com run.googleapis.com artifactregistry.googleapis.com --project "$PROJECT_ID" >/dev/null
 
 upsert_secret "jobhunt-session-secret" "$(get_env SESSION_SECRET)"
-upsert_secret "jobhunt-notion-token" "$(get_env NOTION_TOKEN)"
-upsert_secret "jobhunt-notion-pipeline-db" "$(get_env NOTION_PIPELINE_DB)"
-upsert_secret "jobhunt-notion-contacts-db" "$(get_env NOTION_CONTACTS_DB)"
-upsert_secret "jobhunt-notion-daily-db" "$(get_env NOTION_DAILY_LOG_DB)"
-upsert_secret "jobhunt-notion-interviews-db" "$(get_env NOTION_INTERVIEWS_DB)"
-upsert_secret "jobhunt-notion-events-db" "$(get_env NOTION_EVENTS_DB)"
-upsert_secret "jobhunt-notion-templates-db" "$(get_env NOTION_TEMPLATES_DB)"
-upsert_secret "jobhunt-notion-watchlist-db" "$(get_env NOTION_WATCHLIST_DB)"
 upsert_secret "jobhunt-database-url" "$(get_env DATABASE_URL)"
 upsert_secret "jobhunt-turso-auth-token" "$(get_env TURSO_AUTH_TOKEN)"
 upsert_secret "jobhunt-google-sheets-id" "$(get_env GOOGLE_SHEETS_ID)"
 upsert_secret "jobhunt-google-sheets-tabs" "$(get_env GOOGLE_SHEETS_SYNC_TABS)"
+upsert_secret "jobhunt-google-sheets-contacts-tabs" "$(get_env GOOGLE_SHEETS_CONTACTS_SYNC_TABS)"
+upsert_secret "jobhunt-google-sheets-interviews-tabs" "$(get_env GOOGLE_SHEETS_INTERVIEWS_SYNC_TABS)"
+upsert_secret "jobhunt-google-sheets-events-tabs" "$(get_env GOOGLE_SHEETS_EVENTS_SYNC_TABS)"
 upsert_secret "jobhunt-google-sheets-creds" "$(get_env GOOGLE_SHEETS_CREDENTIALS_JSON)"
+upsert_secret "jobhunt-sheets-sync-cron-token" "$(get_env SHEETS_SYNC_CRON_TOKEN)"
 
 SA_EMAIL="$(gcloud run services describe "$SERVICE_NAME" --region "$REGION" --format='value(spec.template.spec.serviceAccountName)' 2>/dev/null || true)"
 if [[ -z "$SA_EMAIL" ]]; then
@@ -60,21 +56,19 @@ fi
 
 for s in \
   jobhunt-session-secret \
-  jobhunt-notion-token \
-  jobhunt-notion-pipeline-db \
-  jobhunt-notion-contacts-db \
-  jobhunt-notion-daily-db \
-  jobhunt-notion-interviews-db \
-  jobhunt-notion-events-db \
-  jobhunt-notion-templates-db \
-  jobhunt-notion-watchlist-db \
   jobhunt-google-sheets-id \
   jobhunt-google-sheets-tabs \
-  jobhunt-google-sheets-creds; do
-  gcloud secrets add-iam-policy-binding "$s" \
-    --member="serviceAccount:${SA_EMAIL}" \
-    --role="roles/secretmanager.secretAccessor" \
-    --project "$PROJECT_ID" >/dev/null
+  jobhunt-google-sheets-contacts-tabs \
+  jobhunt-google-sheets-interviews-tabs \
+  jobhunt-google-sheets-events-tabs \
+  jobhunt-google-sheets-creds \
+  jobhunt-sheets-sync-cron-token; do
+  if gcloud secrets describe "$s" --project "$PROJECT_ID" >/dev/null 2>&1; then
+    gcloud secrets add-iam-policy-binding "$s" \
+      --member="serviceAccount:${SA_EMAIL}" \
+      --role="roles/secretmanager.secretAccessor" \
+      --project "$PROJECT_ID" >/dev/null
+  fi
  done
 
 if gcloud secrets describe jobhunt-database-url --project "$PROJECT_ID" >/dev/null 2>&1; then
