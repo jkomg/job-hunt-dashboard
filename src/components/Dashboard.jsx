@@ -75,8 +75,10 @@ export default function Dashboard({ onNavigate, me }) {
     weekStats,
     todayQueue = [],
     suggestedTop3 = [],
+    priorityFramework = [],
     health
   } = data
+  const pillarLabel = Object.fromEntries((priorityFramework || []).map(p => [p.id, p.label]))
 
   // Find yesterday's entry using the browser's local timezone
   const yesterdayLabel = new Date(Date.now() - 864e5).toLocaleDateString('en-US', {
@@ -151,6 +153,11 @@ export default function Dashboard({ onNavigate, me }) {
                 <div className="contact-info">
                   <div className="contact-name">{queueIcon(item.type)} {item.title}</div>
                   <div className="contact-meta">{item.subtitle || item.reason}</div>
+                  {item.pillarId && (
+                    <div style={{ marginTop: 4 }}>
+                      <span className="badge badge-gray" style={{ fontSize: 10 }}>{pillarLabel[item.pillarId] || item.pillarId}</span>
+                    </div>
+                  )}
                   <div style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 3 }}>
                     Why now: {item.reason}
                   </div>
@@ -171,6 +178,23 @@ export default function Dashboard({ onNavigate, me }) {
           </>
         )}
       </div>
+
+      {/* Six priorities status */}
+      {!!priorityFramework.length && (
+        <div className="card mb-16">
+          <div className="card-title">6 Priorities</div>
+          {priorityFramework.map(p => (
+            <div key={p.id} className="contact-row" style={{ padding: '8px 0' }}>
+              <div className="contact-info">
+                <div className="contact-name">{p.label}</div>
+              </div>
+              <span className={`badge ${p.count > 0 ? 'badge-yellow' : 'badge-green'}`}>
+                {p.count} item{p.count === 1 ? '' : 's'}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Overdue follow-ups */}
       {overdueContacts.length > 0 && (

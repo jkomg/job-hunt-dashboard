@@ -87,10 +87,22 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start-local-docker.ps1
 
 ## Daily Use (5-Minute Routine)
 
-1. Open Dashboard and check overdue follow-ups.
-2. Update pipeline stages.
-3. Log outreach and interviews.
-4. End day with Daily Check-in and tomorrow's Top 3.
+1. Open `Dashboard` and start with `Today Queue` (top item first).
+2. Work through urgent items in this order:
+   - Follow-Ups Due
+   - Interview Readiness
+   - Pipeline Momentum
+   - Networking Consistency
+   - Application Throughput
+   - Events & Market Presence
+3. When updating any job/contact/interview, always set:
+   - `Next Action`
+   - `Next Action Date`
+4. End day with `Daily Check-in` and click `Auto-fill from Today Queue` for tomorrow’s Top 3.
+
+What “stalled” means:
+- A record is stalled when it has no `Next Action` or no `Next Action Date`.
+- Keep stalled count low in Dashboard `System Health`.
 
 ## Optional: Sync With Shared Google Sheet
 

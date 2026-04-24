@@ -15,6 +15,35 @@ A free, self-hostable job search dashboard designed to be simple enough for non-
 - Next Action + Next Action Date fields across pipeline, contacts, and interviews
 - Optional Google Sheets bi-directional sync for team workflows
 
+## Command Center Workflow (Recommended)
+
+Use the app as a daily command center, not just a tracker.
+
+### The 6 Priorities Engine
+
+`Today Queue` is automatically ranked by these six priorities:
+
+1. Follow-Ups Due
+2. Interview Readiness
+3. Pipeline Momentum
+4. Networking Consistency
+5. Application Throughput
+6. Events & Market Presence
+
+Each queue item includes:
+- a clear reason (`Why now`)
+- one-click action button
+- mapped priority pillar
+
+### Daily Routine (fast)
+
+1. Open `Dashboard` and work from `Today Queue` top-down.
+2. Open each item and set/update `Next Action` and `Next Action Date`.
+3. End day in `Daily Check-in` and use `Auto-fill from Today Queue` for tomorrow’s top 3.
+
+Tip:
+- If `System Health` shows stalled items, clear those first. Stalled items are records missing next action/date.
+
 ## Start Here: Easy Local Install (Recommended)
 
 This path is intended to feel as close to "install app and use it" as possible.

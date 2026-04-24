@@ -29,6 +29,21 @@ function addDaysIso(days) {
   return d.toISOString().slice(0, 10)
 }
 
+const WEEKLY_TARGETS = {
+  outreach: 25,
+  responses: 5,
+  applications: 6
+}
+
+const PRIORITY_FRAMEWORK = [
+  { id: 'follow_ups_due', label: '1) Follow-Ups Due', route: 'pipeline' },
+  { id: 'interview_readiness', label: '2) Interview Readiness', route: 'interviews' },
+  { id: 'pipeline_momentum', label: '3) Pipeline Momentum', route: 'pipeline' },
+  { id: 'networking_consistency', label: '4) Networking Consistency', route: 'contacts' },
+  { id: 'application_throughput', label: '5) Application Throughput', route: 'pipeline' },
+  { id: 'events_market_presence', label: '6) Events & Market Presence', route: 'events' }
+]
+
 const BACKUP_TABLES = [
   'app_settings',
   'daily_logs',
@@ -1695,11 +1710,20 @@ export async function getDashboardData() {
   })
   const stalledInterviews = interviews.filter(i => i.Outcome === 'Pending' && (!String(i['Next Action'] || '').trim() || !String(i['Next Action Date'] || '').trim()))
 
-  const todayQueue = [
+  const weekStats = recentLogs.slice(0, 7).reduce((acc, log) => {
+    acc.outreach += log['Outreach Sent'] || 0
+    acc.responses += log['Responses Received'] || 0
+    acc.applications += log['Applications Submitted'] || 0
+    acc.linkedInPosts += log['LinkedIn Posts'] ? 1 : 0
+    return acc
+  }, { outreach: 0, responses: 0, applications: 0, linkedInPosts: 0 })
+
+  const followUpItems = [
     ...overdueContacts.map(c => ({
       id: `contact-${c.id}`,
       entityId: c.id,
       type: 'contact_follow_up',
+      pillarId: 'follow_ups_due',
       title: `Follow up with ${c.Name}`,
       subtitle: c.Company ? `${c.Title || 'Contact'} @ ${c.Company}` : (c.Title || 'Contact'),
       dueDate: c['Next Follow-Up'] || today,
@@ -1712,18 +1736,23 @@ export async function getDashboardData() {
       id: `pipeline-followup-${p.id}`,
       entityId: p.id,
       type: 'pipeline_follow_up',
+      pillarId: 'follow_ups_due',
       title: `${p.Company}: ${p['Next Action'] || 'Follow up on application'}`,
       subtitle: p.Role || p.Stage,
       dueDate: p['Follow-Up Date'],
       reason: `Pipeline follow-up date is due (${p['Follow-Up Date']}).`,
       actionLabel: 'Open Pipeline',
       route: 'pipeline',
-      priority: 2
-    })),
+      priority: 1
+    }))
+  ]
+
+  const interviewItems = [
     ...dueInterviewActions.map(i => ({
       id: `interview-action-${i.id}`,
       entityId: i.id,
       type: 'interview_action',
+      pillarId: 'interview_readiness',
       title: `${i.Company}: ${i['Next Action'] || 'Complete interview follow-up task'}`,
       subtitle: [i.Round, i.Date].filter(Boolean).join(' · '),
       dueDate: i['Next Action Date'],
@@ -1736,42 +1765,128 @@ export async function getDashboardData() {
       id: `upcoming-interview-${i.id}`,
       entityId: i.id,
       type: 'upcoming_interview',
+      pillarId: 'interview_readiness',
       title: `${i.Company}: Upcoming interview`,
       subtitle: [i.Round, i.Format].filter(Boolean).join(' · ') || 'Interview',
       dueDate: i.Date,
       reason: `Interview is coming up on ${i.Date}.`,
       actionLabel: 'Open Interviews',
       route: 'interviews',
-      priority: 3
-    })),
-    ...upcomingEvents.map(e => ({
-      id: `upcoming-event-${e.id}`,
-      entityId: e.id,
-      type: 'upcoming_event',
-      title: e.Name,
-      subtitle: e.Status || 'Event',
-      dueDate: e.Date,
-      reason: `Event is scheduled for ${e.Date}.`,
-      actionLabel: 'Open Events',
-      route: 'events',
-      priority: 4
+      priority: 2
     }))
   ]
-    .sort((a, b) => {
-      const p = (a.priority || 9) - (b.priority || 9)
-      if (p !== 0) return p
-      return String(a.dueDate || '').localeCompare(String(b.dueDate || ''))
+
+  const momentumItems = stalledPipeline.slice(0, 5).map(p => ({
+    id: `pipeline-stalled-${p.id}`,
+    entityId: p.id,
+    type: 'pipeline_stalled',
+    pillarId: 'pipeline_momentum',
+    title: `${p.Company}: define next action`,
+    subtitle: p.Role || p.Stage,
+    dueDate: p['Follow-Up Date'] || today,
+    reason: 'This active pipeline item is missing next action details.',
+    actionLabel: 'Open Pipeline',
+    route: 'pipeline',
+    priority: 3
+  }))
+
+  const networkingItems = []
+  if (weekStats.outreach < WEEKLY_TARGETS.outreach) {
+    networkingItems.push({
+      id: 'networking-weekly-outreach',
+      entityId: 'weekly-outreach',
+      type: 'networking_goal',
+      pillarId: 'networking_consistency',
+      title: `Send ${WEEKLY_TARGETS.outreach - weekStats.outreach} more outreach messages this week`,
+      subtitle: `Progress: ${weekStats.outreach}/${WEEKLY_TARGETS.outreach}`,
+      dueDate: addDaysIso(1),
+      reason: 'Weekly networking target is behind pace.',
+      actionLabel: 'Open Contacts',
+      route: 'contacts',
+      priority: 4
     })
+  }
+  if (stalledContacts.length > 0) {
+    networkingItems.push({
+      id: 'networking-stalled-contacts',
+      entityId: 'stalled-contacts',
+      type: 'networking_stalled',
+      pillarId: 'networking_consistency',
+      title: `${stalledContacts.length} contact records need a next action`,
+      subtitle: 'Add next action/date to keep outreach moving',
+      dueDate: today,
+      reason: 'Contacts without next actions often get lost.',
+      actionLabel: 'Open Contacts',
+      route: 'contacts',
+      priority: 4
+    })
+  }
+
+  const applicationItems = []
+  if (weekStats.applications < WEEKLY_TARGETS.applications) {
+    applicationItems.push({
+      id: 'applications-weekly-target',
+      entityId: 'weekly-applications',
+      type: 'application_goal',
+      pillarId: 'application_throughput',
+      title: `Submit ${WEEKLY_TARGETS.applications - weekStats.applications} more applications this week`,
+      subtitle: `Progress: ${weekStats.applications}/${WEEKLY_TARGETS.applications}`,
+      dueDate: addDaysIso(2),
+      reason: 'Application throughput is below weekly goal.',
+      actionLabel: 'Open Pipeline',
+      route: 'pipeline',
+      priority: 5
+    })
+  }
+
+  const eventsItems = upcomingEvents.map(e => ({
+    id: `upcoming-event-${e.id}`,
+    entityId: e.id,
+    type: 'upcoming_event',
+    pillarId: 'events_market_presence',
+    title: e.Name,
+    subtitle: e.Status || 'Event',
+    dueDate: e.Date,
+    reason: `Event is scheduled for ${e.Date}.`,
+    actionLabel: 'Open Events',
+    route: 'events',
+    priority: 6
+  }))
+  if (eventsItems.length === 0) {
+    eventsItems.push({
+      id: 'events-none-upcoming',
+      entityId: 'events-empty',
+      type: 'events_gap',
+      pillarId: 'events_market_presence',
+      title: 'Add one networking event for this week',
+      subtitle: 'Keep market visibility and momentum',
+      dueDate: addDaysIso(3),
+      reason: 'No upcoming events are currently scheduled.',
+      actionLabel: 'Open Events',
+      route: 'events',
+      priority: 6
+    })
+  }
+
+  const todayQueue = [
+    ...followUpItems,
+    ...interviewItems,
+    ...momentumItems,
+    ...networkingItems,
+    ...applicationItems,
+    ...eventsItems
+  ].sort((a, b) => {
+    const p = (a.priority || 9) - (b.priority || 9)
+    if (p !== 0) return p
+    return String(a.dueDate || '').localeCompare(String(b.dueDate || ''))
+  })
 
   const suggestedTop3 = todayQueue.slice(0, 3).map((item, idx) => `${idx + 1}. ${item.title}`)
 
-  const weekStats = recentLogs.slice(0, 7).reduce((acc, log) => {
-    acc.outreach += log['Outreach Sent'] || 0
-    acc.responses += log['Responses Received'] || 0
-    acc.applications += log['Applications Submitted'] || 0
-    acc.linkedInPosts += log['LinkedIn Posts'] ? 1 : 0
-    return acc
-  }, { outreach: 0, responses: 0, applications: 0, linkedInPosts: 0 })
+  const queueByPillar = Object.fromEntries(PRIORITY_FRAMEWORK.map(p => [p.id, 0]))
+  for (const item of todayQueue) {
+    if (item?.pillarId && queueByPillar[item.pillarId] != null) queueByPillar[item.pillarId] += 1
+  }
 
   return {
     overdueContacts,
@@ -1784,6 +1899,7 @@ export async function getDashboardData() {
     weekStats,
     todayQueue,
     suggestedTop3,
+    priorityFramework: PRIORITY_FRAMEWORK.map(p => ({ ...p, count: queueByPillar[p.id] || 0 })),
     health: {
       queueSize: todayQueue.length,
       stale: {
