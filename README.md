@@ -5,12 +5,14 @@ A free, self-hostable job search dashboard designed to be simple enough for non-
 ## What This App Does
 
 - Daily briefing: yesterday's Top 3, overdue follow-ups, active pipeline, weekly activity
+- Command-center Today Queue with reasoned priorities and one-click actions
 - Pipeline tracking with stages and follow-up dates
 - Networking tracker (contacts + follow-ups)
 - Interview tracker
 - Events tracker
 - Outreach templates and company watchlist
 - Daily check-in habit tracker
+- Next Action + Next Action Date fields across pipeline, contacts, and interviews
 - Optional Google Sheets bi-directional sync for team workflows
 
 ## Start Here: Easy Local Install (Recommended)

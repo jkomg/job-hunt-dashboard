@@ -27,6 +27,7 @@ export default function DailyCheckin() {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
+  const [autofillingTop3, setAutofillingTop3] = useState(false)
 
   const today = new Date().toLocaleDateString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric', year: 'numeric'
@@ -125,6 +126,25 @@ export default function DailyCheckin() {
       }
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function autofillTop3FromQueue() {
+    setAutofillingTop3(true)
+    setError('')
+    try {
+      const res = await fetch('/api/dashboard', { credentials: 'include' })
+      if (!res.ok) throw new Error('Could not load command center queue')
+      const data = await res.json()
+      const lines = Array.isArray(data?.suggestedTop3) ? data.suggestedTop3.slice(0, 3) : []
+      if (!lines.length) {
+        throw new Error('No queue-based suggestions right now. Add next actions or follow-up dates first.')
+      }
+      set("Tomorrow's Top 3", lines.join('\n'))
+    } catch (e) {
+      setError(e.message || 'Could not auto-fill Top 3')
+    } finally {
+      setAutofillingTop3(false)
     }
   }
 
@@ -236,6 +256,11 @@ export default function DailyCheckin() {
       {/* Tomorrow's Top 3 */}
       <div className="checkin-section" style={{ borderColor: 'var(--accent)' }}>
         <div className="checkin-section-title" style={{ color: 'var(--accent)' }}>Tomorrow's Top 3</div>
+        <div style={{ marginBottom: 10 }}>
+          <button className="btn btn-ghost btn-sm" type="button" onClick={autofillTop3FromQueue} disabled={autofillingTop3}>
+            {autofillingTop3 ? 'Pulling from queue…' : 'Auto-fill from Today Queue'}
+          </button>
+        </div>
         <div className="field">
           <label>3 most important things to do tomorrow</label>
           <textarea

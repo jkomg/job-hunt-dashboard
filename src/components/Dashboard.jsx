@@ -20,6 +20,14 @@ function stageColor(stage) {
   return 'badge-blue'
 }
 
+function queueIcon(type) {
+  if (type === 'contact_follow_up') return '👥'
+  if (type === 'pipeline_follow_up') return '🎯'
+  if (type === 'interview_action' || type === 'upcoming_interview') return '📞'
+  if (type === 'upcoming_event') return '🗓️'
+  return '•'
+}
+
 function pct(val, target) {
   return Math.min(100, Math.round((val / target) * 100))
 }
@@ -59,7 +67,16 @@ export default function Dashboard({ onNavigate, me }) {
   if (loading) return <div className="loading"><div className="spin" />Loading your briefing…</div>
   if (error) return <div className="error-msg">{error}</div>
 
-  const { overdueContacts, duePipelineFollowUps = [], recentLogs, activeItems, weekStats } = data
+  const {
+    overdueContacts,
+    duePipelineFollowUps = [],
+    recentLogs,
+    activeItems,
+    weekStats,
+    todayQueue = [],
+    suggestedTop3 = [],
+    health
+  } = data
 
   // Find yesterday's entry using the browser's local timezone
   const yesterdayLabel = new Date(Date.now() - 864e5).toLocaleDateString('en-US', {
@@ -118,6 +135,43 @@ export default function Dashboard({ onNavigate, me }) {
         )}
       </div>
 
+      {/* Today Queue */}
+      <div className="card mb-16" style={{ borderColor: 'var(--accent)' }}>
+        <div className="card-title" style={{ color: 'var(--accent)' }}>
+          🧭 Today Queue ({todayQueue.length})
+        </div>
+        {!todayQueue.length ? (
+          <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>
+            No urgent items. Pick one pipeline move and one outreach touchpoint today.
+          </div>
+        ) : (
+          <>
+            {todayQueue.slice(0, 8).map(item => (
+              <div key={item.id} className="contact-row" style={{ padding: '10px 0' }}>
+                <div className="contact-info">
+                  <div className="contact-name">{queueIcon(item.type)} {item.title}</div>
+                  <div className="contact-meta">{item.subtitle || item.reason}</div>
+                  <div style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 3 }}>
+                    Why now: {item.reason}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+                  {item.dueDate && <span className="overdue-badge">Due {item.dueDate}</span>}
+                  <button className="btn btn-ghost btn-sm" onClick={() => onNavigate(item.route)}>
+                    {item.actionLabel || 'Open'}
+                  </button>
+                </div>
+              </div>
+            ))}
+            {!!suggestedTop3.length && (
+              <div style={{ marginTop: 10, fontSize: 12, color: 'var(--text-muted)' }}>
+                Suggested Top 3: {suggestedTop3.join(' | ')}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
       {/* Overdue follow-ups */}
       {overdueContacts.length > 0 && (
         <div className="card mb-16" style={{ borderColor: 'var(--red)' }}>
@@ -148,6 +202,19 @@ export default function Dashboard({ onNavigate, me }) {
               </button>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Command Center Health */}
+      {health && (
+        <div className="card mb-16">
+          <div className="card-title">System Health</div>
+          <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>
+            Queue items: {health.queueSize} · Stalled records needing next action: {health.staleTotal}
+          </div>
+          <div style={{ marginTop: 6, color: 'var(--text-muted)', fontSize: 12 }}>
+            Pipeline: {health.stale?.pipeline || 0} · Contacts: {health.stale?.contacts || 0} · Interviews: {health.stale?.interviews || 0}
+          </div>
         </div>
       )}
 

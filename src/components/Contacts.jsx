@@ -28,7 +28,7 @@ function emptyContactForm(defaults = {}) {
     Name: '', Title: '', Company: '', Warmth: '❄️ Cold — no contact yet',
     Status: 'Need to reach out', 'How We Know Each Other': '',
     'LinkedIn URL': '', 'Next Follow-Up': '',
-    Email: '', Phone: '', 'Resume Used': '', Notes: '',
+    Email: '', Phone: '', 'Resume Used': '', Notes: '', 'Next Action': '', 'Next Action Date': '',
     ...defaults
   }
 }
@@ -53,6 +53,10 @@ function ContactForm({ form, set }) {
         <div className="field"><label>LinkedIn URL</label><input value={form['LinkedIn URL']} onChange={e => set('LinkedIn URL', e.target.value)} placeholder="https://linkedin.com/in/…" /></div>
       </div>
       <div className="field"><label>Resume / Cover Letter Used</label><input value={form['Resume Used']} onChange={e => set('Resume Used', e.target.value)} placeholder="e.g. CS General + Healthcare tailored CL" /></div>
+      <div className="checkin-grid">
+        <div className="field"><label>Next Action</label><input value={form['Next Action']} onChange={e => set('Next Action', e.target.value)} placeholder="What is the next outreach step?" /></div>
+        <div className="field"><label>Next Action Date</label><input type="date" value={form['Next Action Date']} onChange={e => set('Next Action Date', e.target.value)} /></div>
+      </div>
       <div className="field"><label>Notes</label><textarea value={form.Notes} onChange={e => set('Notes', e.target.value)} /></div>
     </>
   )
@@ -113,7 +117,9 @@ function ContactModal({ contact, onClose, onUpdate }) {
     Email: contact.Email || '',
     Phone: contact.Phone || '',
     'Resume Used': contact['Resume Used'] || '',
-    Notes: contact.Notes || ''
+    Notes: contact.Notes || '',
+    'Next Action': contact['Next Action'] || '',
+    'Next Action Date': contact['Next Action Date'] || ''
   }))
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -269,6 +275,11 @@ export default function Contacts() {
                   {[c.Title, c.Company].filter(Boolean).join(' @ ')}
                   {c['How We Know Each Other'] && ` · ${c['How We Know Each Other']}`}
                 </div>
+                {c['Next Action'] && (
+                  <div className="contact-meta">
+                    Next: {c['Next Action']}{c['Next Action Date'] ? ` (${c['Next Action Date']})` : ''}
+                  </div>
+                )}
               </div>
               <div className="contact-actions">
                 {c['Next Follow-Up'] && (

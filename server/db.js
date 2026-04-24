@@ -19,6 +19,16 @@ function now() {
   return Date.now()
 }
 
+function todayIso() {
+  return new Date().toISOString().slice(0, 10)
+}
+
+function addDaysIso(days) {
+  const d = new Date()
+  d.setDate(d.getDate() + Number(days || 0))
+  return d.toISOString().slice(0, 10)
+}
+
 const BACKUP_TABLES = [
   'app_settings',
   'daily_logs',
@@ -76,6 +86,37 @@ async function ensureEventSchema() {
     await db.execute('ALTER TABLE events ADD COLUMN source_key TEXT')
   }
   await db.execute('CREATE UNIQUE INDEX IF NOT EXISTS events_source_key_unique_idx ON events(source_key) WHERE source_key IS NOT NULL')
+}
+
+async function ensureActionSchema() {
+  const tableColumns = async (table) => {
+    const res = await db.execute(`PRAGMA table_info(${table})`)
+    return new Set((res.rows || []).map(r => String(r.name || '').toLowerCase()))
+  }
+
+  const pipelineCols = await tableColumns('pipeline_entries')
+  if (!pipelineCols.has('next_action')) {
+    await db.execute('ALTER TABLE pipeline_entries ADD COLUMN next_action TEXT')
+  }
+  if (!pipelineCols.has('next_action_date')) {
+    await db.execute('ALTER TABLE pipeline_entries ADD COLUMN next_action_date TEXT')
+  }
+
+  const contactCols = await tableColumns('contacts')
+  if (!contactCols.has('next_action')) {
+    await db.execute('ALTER TABLE contacts ADD COLUMN next_action TEXT')
+  }
+  if (!contactCols.has('next_action_date')) {
+    await db.execute('ALTER TABLE contacts ADD COLUMN next_action_date TEXT')
+  }
+
+  const interviewCols = await tableColumns('interviews')
+  if (!interviewCols.has('next_action')) {
+    await db.execute('ALTER TABLE interviews ADD COLUMN next_action TEXT')
+  }
+  if (!interviewCols.has('next_action_date')) {
+    await db.execute('ALTER TABLE interviews ADD COLUMN next_action_date TEXT')
+  }
 }
 
 function toUser(row) {
@@ -291,6 +332,7 @@ export async function initDb() {
   await ensureUserSchema()
   await ensureInterviewSchema()
   await ensureEventSchema()
+  await ensureActionSchema()
 
   const seedUsername = String(process.env.DEFAULT_USERNAME || 'jason').trim().toLowerCase() || 'jason'
   const userCountRes = await db.execute('SELECT COUNT(*) AS count FROM users')
@@ -369,7 +411,9 @@ function pipelineRowToRecord(row) {
     'Filed for Unemployment': Number(row.filed_for_unemployment || 0) === 1,
     Outcome: row.outcome || '',
     'Resume URL': row.resume_url || '',
-    'Work Location': row.work_location || ''
+    'Work Location': row.work_location || '',
+    'Next Action': row.next_action || '',
+    'Next Action Date': row.next_action_date || ''
   }
 }
 
@@ -389,7 +433,9 @@ function contactRowToRecord(row) {
     'Next Follow-Up': row.next_follow_up || '',
     'Last Contact': row.last_contact || '',
     'Resume Used': row.resume_used || '',
-    Notes: row.notes || ''
+    Notes: row.notes || '',
+    'Next Action': row.next_action || '',
+    'Next Action Date': row.next_action_date || ''
   }
 }
 
@@ -407,7 +453,9 @@ function interviewRowToRecord(row) {
     'Questions Asked': row.questions_asked || '',
     'Feedback Received': row.feedback_received || '',
     'Follow-Up Sent': Number(row.follow_up_sent || 0) === 1,
-    Notes: row.notes || ''
+    Notes: row.notes || '',
+    'Next Action': row.next_action || '',
+    'Next Action Date': row.next_action_date || ''
   }
 }
 
@@ -979,8 +1027,8 @@ export async function createPipelineEntry(data = {}) {
         id, company, role, stage, priority, sector, job_source, job_url, salary_range,
         date_applied, follow_up_date, contact_name, contact_title, outreach_method, resume_version,
         company_address, company_phone, notes, research_notes, filed_for_unemployment, outcome,
-        resume_url, work_location, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        resume_url, work_location, next_action, next_action_date, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     args: [
       id,
@@ -1006,6 +1054,8 @@ export async function createPipelineEntry(data = {}) {
       data.Outcome || null,
       data['Resume URL'] || null,
       data['Work Location'] || null,
+      data['Next Action'] || null,
+      data['Next Action Date'] || null,
       ts,
       ts
     ]
@@ -1047,6 +1097,8 @@ export async function updatePipelineEntry(id, data = {}) {
   setIfPresent('outcome', data.Outcome === undefined ? undefined : (data.Outcome || null))
   setIfPresent('resume_url', data['Resume URL'] === undefined ? undefined : (data['Resume URL'] || null))
   setIfPresent('work_location', data['Work Location'] === undefined ? undefined : (data['Work Location'] || null))
+  setIfPresent('next_action', data['Next Action'] === undefined ? undefined : (data['Next Action'] || null))
+  setIfPresent('next_action_date', data['Next Action Date'] === undefined ? undefined : (data['Next Action Date'] || null))
 
   updates.push('updated_at = ?')
   args.push(now())
@@ -1093,8 +1145,8 @@ export async function ensureInterviewForPipelineStage(pipelineId, stageOverride 
     sql: `
       INSERT INTO interviews (
         id, company, job_title, date, round, format, outcome, interviewer,
-        questions_asked, feedback_received, follow_up_sent, notes, pipeline_entry_id, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        questions_asked, feedback_received, follow_up_sent, notes, pipeline_entry_id, next_action, next_action_date, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     args: [
       id,
@@ -1110,11 +1162,42 @@ export async function ensureInterviewForPipelineStage(pipelineId, stageOverride 
       0,
       pipeline.Notes || null,
       String(pipeline.id),
+      'Prepare interview talking points and STAR stories',
+      date || addDaysIso(1),
       ts,
       ts
     ]
   })
   return { created: true, interviewId: id }
+}
+
+const STAGE_AUTOMATION = {
+  '📨 Applied': { action: 'Send recruiter follow-up if no response', days: 5 },
+  '🤝 Warm Outreach Sent': { action: 'Follow up with warm contact', days: 3 },
+  '💬 In Conversation': { action: 'Keep momentum with next conversation step', days: 2 },
+  '📞 Interview Scheduled': { action: 'Prep interview and research interviewers', days: 1 },
+  '🎯 Interviewing': { action: 'Send thank-you note and debrief', days: 1 },
+  '📋 Offer': { action: 'Review offer details and questions', days: 1 }
+}
+
+export async function applyPipelineStageAutomation(pipelineId, stageOverride = null) {
+  const pipeline = await getPipelineEntryById(pipelineId)
+  if (!pipeline) return { updated: false, reason: 'pipeline_not_found' }
+  const stage = stageOverride || pipeline.Stage
+  const suggestion = STAGE_AUTOMATION[stage]
+  if (!suggestion) return { updated: false, reason: 'no_suggestion' }
+
+  const needsAction = !String(pipeline['Next Action'] || '').trim()
+  const needsDate = !String(pipeline['Next Action Date'] || '').trim()
+  const updates = {}
+  if (needsAction) updates['Next Action'] = suggestion.action
+  if (needsDate) updates['Next Action Date'] = addDaysIso(suggestion.days)
+  if (Object.keys(updates).length === 0) {
+    return { updated: false, reason: 'already_has_next_action' }
+  }
+
+  await updatePipelineEntry(pipelineId, updates)
+  return { updated: true, updates }
 }
 
 export async function backfillInterviewsFromPipeline() {
@@ -1219,8 +1302,8 @@ export async function createContact(data = {}) {
     sql: `
       INSERT INTO contacts (
         id, name, title, company, email, phone, warmth, status, how_we_know_each_other,
-        linkedin_url, next_follow_up, last_contact, resume_used, notes, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        linkedin_url, next_follow_up, last_contact, resume_used, notes, next_action, next_action_date, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     args: [
       id,
@@ -1237,6 +1320,8 @@ export async function createContact(data = {}) {
       data['Last Contact'] || null,
       data['Resume Used'] || null,
       data.Notes || null,
+      data['Next Action'] || null,
+      data['Next Action Date'] || null,
       ts,
       ts
     ]
@@ -1267,6 +1352,8 @@ export async function updateContact(id, data = {}) {
   setIfPresent('last_contact', data['Last Contact'] === undefined ? undefined : (data['Last Contact'] || null))
   setIfPresent('resume_used', data['Resume Used'] === undefined ? undefined : (data['Resume Used'] || null))
   setIfPresent('notes', data.Notes === undefined ? undefined : (data.Notes || null))
+  setIfPresent('next_action', data['Next Action'] === undefined ? undefined : (data['Next Action'] || null))
+  setIfPresent('next_action_date', data['Next Action Date'] === undefined ? undefined : (data['Next Action Date'] || null))
 
   updates.push('updated_at = ?')
   args.push(now())
@@ -1298,8 +1385,8 @@ export async function createInterview(data = {}) {
     sql: `
       INSERT INTO interviews (
         id, company, job_title, date, round, format, outcome, interviewer,
-        questions_asked, feedback_received, follow_up_sent, notes, pipeline_entry_id, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        questions_asked, feedback_received, follow_up_sent, notes, pipeline_entry_id, next_action, next_action_date, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     args: [
       id,
@@ -1315,6 +1402,8 @@ export async function createInterview(data = {}) {
       data['Follow-Up Sent'] ? 1 : 0,
       data.Notes || null,
       data['Pipeline Entry ID'] || null,
+      data['Next Action'] || null,
+      data['Next Action Date'] || null,
       ts,
       ts
     ]
@@ -1343,6 +1432,8 @@ export async function updateInterview(id, data = {}) {
   setIfPresent('feedback_received', data['Feedback Received'] === undefined ? undefined : (data['Feedback Received'] || null))
   setIfPresent('follow_up_sent', data['Follow-Up Sent'] === undefined ? undefined : (data['Follow-Up Sent'] ? 1 : 0))
   setIfPresent('notes', data.Notes === undefined ? undefined : (data.Notes || null))
+  setIfPresent('next_action', data['Next Action'] === undefined ? undefined : (data['Next Action'] || null))
+  setIfPresent('next_action_date', data['Next Action Date'] === undefined ? undefined : (data['Next Action Date'] || null))
 
   updates.push('updated_at = ?')
   args.push(now())
@@ -1557,12 +1648,16 @@ export async function updateWatchlistEntry(id, data = {}) {
 }
 
 export async function getDashboardData() {
-  const [overdueContacts, recentLogs, pipeline] = await Promise.all([
+  const [overdueContacts, recentLogs, pipeline, interviews, events, contacts] = await Promise.all([
     getOverdueFollowUps(),
     getRecentLogs(8),
-    getPipeline()
+    getPipeline(),
+    getInterviews(),
+    getEvents(),
+    getContacts()
   ])
   const today = new Date().toISOString().slice(0, 10)
+  const weekAhead = addDaysIso(7)
 
   const activeItems = pipeline.filter(p =>
     ['💬 In Conversation', '📞 Interview Scheduled', '🎯 Interviewing'].includes(p.Stage)
@@ -1577,6 +1672,99 @@ export async function getDashboardData() {
     })
     .sort((a, b) => String(a['Follow-Up Date']).localeCompare(String(b['Follow-Up Date'])))
 
+  const dueInterviewActions = interviews
+    .filter(i => i.Outcome === 'Pending' && i['Next Action Date'] && i['Next Action Date'] <= today)
+    .sort((a, b) => String(a['Next Action Date']).localeCompare(String(b['Next Action Date'])))
+
+  const upcomingInterviews = interviews
+    .filter(i => i.Outcome === 'Pending' && i.Date && i.Date >= today && i.Date <= weekAhead)
+    .sort((a, b) => String(a.Date).localeCompare(String(b.Date)))
+
+  const upcomingEvents = events
+    .filter(e => e.Status !== 'Attended' && e.Status !== 'Skipped' && e.Date && e.Date >= today && e.Date <= weekAhead)
+    .sort((a, b) => String(a.Date).localeCompare(String(b.Date)))
+
+  const stalledPipeline = pipeline.filter(p => {
+    const stage = String(p.Stage || '')
+    if (stage.includes('Closed')) return false
+    return !String(p['Next Action'] || '').trim() || !String(p['Next Action Date'] || '').trim()
+  })
+  const stalledContacts = contacts.filter(c => {
+    if (['Gone cold', 'Referred me'].includes(String(c.Status || ''))) return false
+    return !String(c['Next Action'] || '').trim() || !String(c['Next Action Date'] || '').trim()
+  })
+  const stalledInterviews = interviews.filter(i => i.Outcome === 'Pending' && (!String(i['Next Action'] || '').trim() || !String(i['Next Action Date'] || '').trim()))
+
+  const todayQueue = [
+    ...overdueContacts.map(c => ({
+      id: `contact-${c.id}`,
+      entityId: c.id,
+      type: 'contact_follow_up',
+      title: `Follow up with ${c.Name}`,
+      subtitle: c.Company ? `${c.Title || 'Contact'} @ ${c.Company}` : (c.Title || 'Contact'),
+      dueDate: c['Next Follow-Up'] || today,
+      reason: `Contact follow-up is due (${c['Next Follow-Up'] || 'today'}).`,
+      actionLabel: 'Open Contacts',
+      route: 'contacts',
+      priority: 1
+    })),
+    ...duePipelineFollowUps.map(p => ({
+      id: `pipeline-followup-${p.id}`,
+      entityId: p.id,
+      type: 'pipeline_follow_up',
+      title: `${p.Company}: ${p['Next Action'] || 'Follow up on application'}`,
+      subtitle: p.Role || p.Stage,
+      dueDate: p['Follow-Up Date'],
+      reason: `Pipeline follow-up date is due (${p['Follow-Up Date']}).`,
+      actionLabel: 'Open Pipeline',
+      route: 'pipeline',
+      priority: 2
+    })),
+    ...dueInterviewActions.map(i => ({
+      id: `interview-action-${i.id}`,
+      entityId: i.id,
+      type: 'interview_action',
+      title: `${i.Company}: ${i['Next Action'] || 'Complete interview follow-up task'}`,
+      subtitle: [i.Round, i.Date].filter(Boolean).join(' · '),
+      dueDate: i['Next Action Date'],
+      reason: `Interview next action is due (${i['Next Action Date']}).`,
+      actionLabel: 'Open Interviews',
+      route: 'interviews',
+      priority: 2
+    })),
+    ...upcomingInterviews.map(i => ({
+      id: `upcoming-interview-${i.id}`,
+      entityId: i.id,
+      type: 'upcoming_interview',
+      title: `${i.Company}: Upcoming interview`,
+      subtitle: [i.Round, i.Format].filter(Boolean).join(' · ') || 'Interview',
+      dueDate: i.Date,
+      reason: `Interview is coming up on ${i.Date}.`,
+      actionLabel: 'Open Interviews',
+      route: 'interviews',
+      priority: 3
+    })),
+    ...upcomingEvents.map(e => ({
+      id: `upcoming-event-${e.id}`,
+      entityId: e.id,
+      type: 'upcoming_event',
+      title: e.Name,
+      subtitle: e.Status || 'Event',
+      dueDate: e.Date,
+      reason: `Event is scheduled for ${e.Date}.`,
+      actionLabel: 'Open Events',
+      route: 'events',
+      priority: 4
+    }))
+  ]
+    .sort((a, b) => {
+      const p = (a.priority || 9) - (b.priority || 9)
+      if (p !== 0) return p
+      return String(a.dueDate || '').localeCompare(String(b.dueDate || ''))
+    })
+
+  const suggestedTop3 = todayQueue.slice(0, 3).map((item, idx) => `${idx + 1}. ${item.title}`)
+
   const weekStats = recentLogs.slice(0, 7).reduce((acc, log) => {
     acc.outreach += log['Outreach Sent'] || 0
     acc.responses += log['Responses Received'] || 0
@@ -1588,8 +1776,22 @@ export async function getDashboardData() {
   return {
     overdueContacts,
     duePipelineFollowUps,
+    dueInterviewActions,
+    upcomingInterviews,
+    upcomingEvents,
     recentLogs,
     activeItems,
-    weekStats
+    weekStats,
+    todayQueue,
+    suggestedTop3,
+    health: {
+      queueSize: todayQueue.length,
+      stale: {
+        pipeline: stalledPipeline.length,
+        contacts: stalledContacts.length,
+        interviews: stalledInterviews.length
+      },
+      staleTotal: stalledPipeline.length + stalledContacts.length + stalledInterviews.length
+    }
   }
 }

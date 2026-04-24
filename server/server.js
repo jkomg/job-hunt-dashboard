@@ -21,7 +21,7 @@ import {
   getWatchlist, createWatchlistEntry, updateWatchlistEntry,
   getDailyLogs, getTodayLog, createDailyLog, updateDailyLog,
   getPipeline, updatePipelineEntry, updatePipelineStage, updatePipelineFollowUp, createPipelineEntry,
-  ensureInterviewForPipelineStage, backfillInterviewsFromPipeline
+  ensureInterviewForPipelineStage, backfillInterviewsFromPipeline, applyPipelineStageAutomation
 } from './db.js'
 import { runSheetsSync, testSheetsConnection, getSheetsSyncStatus, normalizeSheetsSyncError } from './sheetsSync.js'
 import { getGmailIntegrationConfig, buildGmailAuthUrl, exchangeGmailCode, importEventsFromGmail } from './gmailEvents.js'
@@ -458,12 +458,15 @@ app.patch('/api/pipeline/:id/stage', requireAuth, async (req, res) => {
     await updatePipelineStage(req.params.id, nextStage)
 
     let interviewAutoCreated = false
+    let nextActionAutoUpdated = false
     if (nextStage) {
       const result = await ensureInterviewForPipelineStage(req.params.id, nextStage)
       interviewAutoCreated = !!result?.created
+      const actionResult = await applyPipelineStageAutomation(req.params.id, nextStage)
+      nextActionAutoUpdated = !!actionResult?.updated
     }
 
-    res.json({ ok: true, interviewAutoCreated })
+    res.json({ ok: true, interviewAutoCreated, nextActionAutoUpdated })
   } catch (e) {
     res.status(500).json({ error: e.message })
   }
@@ -482,11 +485,14 @@ app.patch('/api/pipeline/:id', requireAuth, async (req, res) => {
   try {
     await updatePipelineEntry(req.params.id, req.body)
     let interviewAutoCreated = false
+    let nextActionAutoUpdated = false
     if (req.body?.Stage) {
       const result = await ensureInterviewForPipelineStage(req.params.id, req.body.Stage)
       interviewAutoCreated = !!result?.created
+      const actionResult = await applyPipelineStageAutomation(req.params.id, req.body.Stage)
+      nextActionAutoUpdated = !!actionResult?.updated
     }
-    res.json({ ok: true, interviewAutoCreated })
+    res.json({ ok: true, interviewAutoCreated, nextActionAutoUpdated })
   } catch (e) {
     res.status(500).json({ error: e.message })
   }
@@ -496,11 +502,14 @@ app.post('/api/pipeline', requireAuth, async (req, res) => {
   try {
     const page = await createPipelineEntry(req.body)
     let interviewAutoCreated = false
+    let nextActionAutoUpdated = false
     if (req.body?.Stage) {
       const result = await ensureInterviewForPipelineStage(page.id, req.body.Stage)
       interviewAutoCreated = !!result?.created
+      const actionResult = await applyPipelineStageAutomation(page.id, req.body.Stage)
+      nextActionAutoUpdated = !!actionResult?.updated
     }
-    res.json({ ok: true, id: page.id, interviewAutoCreated })
+    res.json({ ok: true, id: page.id, interviewAutoCreated, nextActionAutoUpdated })
   } catch (e) {
     res.status(500).json({ error: e.message })
   }

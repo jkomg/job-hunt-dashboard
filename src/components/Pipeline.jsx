@@ -42,6 +42,7 @@ function emptyForm(defaults = {}) {
     'Contact Name': '', 'Contact Title': '', 'Outreach Method': '', 'Resume Version': '',
     'Company Address': '', 'Company Phone': '', Notes: '', 'Research Notes': '',
     'Filed for Unemployment': false, Outcome: '', 'Resume URL': '', 'Work Location': '',
+    'Next Action': '', 'Next Action Date': '',
     ...defaults
   }
 }
@@ -81,6 +82,10 @@ function PipelineForm({ form, set }) {
       <div className="field"><label>Job URL</label><input value={form['Job URL']} onChange={e => set('Job URL', e.target.value)} placeholder="https://…" /></div>
       <div className="field"><label>Notes</label><textarea value={form.Notes} onChange={e => set('Notes', e.target.value)} /></div>
       <div className="field"><label>Research Notes</label><textarea value={form['Research Notes']} onChange={e => set('Research Notes', e.target.value)} placeholder="Company background, culture, products, interview prep…" /></div>
+      <div className="checkin-grid">
+        <div className="field"><label>Next Action</label><input value={form['Next Action']} onChange={e => set('Next Action', e.target.value)} placeholder="What should happen next for this job?" /></div>
+        <div className="field"><label>Next Action Date</label><input type="date" value={form['Next Action Date']} onChange={e => set('Next Action Date', e.target.value)} /></div>
+      </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
         <input type="checkbox" id="filed-ue" checked={!!form['Filed for Unemployment']} onChange={e => set('Filed for Unemployment', e.target.checked)} style={{ width: 16, height: 16, margin: 0, appearance: 'auto', flexShrink: 0 }} />
         <label htmlFor="filed-ue" style={{ fontSize: 13, color: 'var(--text)', cursor: 'pointer', margin: 0 }}>Filed for Unemployment</label>
@@ -163,7 +168,9 @@ function CardModal({ card, onClose, onUpdate }) {
     'Filed for Unemployment': card['Filed for Unemployment'] || false,
     Outcome: card.Outcome || '',
     'Resume URL': card['Resume URL'] || '',
-    'Work Location': card['Work Location'] || ''
+    'Work Location': card['Work Location'] || '',
+    'Next Action': card['Next Action'] || '',
+    'Next Action Date': card['Next Action Date'] || ''
   }))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -347,6 +354,12 @@ export default function Pipeline() {
                   >
                     <div className="kanban-card-company">{card.Company}</div>
                     {card.Role && <div className="kanban-card-role">{card.Role}</div>}
+                    {card['Next Action'] && (
+                      <div className="kanban-card-role" style={{ color: 'var(--text)', marginBottom: 6 }}>
+                        Next: {card['Next Action']}
+                        {card['Next Action Date'] ? ` (${card['Next Action Date']})` : ''}
+                      </div>
+                    )}
                     <div className="kanban-card-meta">
                       {card.Priority && <span className={`badge ${priorityColor(card.Priority)}`} style={{ fontSize: 10 }}>{card.Priority}</span>}
                       {card['Follow-Up Date'] && <span className="text-muted text-sm">↩ {card['Follow-Up Date']}</span>}
