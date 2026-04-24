@@ -664,6 +664,16 @@ export async function updatePassword(userId, newHash, { clearMustChangePassword 
   })
 }
 
+export async function updateUsername(userId, nextUsername) {
+  const normalized = String(nextUsername || '').trim().toLowerCase()
+  if (!normalized) throw new Error('Username is required')
+  await db.execute({
+    sql: 'UPDATE users SET username = ? WHERE id = ?',
+    args: [normalized, userId]
+  })
+  return getUserById(userId)
+}
+
 export async function getSheetSyncLink(sheetId, tabName, rowNumber) {
   const res = await db.execute({
     sql: `

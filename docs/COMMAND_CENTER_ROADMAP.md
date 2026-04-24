@@ -24,7 +24,7 @@ Work order:
 ## 2) Onboarding + UX (must-have)
 
 - [x] First-run wizard exists
-- [ ] Expand first-run wizard: username, optional Sheets connect, test connection in-flow
+- [x] Expand first-run wizard: username, optional Sheets connect, test connection in-flow
 - [x] Empty-state templates added across major pages
 - [ ] Improve mobile ergonomics on dense forms and table-heavy screens
 - [x] In-app help text on key fields (stage, follow-up, outcomes)

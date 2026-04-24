@@ -73,7 +73,10 @@ Default login (session mode):
 
 - username: whatever you chose during setup (default is `jason`)
 - password: `jobhunt2026`
-- first login opens a quick setup wizard to choose dashboard display name
+- first login opens a quick setup wizard to set:
+  - dashboard display name
+  - username (local sign-in)
+  - optional Google Sheets link + in-flow connection test
 
 ### Install + Run (Windows PowerShell)
 
@@ -95,7 +98,10 @@ Default login (session mode):
 
 - username: whatever you chose during setup (default is `jason`)
 - password: `jobhunt2026`
-- first login opens a quick setup wizard to choose dashboard display name
+- first login opens a quick setup wizard to set:
+  - dashboard display name
+  - username (local sign-in)
+  - optional Google Sheets link + in-flow connection test
 
 ### Local Data Storage
 
