@@ -88,6 +88,8 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start-local-docker.ps1
 ## Daily Use (5-Minute Routine)
 
 1. Open `Dashboard` and start with `Today Queue` (top item first).
+   - Use `Focus Now` for quick jumps to Interviews, Follow-ups, and Stale items.
+   - Use `Top 3 Actions` to open the exact record directly when available.
 2. Work through urgent items in this order:
    - Interview Readiness
    - Follow-Ups Due

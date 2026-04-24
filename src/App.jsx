@@ -29,7 +29,13 @@ export default function App() {
   const [authed, setAuthed] = useState(null)
   const [me, setMe] = useState(null)
   const [view, setView] = useState('dashboard')
+  const [navIntent, setNavIntent] = useState(null)
   const [theme, setTheme] = useTheme()
+
+  function navigate(nextView, intent = null) {
+    setView(nextView)
+    setNavIntent(intent ? { ...intent, _ts: Date.now() } : { _ts: Date.now() })
+  }
 
   async function refreshMe() {
     try {
@@ -84,7 +90,7 @@ export default function App() {
             <button
               key={n.id}
               className={`nav-item${view === n.id ? ' active' : ''}`}
-              onClick={() => setView(n.id)}
+              onClick={() => navigate(n.id)}
             >
               <span className="nav-icon">{n.icon}</span>
               {n.label}
@@ -127,9 +133,9 @@ export default function App() {
           ))}
         </div>
 
-        {view === 'dashboard'  && <Dashboard onNavigate={setView} me={me} />}
+        {view === 'dashboard'  && <Dashboard onNavigate={navigate} me={me} />}
         {view === 'checkin'    && <DailyCheckin />}
-        {view === 'pipeline'   && <Pipeline />}
+        {view === 'pipeline'   && <Pipeline navIntent={navIntent} />}
         {view === 'contacts'   && <Contacts />}
         {view === 'interviews' && <Interviews />}
         {view === 'events'     && <Events />}
@@ -144,7 +150,7 @@ export default function App() {
           <button
             key={n.id}
             className={`bottom-nav-item${view === n.id ? ' active' : ''}`}
-            onClick={() => setView(n.id)}
+            onClick={() => navigate(n.id)}
           >
             <span className="nav-icon">{n.icon}</span>
             {n.label}

@@ -216,7 +216,7 @@ function CardModal({ card, onClose, onUpdate }) {
   )
 }
 
-export default function Pipeline() {
+export default function Pipeline({ navIntent }) {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState(null)
@@ -233,6 +233,18 @@ export default function Pipeline() {
   }
 
   useEffect(load, [])
+
+  useEffect(() => {
+    if (!navIntent) return
+    if (navIntent.mode === 'due_followups') setFilter('due_followups')
+    if (navIntent.mode === 'stale_actions') setFilter('stale_actions')
+  }, [navIntent])
+
+  useEffect(() => {
+    if (!navIntent?.focusId) return
+    const hit = items.find(i => i.id === navIntent.focusId)
+    if (hit) setSelected(hit)
+  }, [navIntent, items])
 
   function handleUpdate(id, updatedFields) {
     setItems(prev => prev.map(item => item.id === id ? { ...item, ...updatedFields } : item))
@@ -275,8 +287,22 @@ export default function Pipeline() {
 
   // ─── Render ──────────────────────────────────────────
 
+  const today = new Date().toISOString().slice(0, 10)
+  const isDueFollowup = (i) => {
+    const due = String(i['Follow-Up Date'] || '').trim()
+    if (!due) return false
+    if (i.Stage?.includes('Closed')) return false
+    return due <= today
+  }
+  const isStaleAction = (i) => {
+    if (i.Stage?.includes('Closed')) return false
+    return !String(i['Next Action'] || '').trim() || !String(i['Next Action Date'] || '').trim()
+  }
+
   const visible = filter === 'all' ? items
     : filter === 'active' ? items.filter(i => !i.Stage?.includes('Closed'))
+    : filter === 'due_followups' ? items.filter(isDueFollowup)
+    : filter === 'stale_actions' ? items.filter(isStaleAction)
     : items.filter(i => i.Stage === filter)
 
   const byStage = STAGES.reduce((acc, s) => {
@@ -305,6 +331,8 @@ export default function Pipeline() {
       <div className="tabs">
         <button className={`tab${filter === 'active' ? ' active' : ''}`} onClick={() => setFilter('active')}>Active</button>
         <button className={`tab${filter === 'all' ? ' active' : ''}`} onClick={() => setFilter('all')}>All</button>
+        <button className={`tab${filter === 'due_followups' ? ' active' : ''}`} onClick={() => setFilter('due_followups')}>Due Follow-ups</button>
+        <button className={`tab${filter === 'stale_actions' ? ' active' : ''}`} onClick={() => setFilter('stale_actions')}>Missing Next Action</button>
         {['💬 In Conversation', '📞 Interview Scheduled', '🎯 Interviewing'].map(s => (
           <button key={s} className={`tab${filter === s ? ' active' : ''}`} onClick={() => setFilter(s)}>{s}</button>
         ))}

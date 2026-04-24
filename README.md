@@ -37,9 +37,10 @@ Each queue item includes:
 
 ### Daily Routine (fast)
 
-1. Open `Dashboard` and work from `Today Queue` top-down.
-2. Open each item and set/update `Next Action` and `Next Action Date`.
-3. End day in `Daily Check-in` and use `Auto-fill from Today Queue` for tomorrow’s top 3.
+1. Open `Dashboard` and use `Focus Now` first (Interviews, Follow-ups, Stale items).
+2. Use `Top 3 Actions` for direct record-level links (opens the specific card when available).
+3. Open each item and set/update `Next Action` and `Next Action Date`.
+4. End day in `Daily Check-in` and use `Auto-fill from Today Queue` for tomorrow’s top 3.
 
 Tip:
 - If `System Health` shows stalled items, clear those first. Stalled items are records missing next action/date.
