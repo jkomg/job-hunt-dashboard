@@ -188,6 +188,16 @@ export default function Interviews() {
         <button className={`tab${filter === 'Rejected' ? ' active' : ''}`} onClick={() => setFilter('Rejected')}>Rejected</button>
       </div>
 
+      {items.length === 0 && (
+        <div className="card mb-16">
+          <div className="card-title">Track Every Interview</div>
+          <div style={{ color: 'var(--text-muted)', marginBottom: 10 }}>
+            Logging interview details helps you prep better and improve over time.
+          </div>
+          <button className="btn btn-primary btn-sm" onClick={() => setShowAdd(true)}>+ Log First Interview</button>
+        </div>
+      )}
+
       <div className="card" style={{ padding: 0 }}>
         {filtered.length === 0 ? (
           <div className="empty-state">
