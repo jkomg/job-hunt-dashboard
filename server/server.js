@@ -7,6 +7,7 @@ import bcrypt from 'bcryptjs'
 import { existsSync } from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import { Storage } from '@google-cloud/storage'
 
 import {
   initDb,
@@ -39,6 +40,9 @@ const ADMIN_EMAILS = new Set(
 )
 const PASSWORD_CHANGE_ALLOWED_PATHS = new Set(['/api/me', '/api/change-password', '/api/logout'])
 const SHEETS_SYNC_CRON_TOKEN = String(process.env.SHEETS_SYNC_CRON_TOKEN || '').trim()
+const BACKUP_EXPORT_CRON_TOKEN = String(process.env.BACKUP_EXPORT_CRON_TOKEN || '').trim()
+const BACKUP_GCS_BUCKET = String(process.env.BACKUP_GCS_BUCKET || '').trim()
+const BACKUP_GCS_PREFIX = String(process.env.BACKUP_GCS_PREFIX || 'job-hunt').trim()
 const SHEET_SETTINGS_KEYS = {
   enabled: 'sheets.sync.enabled',
   sheetId: 'sheets.sheet_id',
@@ -66,7 +70,8 @@ const rateBuckets = new Map()
 const CSRF_EXEMPT_PATHS = new Set([
   '/api/login',
   '/api/health',
-  '/api/internal/sheets/sync'
+  '/api/internal/sheets/sync',
+  '/api/internal/backup/export'
 ])
 
 function parseBool(value, fallback = false) {
@@ -279,12 +284,12 @@ app.get('/api/health', (_req, res) => {
   res.json({ ok: true, authMode: AUTH_MODE, now: new Date().toISOString() })
 })
 
-function isValidCronToken(req) {
-  const provided = String(req.headers['x-sync-token'] || '').trim()
-  if (!provided || !SHEETS_SYNC_CRON_TOKEN) return false
+function isValidInternalToken(req, headerName, expectedToken) {
+  const provided = String(req.headers[headerName] || '').trim()
+  if (!provided || !expectedToken) return false
 
   const a = Buffer.from(provided, 'utf8')
-  const b = Buffer.from(SHEETS_SYNC_CRON_TOKEN, 'utf8')
+  const b = Buffer.from(expectedToken, 'utf8')
   if (a.length !== b.length) return false
   return crypto.timingSafeEqual(a, b)
 }
@@ -833,7 +838,7 @@ app.post('/api/internal/sheets/sync', async (req, res) => {
   if (!SHEETS_SYNC_CRON_TOKEN) {
     return res.status(503).json({ error: 'SHEETS_SYNC_CRON_TOKEN is not configured' })
   }
-  if (!isValidCronToken(req)) {
+  if (!isValidInternalToken(req, 'x-sync-token', SHEETS_SYNC_CRON_TOKEN)) {
     return res.status(401).json({ error: 'Invalid sync token' })
   }
 
@@ -850,6 +855,45 @@ app.post('/api/internal/sheets/sync', async (req, res) => {
       retryable: normalized.retryable,
       details: normalized.details
     })
+  }
+})
+
+app.post('/api/internal/backup/export', async (req, res) => {
+  if (!BACKUP_EXPORT_CRON_TOKEN) {
+    return res.status(503).json({ error: 'BACKUP_EXPORT_CRON_TOKEN is not configured' })
+  }
+  if (!BACKUP_GCS_BUCKET) {
+    return res.status(503).json({ error: 'BACKUP_GCS_BUCKET is not configured' })
+  }
+  if (!isValidInternalToken(req, 'x-backup-token', BACKUP_EXPORT_CRON_TOKEN)) {
+    return res.status(401).json({ error: 'Invalid backup token' })
+  }
+
+  try {
+    const snapshot = await exportBackupSnapshot()
+    const payload = JSON.stringify(snapshot, null, 2)
+    const iso = new Date().toISOString().replace(/[:.]/g, '-')
+    const prefix = BACKUP_GCS_PREFIX.replace(/^\/+|\/+$/g, '')
+    const objectName = `${prefix ? `${prefix}/` : ''}backup-${iso}.json`
+
+    const storage = new Storage()
+    const file = storage.bucket(BACKUP_GCS_BUCKET).file(objectName)
+    await file.save(payload, {
+      resumable: false,
+      contentType: 'application/json; charset=utf-8',
+      metadata: { cacheControl: 'no-store' }
+    })
+
+    res.json({
+      ok: true,
+      exportedAt: snapshot.exportedAt,
+      bucket: BACKUP_GCS_BUCKET,
+      objectName,
+      bytes: Buffer.byteLength(payload, 'utf8')
+    })
+  } catch (e) {
+    console.error('internal.backup.export failed', e)
+    res.status(500).json({ error: 'Could not export backup to Cloud Storage' })
   }
 })
 
