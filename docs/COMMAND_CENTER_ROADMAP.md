@@ -26,13 +26,13 @@ Work order:
 - [x] First-run wizard exists
 - [x] Expand first-run wizard: username, optional Sheets connect, test connection in-flow
 - [x] Empty-state templates added across major pages
-- [ ] Improve mobile ergonomics on dense forms and table-heavy screens
+- [x] Improve mobile ergonomics on dense forms and table-heavy screens
 - [x] In-app help text on key fields (stage, follow-up, outcomes)
 
 ## 3) Data Trust + Sync Confidence (must-have)
 
 - [x] Show “last saved locally” and “last synced to Google” separately in Settings
-- [ ] Add per-entity sync results summary card in dashboard
+- [x] Add per-entity sync results summary card in dashboard
 - [x] Add conflict-safe sync behavior before overwrite (local + sheet changed rows are skipped)
 - [x] Add downloadable sync logs for support and troubleshooting
 

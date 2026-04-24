@@ -19,6 +19,32 @@ function pct(val, target) {
   return Math.min(100, Math.round((val / target) * 100))
 }
 
+function timeAgo(iso) {
+  if (!iso) return 'never'
+  const ts = new Date(iso).getTime()
+  if (!Number.isFinite(ts)) return 'unknown'
+  const mins = Math.floor((Date.now() - ts) / 60000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours}h ago`
+  return `${Math.floor(hours / 24)}d ago`
+}
+
+function summarizeSync(run) {
+  const summary = run?.summary || {}
+  const merged = (summary.inbound || summary.outbound)
+    ? { ...(summary.inbound || {}), ...(summary.outbound || {}) }
+    : summary
+
+  const parts = []
+  if (Number.isFinite(Number(merged.updatedRows))) parts.push(`${merged.updatedRows} updated`)
+  if (Number.isFinite(Number(merged.imported))) parts.push(`${merged.imported} imported`)
+  if (Number.isFinite(Number(merged.skippedUnchanged))) parts.push(`${merged.skippedUnchanged} skipped`)
+  if (Number(merged.conflicts || 0) > 0) parts.push(`${merged.conflicts} conflicts`)
+  return parts.length ? parts.join(' • ') : 'No recent summary'
+}
+
 function StatCard({ label, value, target, color }) {
   const p = pct(value, target)
   return (
@@ -115,11 +141,23 @@ export default function Dashboard({ onNavigate, me }) {
           <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>
             Last success: {syncStatus.health.lastSuccessAt ? new Date(syncStatus.health.lastSuccessAt).toLocaleString() : 'Never'}
           </div>
+          <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>
+            Last local save: {syncStatus.freshness?.localLastSavedAt ? `${timeAgo(syncStatus.freshness.localLastSavedAt)}` : 'Never'}
+          </div>
+          <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>
+            Last Google sync: {syncStatus.freshness?.googleLastSyncedAt ? `${timeAgo(syncStatus.freshness.googleLastSyncedAt)}` : 'Never'}
+          </div>
           {syncStatus.health.lastError?.details && (
             <div style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 6 }}>
               Last issue: {syncStatus.health.lastError.details}
             </div>
           )}
+          <div style={{ marginTop: 10, fontSize: 12, color: 'var(--text-muted)' }}>
+            <div>Pipeline: {summarizeSync(syncStatus.entities?.pipeline)}</div>
+            <div>Networking: {summarizeSync(syncStatus.entities?.contacts)}</div>
+            <div>Interviews: {summarizeSync(syncStatus.entities?.interviews)}</div>
+            <div>Events: {summarizeSync(syncStatus.entities?.events)}</div>
+          </div>
           <div style={{ marginTop: 10 }}>
             <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('settings')}>
               Open sync settings →
