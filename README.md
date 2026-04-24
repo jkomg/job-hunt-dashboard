@@ -23,8 +23,8 @@ Use the app as a daily command center, not just a tracker.
 
 `Today Queue` is automatically ranked by these six priorities:
 
-1. Follow-Ups Due
-2. Interview Readiness
+1. Interview Readiness
+2. Follow-Ups Due
 3. Pipeline Momentum
 4. Networking Consistency
 5. Application Throughput
@@ -256,6 +256,7 @@ Requires optional `NOTION_*` vars in `.env`.
 
 - Additional scripts and usage notes: [scripts/README.md](./scripts/README.md)
 - Shareable one-page beginner guide: [docs/REMOTE_REBELLION_HANDOUT.md](./docs/REMOTE_REBELLION_HANDOUT.md)
+- Command center implementation roadmap: [docs/COMMAND_CENTER_ROADMAP.md](./docs/COMMAND_CENTER_ROADMAP.md)
 - Deployment helpers: `deploy.sh`, `setup-secrets.sh`, `scripts/setup-iap-lb.sh`, `scripts/setup-daily-sheets-sync.sh`
 
 ## License

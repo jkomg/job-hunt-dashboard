@@ -89,8 +89,8 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start-local-docker.ps1
 
 1. Open `Dashboard` and start with `Today Queue` (top item first).
 2. Work through urgent items in this order:
-   - Follow-Ups Due
    - Interview Readiness
+   - Follow-Ups Due
    - Pipeline Momentum
    - Networking Consistency
    - Application Throughput

@@ -36,8 +36,8 @@ const WEEKLY_TARGETS = {
 }
 
 const PRIORITY_FRAMEWORK = [
-  { id: 'follow_ups_due', label: '1) Follow-Ups Due', route: 'pipeline' },
-  { id: 'interview_readiness', label: '2) Interview Readiness', route: 'interviews' },
+  { id: 'interview_readiness', label: '1) Interview Readiness', route: 'interviews' },
+  { id: 'follow_ups_due', label: '2) Follow-Ups Due', route: 'pipeline' },
   { id: 'pipeline_momentum', label: '3) Pipeline Momentum', route: 'pipeline' },
   { id: 'networking_consistency', label: '4) Networking Consistency', route: 'contacts' },
   { id: 'application_throughput', label: '5) Application Throughput', route: 'pipeline' },
@@ -1730,7 +1730,7 @@ export async function getDashboardData() {
       reason: `Contact follow-up is due (${c['Next Follow-Up'] || 'today'}).`,
       actionLabel: 'Open Contacts',
       route: 'contacts',
-      priority: 1
+      priority: 2
     })),
     ...duePipelineFollowUps.map(p => ({
       id: `pipeline-followup-${p.id}`,
@@ -1743,7 +1743,7 @@ export async function getDashboardData() {
       reason: `Pipeline follow-up date is due (${p['Follow-Up Date']}).`,
       actionLabel: 'Open Pipeline',
       route: 'pipeline',
-      priority: 1
+      priority: 2
     }))
   ]
 
@@ -1759,7 +1759,7 @@ export async function getDashboardData() {
       reason: `Interview next action is due (${i['Next Action Date']}).`,
       actionLabel: 'Open Interviews',
       route: 'interviews',
-      priority: 2
+      priority: 1
     })),
     ...upcomingInterviews.map(i => ({
       id: `upcoming-interview-${i.id}`,
@@ -1772,7 +1772,7 @@ export async function getDashboardData() {
       reason: `Interview is coming up on ${i.Date}.`,
       actionLabel: 'Open Interviews',
       route: 'interviews',
-      priority: 2
+      priority: 1
     }))
   ]
 
