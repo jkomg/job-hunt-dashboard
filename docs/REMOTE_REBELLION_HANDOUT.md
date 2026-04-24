@@ -125,6 +125,7 @@ This is optional for team workflows.
 Notes:
 - Service-account email usually looks like `name@project-id.iam.gserviceaccount.com`.
 - If you skip sharing the sheet with this email, sync will fail.
+- Pipeline sync includes `App Date`, `Resume URL`, and `Cover Letter` updates.
 
 ### Manual `.env` setup (optional)
 

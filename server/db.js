@@ -116,6 +116,9 @@ async function ensureActionSchema() {
   if (!pipelineCols.has('next_action_date')) {
     await db.execute('ALTER TABLE pipeline_entries ADD COLUMN next_action_date TEXT')
   }
+  if (!pipelineCols.has('cover_letter')) {
+    await db.execute('ALTER TABLE pipeline_entries ADD COLUMN cover_letter TEXT')
+  }
 
   const contactCols = await tableColumns('contacts')
   if (!contactCols.has('next_action')) {
@@ -259,6 +262,7 @@ export async function initDb() {
         filed_for_unemployment INTEGER NOT NULL DEFAULT 0,
         outcome TEXT,
         resume_url TEXT,
+        cover_letter TEXT,
         work_location TEXT,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
@@ -426,6 +430,7 @@ function pipelineRowToRecord(row) {
     'Filed for Unemployment': Number(row.filed_for_unemployment || 0) === 1,
     Outcome: row.outcome || '',
     'Resume URL': row.resume_url || '',
+    'Cover Letter': row.cover_letter || '',
     'Work Location': row.work_location || '',
     'Next Action': row.next_action || '',
     'Next Action Date': row.next_action_date || ''
@@ -1042,8 +1047,8 @@ export async function createPipelineEntry(data = {}) {
         id, company, role, stage, priority, sector, job_source, job_url, salary_range,
         date_applied, follow_up_date, contact_name, contact_title, outreach_method, resume_version,
         company_address, company_phone, notes, research_notes, filed_for_unemployment, outcome,
-        resume_url, work_location, next_action, next_action_date, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        resume_url, cover_letter, work_location, next_action, next_action_date, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     args: [
       id,
@@ -1068,6 +1073,7 @@ export async function createPipelineEntry(data = {}) {
       data['Filed for Unemployment'] ? 1 : 0,
       data.Outcome || null,
       data['Resume URL'] || null,
+      data['Cover Letter'] || null,
       data['Work Location'] || null,
       data['Next Action'] || null,
       data['Next Action Date'] || null,
@@ -1111,6 +1117,7 @@ export async function updatePipelineEntry(id, data = {}) {
   setIfPresent('filed_for_unemployment', data['Filed for Unemployment'] === undefined ? undefined : (data['Filed for Unemployment'] ? 1 : 0))
   setIfPresent('outcome', data.Outcome === undefined ? undefined : (data.Outcome || null))
   setIfPresent('resume_url', data['Resume URL'] === undefined ? undefined : (data['Resume URL'] || null))
+  setIfPresent('cover_letter', data['Cover Letter'] === undefined ? undefined : (data['Cover Letter'] || null))
   setIfPresent('work_location', data['Work Location'] === undefined ? undefined : (data['Work Location'] || null))
   setIfPresent('next_action', data['Next Action'] === undefined ? undefined : (data['Next Action'] || null))
   setIfPresent('next_action_date', data['Next Action Date'] === undefined ? undefined : (data['Next Action Date'] || null))

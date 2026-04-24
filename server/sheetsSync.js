@@ -341,7 +341,9 @@ function pickInboundFields(tabName, rowObj) {
     'Job URL': rowObj['link to posting'] || rowObj['job url'] || rowObj.url || rowObj['application link'] || '',
     'Job Source': rowObj['job source'] || source || '',
     'Date Applied': appliedDate || dateAdded || null,
-    'Follow-Up Date': followUpDate || null
+    'Follow-Up Date': followUpDate || null,
+    'Resume URL': rowObj['resume url'] || rowObj.resume || rowObj['resume link'] || '',
+    'Cover Letter': rowObj['cover letter'] || rowObj['cover letter url'] || rowObj['cover letter link'] || ''
   }
 
   const foundBy = rowObj['found by'] || ''
@@ -566,6 +568,8 @@ function patchOutboundValues(headers, rowValues, pipelineItem) {
   patch(['research notes'], pipelineItem['Research Notes'] || '')
   patch(['app date', 'date applied', 'applied date'], pipelineItem['Date Applied'] || '')
   patch(['outcome'], pipelineItem.Outcome || '')
+  patch(['resume url', 'resume', 'resume link'], pipelineItem['Resume URL'] || '')
+  patch(['cover letter', 'cover letter url', 'cover letter link'], pipelineItem['Cover Letter'] || '')
 
   return out
 }
@@ -573,7 +577,9 @@ function patchOutboundValues(headers, rowValues, pipelineItem) {
 async function readTabRows(sheets, spreadsheetId, tabName) {
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId,
-    range: `${tabName}!A:ZZ`
+    range: `${tabName}!A:ZZ`,
+    valueRenderOption: 'FORMULA',
+    dateTimeRenderOption: 'FORMATTED_STRING'
   })
 
   const values = res.data.values || []
@@ -689,6 +695,8 @@ async function runOutboundSync({ sheets, spreadsheetId, tabs }) {
       const rowIdx = link.row_number - 2
       const currentRow = rows[rowIdx] || []
       const patched = patchOutboundValues(headers, currentRow, item)
+      if (patched.length < 15) patched.length = 15
+      patched[14] = `=TODAY()-I${link.row_number}`
 
       const outboundFingerprint = {
         stage: item.Stage || null,
@@ -696,7 +704,9 @@ async function runOutboundSync({ sheets, spreadsheetId, tabs }) {
         notes: item.Notes || null,
         researchNotes: item['Research Notes'] || null,
         dateApplied: item['Date Applied'] || null,
-        outcome: item.Outcome || null
+        outcome: item.Outcome || null,
+        resumeUrl: item['Resume URL'] || null,
+        coverLetter: item['Cover Letter'] || null
       }
       const outboundHash = hashObject(outboundFingerprint)
 

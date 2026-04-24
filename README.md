@@ -140,6 +140,11 @@ docker compose restart
 
 3. Run sync manually from app/API (`POST /api/sheets/sync`) or configure daily scheduler in cloud mode.
 
+Pipeline sync notes (Remote Rebellion template):
+- `Date Applied` in app writes to sheet `App Date`.
+- `Resume URL` and `Cover Letter` fields on pipeline cards sync to matching sheet columns.
+- Column `O` formula is maintained as `=TODAY()-I{row}` during pipeline outbound sync.
+
 ## Sync Troubleshooting (In-App)
 
 Use `Settings` in the app sidebar:
