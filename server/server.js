@@ -20,7 +20,8 @@ import {
   getTemplates, createTemplate, updateTemplate,
   getWatchlist, createWatchlistEntry, updateWatchlistEntry,
   getDailyLogs, getTodayLog, createDailyLog, updateDailyLog,
-  getPipeline, updatePipelineEntry, updatePipelineStage, updatePipelineFollowUp, createPipelineEntry
+  getPipeline, updatePipelineEntry, updatePipelineStage, updatePipelineFollowUp, createPipelineEntry,
+  ensureInterviewForPipelineStage
 } from './db.js'
 import { runSheetsSync, testSheetsConnection, getSheetsSyncStatus, normalizeSheetsSyncError } from './sheetsSync.js'
 
@@ -413,8 +414,16 @@ app.get('/api/pipeline', requireAuth, async (req, res) => {
 
 app.patch('/api/pipeline/:id/stage', requireAuth, async (req, res) => {
   try {
-    await updatePipelineStage(req.params.id, req.body.stage)
-    res.json({ ok: true })
+    const nextStage = String(req.body.stage || '')
+    await updatePipelineStage(req.params.id, nextStage)
+
+    let interviewAutoCreated = false
+    if (nextStage) {
+      const result = await ensureInterviewForPipelineStage(req.params.id, nextStage)
+      interviewAutoCreated = !!result?.created
+    }
+
+    res.json({ ok: true, interviewAutoCreated })
   } catch (e) {
     res.status(500).json({ error: e.message })
   }
