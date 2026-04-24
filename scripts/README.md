@@ -66,6 +66,24 @@ Local onboarding helper for new users/contributors.
 ./scripts/bootstrap-local.sh
 ```
 
+## smoke-test-local.mjs
+
+End-to-end local smoke test for reliability checks.
+
+### What it validates
+
+- app boot with a fresh local SQLite DB
+- local login flow
+- forced password change flow
+- save/read daily check-in
+- Sheets sync endpoint path (success or expected structured config error)
+
+### Running
+
+```bash
+npm run smoke:test
+```
+
 ## import-legacy-jobs.js (legacy)
 
 Bulk-imports a legacy Notion page of job applications into the pipeline database.
