@@ -17,7 +17,7 @@ Work order:
 - [x] Automated local backup export (JSON)
 - [x] Restore/import flow
 - [x] Add optional scheduled backup export job for cloud deploys
-- [ ] Add database file export option (`.db`) in admin tools
+- [x] Add database file export option (`.db`) in admin tools
 - [ ] Add end-to-end smoke tests: install, login, save check-in, sync
 - [x] Add versioned DB migration tracking table and migration runner
 

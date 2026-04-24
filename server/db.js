@@ -2,6 +2,8 @@ import { createClient } from '@libsql/client'
 import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
 import { existsSync, mkdirSync } from 'fs'
+import path from 'path'
+import { fileURLToPath } from 'url'
 
 if (!existsSync('./data')) mkdirSync('./data')
 
@@ -922,6 +924,42 @@ export async function exportBackupSnapshot() {
     databaseUrl: DATABASE_URL,
     tables
   }
+}
+
+export function getLocalDatabaseFilePath() {
+  const rawUrl = String(DATABASE_URL || '').trim()
+  if (!rawUrl.startsWith('file:')) return null
+
+  if (rawUrl.startsWith('file://')) {
+    try {
+      return fileURLToPath(rawUrl)
+    } catch {
+      return null
+    }
+  }
+
+  const filePart = rawUrl.slice('file:'.length)
+  if (!filePart) return null
+  return path.resolve(process.cwd(), filePart)
+}
+
+export async function createLocalDatabaseSnapshot(snapshotPath) {
+  const localDbPath = getLocalDatabaseFilePath()
+  if (!localDbPath) {
+    throw new Error('Raw .db export is only available in local SQLite mode.')
+  }
+  if (!existsSync(localDbPath)) {
+    throw new Error('Local database file not found.')
+  }
+
+  const outPath = path.resolve(String(snapshotPath || '').trim())
+  if (!outPath) {
+    throw new Error('Snapshot path is required')
+  }
+
+  const escapedPath = outPath.replace(/'/g, "''")
+  await db.execute(`VACUUM INTO '${escapedPath}'`)
+  return outPath
 }
 
 export async function restoreBackupSnapshot(snapshot) {

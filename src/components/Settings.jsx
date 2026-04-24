@@ -97,6 +97,7 @@ export default function Settings({ me, onProfileUpdated }) {
   const [syncing, setSyncing] = useState(false)
   const [reconcilingInterviews, setReconcilingInterviews] = useState(false)
   const [exportingBackup, setExportingBackup] = useState(false)
+  const [exportingDbFile, setExportingDbFile] = useState(false)
   const [restoringBackup, setRestoringBackup] = useState(false)
   const [gmailStatus, setGmailStatus] = useState(null)
   const [gmailConnecting, setGmailConnecting] = useState(false)
@@ -361,6 +362,39 @@ export default function Settings({ me, onProfileUpdated }) {
     }
   }
 
+  async function exportDbFile() {
+    setExportingDbFile(true)
+    setError(null)
+    setSuccess('')
+    try {
+      const res = await fetch('/api/admin/backup/export-db', { credentials: 'include' })
+      if (!res.ok) {
+        let payload = null
+        try {
+          payload = await res.json()
+        } catch {
+          payload = null
+        }
+        throw new Error(payload?.error || `Could not export .db file (${res.status})`)
+      }
+
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `job-hunt-backup-${new Date().toISOString().slice(0, 10)}.db`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+      setSuccess('Database file exported.')
+    } catch (e) {
+      setError({ error: e.message || 'Could not export database file' })
+    } finally {
+      setExportingDbFile(false)
+    }
+  }
+
   function chooseBackupFile() {
     backupFileInputRef.current?.click()
   }
@@ -594,6 +628,9 @@ export default function Settings({ me, onProfileUpdated }) {
           <button className="btn btn-primary" onClick={exportBackup} disabled={exportingBackup || !me?.isAdmin}>
             {exportingBackup ? 'Exporting…' : 'Export Backup'}
           </button>
+          <button className="btn btn-ghost" onClick={exportDbFile} disabled={exportingDbFile || !me?.isAdmin}>
+            {exportingDbFile ? 'Exporting…' : 'Export DB File (.db)'}
+          </button>
           <button className="btn btn-ghost" onClick={chooseBackupFile} disabled={restoringBackup || !me?.isAdmin}>
             {restoringBackup ? 'Restoring…' : 'Restore Backup'}
           </button>
@@ -610,6 +647,9 @@ export default function Settings({ me, onProfileUpdated }) {
             Backup and restore are available to admin users only.
           </div>
         )}
+        <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>
+          `.db` export works only in local SQLite mode (for example `DATABASE_URL=file:./data/app.db`).
+        </div>
       </div>
 
       <div className="card" style={{ marginTop: 16 }}>
