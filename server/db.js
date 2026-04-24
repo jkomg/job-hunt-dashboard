@@ -943,6 +943,25 @@ export function getLocalDatabaseFilePath() {
   return path.resolve(process.cwd(), filePart)
 }
 
+export async function createLocalDatabaseSnapshot(snapshotPath) {
+  const localDbPath = getLocalDatabaseFilePath()
+  if (!localDbPath) {
+    throw new Error('Raw .db export is only available in local SQLite mode.')
+  }
+  if (!existsSync(localDbPath)) {
+    throw new Error('Local database file not found.')
+  }
+
+  const outPath = path.resolve(String(snapshotPath || '').trim())
+  if (!outPath) {
+    throw new Error('Snapshot path is required')
+  }
+
+  const escapedPath = outPath.replace(/'/g, "''")
+  await db.execute(`VACUUM INTO '${escapedPath}'`)
+  return outPath
+}
+
 export async function restoreBackupSnapshot(snapshot) {
   const payload = snapshot && typeof snapshot === 'object' ? snapshot : null
   if (!payload || typeof payload !== 'object') {
