@@ -112,7 +112,7 @@ export function getGmailIntegrationConfig() {
   }
 }
 
-export function buildGmailAuthUrl() {
+export function buildGmailAuthUrl(state = '') {
   const config = getGmailIntegrationConfig()
   if (!config.configured) {
     throw new Error('Gmail OAuth is not configured. Set GMAIL_OAUTH_CLIENT_ID, GMAIL_OAUTH_CLIENT_SECRET, and GMAIL_OAUTH_REDIRECT_URI.')
@@ -122,7 +122,8 @@ export function buildGmailAuthUrl() {
     access_type: 'offline',
     prompt: 'consent',
     include_granted_scopes: true,
-    scope: ['https://www.googleapis.com/auth/gmail.readonly']
+    scope: ['https://www.googleapis.com/auth/gmail.readonly'],
+    state: String(state || '')
   })
   return { url }
 }

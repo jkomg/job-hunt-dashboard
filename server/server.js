@@ -54,7 +54,9 @@ const APP_SETTINGS_KEYS = {
 const GMAIL_SETTINGS_KEYS = {
   tokens: 'gmail.oauth.tokens',
   email: 'gmail.oauth.email',
-  connectedAt: 'gmail.oauth.connected_at'
+  connectedAt: 'gmail.oauth.connected_at',
+  oauthState: 'gmail.oauth.state',
+  oauthStateCreatedAt: 'gmail.oauth.state_created_at'
 }
 const RATE_LIMIT_WINDOW_MS = 60 * 1000
 const API_RATE_LIMIT = Number(process.env.API_RATE_LIMIT || 400)
@@ -190,6 +192,28 @@ async function clearGmailConnection() {
   await setAppSetting(GMAIL_SETTINGS_KEYS.tokens, '')
   await setAppSetting(GMAIL_SETTINGS_KEYS.email, '')
   await setAppSetting(GMAIL_SETTINGS_KEYS.connectedAt, '')
+}
+
+async function saveGmailOauthState(state) {
+  await setAppSetting(GMAIL_SETTINGS_KEYS.oauthState, String(state || ''))
+  await setAppSetting(GMAIL_SETTINGS_KEYS.oauthStateCreatedAt, String(Date.now()))
+}
+
+async function consumeAndValidateGmailOauthState(state) {
+  const [expectedState, createdAtRaw] = await Promise.all([
+    getAppSetting(GMAIL_SETTINGS_KEYS.oauthState),
+    getAppSetting(GMAIL_SETTINGS_KEYS.oauthStateCreatedAt)
+  ])
+  await Promise.all([
+    setAppSetting(GMAIL_SETTINGS_KEYS.oauthState, ''),
+    setAppSetting(GMAIL_SETTINGS_KEYS.oauthStateCreatedAt, '')
+  ])
+
+  if (!expectedState || !state || state !== expectedState) return false
+
+  const createdAt = Number(createdAtRaw || 0)
+  if (!Number.isFinite(createdAt) || createdAt <= 0) return false
+  return (Date.now() - createdAt) <= (10 * 60 * 1000)
 }
 
 function formatSyncRun(row) {
@@ -771,8 +795,7 @@ app.post('/api/sheets/sync', requireAuth, async (req, res) => {
   try {
     const overrides = await getSheetsConfigOverrides()
     const result = await runSheetsSync(overrides)
-    const interviewBackfill = await backfillInterviewsFromPipeline()
-    res.json({ ...result, interviewBackfill })
+    res.json(result)
   } catch (e) {
     const normalized = e?.normalized || normalizeSheetsSyncError(e)
     res.status(normalized.status || 500).json({
@@ -796,8 +819,7 @@ app.post('/api/internal/sheets/sync', async (req, res) => {
   try {
     const overrides = await getSheetsConfigOverrides()
     const result = await runSheetsSync(overrides)
-    const interviewBackfill = await backfillInterviewsFromPipeline()
-    res.json({ ...result, interviewBackfill })
+    res.json(result)
   } catch (e) {
     console.error('internal.sheets.sync failed', e)
     const normalized = e?.normalized || normalizeSheetsSyncError(e)
@@ -871,7 +893,9 @@ app.get('/api/gmail/status', requireAuth, async (_req, res) => {
 
 app.post('/api/gmail/auth-url', requireAuth, async (_req, res) => {
   try {
-    const { url } = buildGmailAuthUrl()
+    const state = crypto.randomBytes(24).toString('hex')
+    await saveGmailOauthState(state)
+    const { url } = buildGmailAuthUrl(state)
     res.json({ ok: true, url })
   } catch (e) {
     res.status(400).json({ error: e.message })
@@ -881,7 +905,10 @@ app.post('/api/gmail/auth-url', requireAuth, async (_req, res) => {
 app.get('/api/gmail/oauth/callback', requireAuth, async (req, res) => {
   try {
     const code = String(req.query?.code || '').trim()
+    const state = String(req.query?.state || '').trim()
     if (!code) return res.status(400).send('Missing OAuth code')
+    const stateValid = await consumeAndValidateGmailOauthState(state)
+    if (!stateValid) return res.status(400).send('Invalid OAuth state. Start Gmail connect again from Settings.')
 
     const { tokens, email } = await exchangeGmailCode(code)
     await setGmailConnection({ tokens, email })
