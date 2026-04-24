@@ -114,6 +114,7 @@ Use `Settings` in the app sidebar:
 - `Save Settings` to update sheet ID/tab mappings.
 - `Test Connection` to validate credentials, sharing, and tab names.
 - `Run Sync Now` to force a sync and see immediate result.
+- `Repair Interviews from Pipeline` to backfill missing interview entries from cards already in interview stages.
 
 Common errors and fixes:
 - `MISSING_SHEET_ID`: add Sheet URL/ID in Settings and save.
@@ -123,6 +124,37 @@ Common errors and fixes:
 - `TAB_NOT_FOUND`: fix tab names in Settings to match exact sheet tab titles.
 - `GOOGLE_API_DISABLED`: enable Google Sheets API in Google Cloud project.
 - `GOOGLE_TEMPORARY`: retry later (rate-limit/outage/timeout).
+
+## Optional: Import Events from Gmail
+
+This can pull interview/calendar invite emails into the `Events` section.
+
+### Configure once
+
+1. In Google Cloud Console, open `APIs & Services` -> `Credentials`.
+2. Create OAuth Client ID as `Web application`.
+3. Add authorized redirect URI:
+   - local Docker: `http://localhost:8080/api/gmail/oauth/callback`
+   - cloud domain: `https://hunt.jkomg.us/api/gmail/oauth/callback`
+4. Add to `.env`:
+
+```env
+GMAIL_OAUTH_CLIENT_ID=...
+GMAIL_OAUTH_CLIENT_SECRET=...
+GMAIL_OAUTH_REDIRECT_URI=...
+```
+
+5. Restart app (`docker compose restart` or redeploy Cloud Run).
+
+### Use it
+
+In `Settings`:
+- `Connect Gmail` (read-only scope)
+- `Import Events from Gmail`
+
+Notes:
+- Current importer prioritizes `.ics`/calendar invite emails for accuracy.
+- Imports are deduped, so reruns do not create duplicate events.
 
 ## Screenshot Plan
 

@@ -12,18 +12,19 @@ import {
   initDb,
   getUserByUsername, getUserByEmail, getUserById,
   createSession, getSession, deleteSession, updatePassword, getRecentSheetSyncRuns,
-  getAppSettings, setAppSetting, exportBackupSnapshot, restoreBackupSnapshot,
+  getAppSetting, getAppSettings, setAppSetting, exportBackupSnapshot, restoreBackupSnapshot,
   getDashboardData,
   getContacts, markContacted, updateContactStatus, createContact, updateContact,
   getInterviews, createInterview, updateInterview,
-  getEvents, createEvent, updateEvent,
+  getEvents, createEvent, updateEvent, getEventBySourceKey,
   getTemplates, createTemplate, updateTemplate,
   getWatchlist, createWatchlistEntry, updateWatchlistEntry,
   getDailyLogs, getTodayLog, createDailyLog, updateDailyLog,
   getPipeline, updatePipelineEntry, updatePipelineStage, updatePipelineFollowUp, createPipelineEntry,
-  ensureInterviewForPipelineStage
+  ensureInterviewForPipelineStage, backfillInterviewsFromPipeline
 } from './db.js'
 import { runSheetsSync, testSheetsConnection, getSheetsSyncStatus, normalizeSheetsSyncError } from './sheetsSync.js'
+import { getGmailIntegrationConfig, buildGmailAuthUrl, exchangeGmailCode, importEventsFromGmail } from './gmailEvents.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -49,6 +50,11 @@ const SHEET_SETTINGS_KEYS = {
 const APP_SETTINGS_KEYS = {
   onboardingComplete: 'app.onboarding.completed',
   displayName: 'app.profile.display_name'
+}
+const GMAIL_SETTINGS_KEYS = {
+  tokens: 'gmail.oauth.tokens',
+  email: 'gmail.oauth.email',
+  connectedAt: 'gmail.oauth.connected_at'
 }
 const RATE_LIMIT_WINDOW_MS = 60 * 1000
 const API_RATE_LIMIT = Number(process.env.API_RATE_LIMIT || 400)
@@ -79,6 +85,15 @@ function getClientIp(req) {
   const xfwd = String(req.headers['x-forwarded-for'] || '').trim()
   if (xfwd) return xfwd.split(',')[0].trim()
   return req.ip || req.connection?.remoteAddress || 'unknown'
+}
+
+function parseJson(value, fallback = null) {
+  if (!value) return fallback
+  try {
+    return JSON.parse(value)
+  } catch {
+    return fallback
+  }
 }
 
 function checkRateLimit(req, { scope, limit, windowMs }) {
@@ -150,6 +165,31 @@ async function getSheetsConfigOverrides() {
   }
 
   return overrides
+}
+
+async function getGmailConnection() {
+  const [rawTokens, email, connectedAt] = await Promise.all([
+    getAppSetting(GMAIL_SETTINGS_KEYS.tokens),
+    getAppSetting(GMAIL_SETTINGS_KEYS.email),
+    getAppSetting(GMAIL_SETTINGS_KEYS.connectedAt)
+  ])
+  return {
+    tokens: parseJson(rawTokens, null),
+    email: email || null,
+    connectedAt: connectedAt || null
+  }
+}
+
+async function setGmailConnection({ tokens, email }) {
+  await setAppSetting(GMAIL_SETTINGS_KEYS.tokens, JSON.stringify(tokens || {}))
+  await setAppSetting(GMAIL_SETTINGS_KEYS.email, email || '')
+  await setAppSetting(GMAIL_SETTINGS_KEYS.connectedAt, new Date().toISOString())
+}
+
+async function clearGmailConnection() {
+  await setAppSetting(GMAIL_SETTINGS_KEYS.tokens, '')
+  await setAppSetting(GMAIL_SETTINGS_KEYS.email, '')
+  await setAppSetting(GMAIL_SETTINGS_KEYS.connectedAt, '')
 }
 
 function formatSyncRun(row) {
@@ -441,7 +481,12 @@ app.patch('/api/pipeline/:id/followup', requireAuth, async (req, res) => {
 app.patch('/api/pipeline/:id', requireAuth, async (req, res) => {
   try {
     await updatePipelineEntry(req.params.id, req.body)
-    res.json({ ok: true })
+    let interviewAutoCreated = false
+    if (req.body?.Stage) {
+      const result = await ensureInterviewForPipelineStage(req.params.id, req.body.Stage)
+      interviewAutoCreated = !!result?.created
+    }
+    res.json({ ok: true, interviewAutoCreated })
   } catch (e) {
     res.status(500).json({ error: e.message })
   }
@@ -450,7 +495,12 @@ app.patch('/api/pipeline/:id', requireAuth, async (req, res) => {
 app.post('/api/pipeline', requireAuth, async (req, res) => {
   try {
     const page = await createPipelineEntry(req.body)
-    res.json({ ok: true, id: page.id })
+    let interviewAutoCreated = false
+    if (req.body?.Stage) {
+      const result = await ensureInterviewForPipelineStage(page.id, req.body.Stage)
+      interviewAutoCreated = !!result?.created
+    }
+    res.json({ ok: true, id: page.id, interviewAutoCreated })
   } catch (e) {
     res.status(500).json({ error: e.message })
   }
@@ -526,6 +576,16 @@ app.patch('/api/interviews/:id', requireAuth, async (req, res) => {
     await updateInterview(req.params.id, req.body)
     res.json({ ok: true })
   } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+app.post('/api/interviews/reconcile', requireAuth, async (_req, res) => {
+  try {
+    const result = await backfillInterviewsFromPipeline()
+    res.json({ ok: true, ...result })
+  } catch (e) {
+    console.error('interviews.reconcile failed', e)
     res.status(500).json({ error: e.message })
   }
 })
@@ -702,7 +762,8 @@ app.post('/api/sheets/sync', requireAuth, async (req, res) => {
   try {
     const overrides = await getSheetsConfigOverrides()
     const result = await runSheetsSync(overrides)
-    res.json(result)
+    const interviewBackfill = await backfillInterviewsFromPipeline()
+    res.json({ ...result, interviewBackfill })
   } catch (e) {
     const normalized = e?.normalized || normalizeSheetsSyncError(e)
     res.status(normalized.status || 500).json({
@@ -726,7 +787,8 @@ app.post('/api/internal/sheets/sync', async (req, res) => {
   try {
     const overrides = await getSheetsConfigOverrides()
     const result = await runSheetsSync(overrides)
-    res.json(result)
+    const interviewBackfill = await backfillInterviewsFromPipeline()
+    res.json({ ...result, interviewBackfill })
   } catch (e) {
     console.error('internal.sheets.sync failed', e)
     const normalized = e?.normalized || normalizeSheetsSyncError(e)
@@ -776,6 +838,99 @@ app.get('/api/sheets/status', requireAuth, async (_req, res) => {
   } catch (e) {
     console.error('sheets.status failed', e)
     res.status(500).json({ error: 'Could not load sync status' })
+  }
+})
+
+// ─── Gmail Event Import ───────────────────────────────────────────────────────
+
+app.get('/api/gmail/status', requireAuth, async (_req, res) => {
+  try {
+    const config = getGmailIntegrationConfig()
+    const connection = await getGmailConnection()
+    res.json({
+      ok: true,
+      configured: config.configured,
+      connected: !!connection.tokens,
+      email: connection.email,
+      connectedAt: connection.connectedAt,
+      query: config.query
+    })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+app.post('/api/gmail/auth-url', requireAuth, async (_req, res) => {
+  try {
+    const { url } = buildGmailAuthUrl()
+    res.json({ ok: true, url })
+  } catch (e) {
+    res.status(400).json({ error: e.message })
+  }
+})
+
+app.get('/api/gmail/oauth/callback', requireAuth, async (req, res) => {
+  try {
+    const code = String(req.query?.code || '').trim()
+    if (!code) return res.status(400).send('Missing OAuth code')
+
+    const { tokens, email } = await exchangeGmailCode(code)
+    await setGmailConnection({ tokens, email })
+    return res.redirect('/?settings=gmail-connected')
+  } catch (e) {
+    console.error('gmail.oauth.callback failed', e)
+    return res.status(500).send(`Gmail connection failed: ${e.message}`)
+  }
+})
+
+app.post('/api/gmail/disconnect', requireAuth, async (_req, res) => {
+  try {
+    await clearGmailConnection()
+    res.json({ ok: true })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+app.post('/api/gmail/import-events', requireAuth, async (req, res) => {
+  try {
+    const connection = await getGmailConnection()
+    if (!connection.tokens) {
+      return res.status(400).json({ error: 'Gmail is not connected yet.' })
+    }
+
+    const maxMessages = Number(req.body?.maxMessages || 40)
+    const imported = await importEventsFromGmail({ tokens: connection.tokens, maxMessages })
+    await setGmailConnection({ tokens: imported.tokens, email: connection.email })
+
+    let created = 0
+    let deduped = 0
+    for (const event of imported.events) {
+      const existing = await getEventBySourceKey(event.sourceKey)
+      if (existing) {
+        deduped += 1
+        continue
+      }
+      await createEvent({
+        Name: event.name,
+        Date: event.date,
+        Status: 'Planned',
+        'Registration Link': event.registrationLink,
+        Notes: event.notes,
+        'Source Key': event.sourceKey
+      })
+      created += 1
+    }
+
+    res.json({
+      ok: true,
+      detected: imported.events.length,
+      created,
+      deduped
+    })
+  } catch (e) {
+    console.error('gmail.import-events failed', e)
+    res.status(500).json({ error: e.message })
   }
 })
 

@@ -145,6 +145,8 @@ docker compose up -d
   - update sheet ID/tabs
   - run `Test Connection`
   - run `Run Sync Now`
+  - run `Repair Interviews from Pipeline` if interview cards are missing from Interview Tracker
+  - optionally connect Gmail and run `Import Events from Gmail`
   - export and restore backups (admin users)
 
 ## Screenshot Placeholders

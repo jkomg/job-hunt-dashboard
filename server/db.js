@@ -69,6 +69,15 @@ async function ensureInterviewSchema() {
   await db.execute('CREATE UNIQUE INDEX IF NOT EXISTS interviews_pipeline_entry_unique_idx ON interviews(pipeline_entry_id) WHERE pipeline_entry_id IS NOT NULL')
 }
 
+async function ensureEventSchema() {
+  const res = await db.execute('PRAGMA table_info(events)')
+  const columns = new Set((res.rows || []).map(r => String(r.name || '').toLowerCase()))
+  if (!columns.has('source_key')) {
+    await db.execute('ALTER TABLE events ADD COLUMN source_key TEXT')
+  }
+  await db.execute('CREATE UNIQUE INDEX IF NOT EXISTS events_source_key_unique_idx ON events(source_key) WHERE source_key IS NOT NULL')
+}
+
 function toUser(row) {
   if (!row) return null
   return {
@@ -281,6 +290,7 @@ export async function initDb() {
 
   await ensureUserSchema()
   await ensureInterviewSchema()
+  await ensureEventSchema()
 
   const seedUsername = String(process.env.DEFAULT_USERNAME || 'jason').trim().toLowerCase() || 'jason'
   const userCountRes = await db.execute('SELECT COUNT(*) AS count FROM users')
@@ -410,7 +420,8 @@ function eventRowToRecord(row) {
     Price: row.price || '',
     Status: row.status || '',
     'Registration Link': row.registration_link || '',
-    Notes: row.notes || ''
+    Notes: row.notes || '',
+    'Source Key': row.source_key || ''
   }
 }
 
@@ -1106,6 +1117,37 @@ export async function ensureInterviewForPipelineStage(pipelineId, stageOverride 
   return { created: true, interviewId: id }
 }
 
+export async function backfillInterviewsFromPipeline() {
+  const pipeline = await getPipeline()
+  let created = 0
+  let alreadyExists = 0
+  let skipped = 0
+
+  for (const item of pipeline) {
+    if (!INTERVIEW_TRIGGER_STAGES.has(item.Stage)) {
+      skipped += 1
+      continue
+    }
+    const result = await ensureInterviewForPipelineStage(item.id, item.Stage)
+    if (result?.created) {
+      created += 1
+      continue
+    }
+    if (result?.reason === 'already_exists') {
+      alreadyExists += 1
+      continue
+    }
+    skipped += 1
+  }
+
+  return {
+    scanned: pipeline.length,
+    created,
+    alreadyExists,
+    skipped
+  }
+}
+
 export async function updatePipelineFollowUp(id, date) {
   await db.execute({
     sql: 'UPDATE pipeline_entries SET follow_up_date = ?, updated_at = ? WHERE id = ?',
@@ -1331,8 +1373,8 @@ export async function createEvent(data = {}) {
   await db.execute({
     sql: `
       INSERT INTO events (
-        id, name, date, price, status, registration_link, notes, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        id, name, date, price, status, registration_link, notes, source_key, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     args: [
       id,
@@ -1342,11 +1384,21 @@ export async function createEvent(data = {}) {
       data.Status || 'Interested',
       data['Registration Link'] || null,
       data.Notes || null,
+      data['Source Key'] || null,
       ts,
       ts
     ]
   })
   return { id }
+}
+
+export async function getEventBySourceKey(sourceKey) {
+  if (!sourceKey) return null
+  const res = await db.execute({
+    sql: 'SELECT * FROM events WHERE source_key = ? LIMIT 1',
+    args: [String(sourceKey)]
+  })
+  return eventRowToRecord(firstRow(res))
 }
 
 export async function updateEvent(id, data = {}) {
