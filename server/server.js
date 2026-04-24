@@ -11,7 +11,7 @@ import { fileURLToPath } from 'url'
 import {
   initDb,
   getUserByUsername, getUserByEmail, getUserById,
-  createSession, getSession, deleteSession, updatePassword, getRecentSheetSyncRuns, getLocalDataLastUpdatedAt,
+  createSession, getSession, deleteSession, updatePassword, updateUsername, getRecentSheetSyncRuns, getLocalDataLastUpdatedAt,
   getAppSetting, getAppSettings, setAppSetting, exportBackupSnapshot, restoreBackupSnapshot,
   getDashboardData,
   getContacts, markContacted, updateContactStatus, createContact, updateContact,
@@ -395,9 +395,11 @@ app.post('/api/logout', async (req, res) => {
 app.get('/api/me', requireAuth, async (req, res) => {
   try {
     const onboarding = await getOnboardingStatus()
+    const user = await getUserById(req.userId)
     res.json({
       ok: true,
       authMode: req.authMode,
+      username: user?.username || null,
       email: req.userEmail || null,
       isAdmin: !!req.isAdmin,
       mustChangePassword: !!req.mustChangePassword,
@@ -429,14 +431,27 @@ app.get('/api/setup/status', requireAuth, async (_req, res) => {
 app.post('/api/setup/complete', requireAuth, async (req, res) => {
   try {
     const displayName = String(req.body?.displayName || '').trim()
+    const nextUsernameRaw = req.body?.username
+    const nextUsername = nextUsernameRaw == null ? '' : String(nextUsernameRaw).trim().toLowerCase()
     if (!displayName) {
       return res.status(400).json({ error: 'Display name is required' })
     }
+    if (nextUsernameRaw != null) {
+      if (!nextUsername) return res.status(400).json({ error: 'Username is required' })
+      if (!/^[a-z0-9._-]{3,32}$/.test(nextUsername)) {
+        return res.status(400).json({ error: 'Username must be 3-32 chars: letters, numbers, dot, dash, underscore' })
+      }
+      await updateUsername(req.userId, nextUsername)
+    }
     await setAppSetting(APP_SETTINGS_KEYS.displayName, displayName)
     await setAppSetting(APP_SETTINGS_KEYS.onboardingComplete, 'true')
-    res.json({ ok: true, onboardingComplete: true, displayName })
+    const updatedUser = await getUserById(req.userId)
+    res.json({ ok: true, onboardingComplete: true, displayName, username: updatedUser?.username || null })
   } catch (e) {
     console.error('setup.complete failed', e)
+    if (String(e?.message || '').includes('UNIQUE constraint failed')) {
+      return res.status(409).json({ error: 'That username is already taken' })
+    }
     res.status(500).json({ error: 'Could not complete setup' })
   }
 })

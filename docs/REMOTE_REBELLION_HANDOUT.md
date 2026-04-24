@@ -74,7 +74,10 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start-local-docker.ps1
 ## Open the App
 
 - Go to: `http://localhost:8080`
-- First login runs a quick setup wizard (choose display name)
+- First login runs a quick setup wizard:
+  - choose display name
+  - set username for local sign-in
+  - optionally connect/test Google Sheets during setup
 - Sign in:
   - username: the one you chose in setup (default `jason`)
   - password: `jobhunt2026`
