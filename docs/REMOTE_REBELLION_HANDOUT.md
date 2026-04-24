@@ -29,7 +29,9 @@ cd job-hunt-dashboard
 What this does:
 - creates a `Projects` folder if needed
 - downloads the app
-- starts guided setup (username + optional Google Sheet link)
+- starts guided setup:
+  - choose username
+  - choose install mode (`No Google sync` or `With Google sync`)
 - starts the app in Docker
 
 If you don't have `git` installed, use the ZIP install method below.
@@ -48,7 +50,9 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start-local-docker.ps1
 What this does:
 - creates a `Projects` folder if needed
 - downloads the app
-- starts guided setup (username + optional Google Sheet link)
+- starts guided setup:
+  - choose username
+  - choose install mode (`No Google sync` or `With Google sync`)
 - starts the app in Docker
 
 If you don't have `git` installed, use the ZIP install method below.
@@ -156,6 +160,21 @@ docker compose down
 docker compose up -d
 ```
 
+## Optional Desktop Launchers
+
+For non-technical users, create clickable Desktop start/stop shortcuts:
+
+- macOS:
+```bash
+chmod +x ./scripts/create-launchers-mac.sh
+./scripts/create-launchers-mac.sh
+```
+
+- Windows:
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\create-launchers-windows.ps1
+```
+
 ## Need Help?
 
 - Check the main project guide: `README.md`
@@ -175,10 +194,14 @@ docker compose up -d
 ## Screenshot Placeholders
 
 Put screenshots in `docs/images/install/`:
+See detailed capture checklist: `docs/images/install/SHOT_LIST.md`.
 - `mac-terminal-run-script.png`
 - `windows-powershell-run-script.png`
+- `installer-install-mode-choice.png`
 - `installer-username-prompt.png`
 - `installer-google-sync-prompts.png`
+- `desktop-launchers-mac.png`
+- `desktop-launchers-windows.png`
 - `google-cloud-create-service-account.png`
 - `google-cloud-download-json-key.png`
 - `google-sheet-share-service-account.png`

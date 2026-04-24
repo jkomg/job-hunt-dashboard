@@ -48,8 +48,8 @@ Work order:
 
 - [x] Docker-first guided setup scripts for macOS/Linux/Windows
 - [x] No-Git/ZIP install path documented
-- [ ] Add launcher shortcuts for desktop start/stop flows
-- [ ] Add explicit guided modes: “No Google sync” vs “With Google sync” in installer copy
+- [x] Add launcher shortcuts for desktop start/stop flows
+- [x] Add explicit guided modes: “No Google sync” vs “With Google sync” in installer copy
 - [ ] Add screenshot-rich walkthrough + short install video links in docs
 
 ## 6) Product polish (next)

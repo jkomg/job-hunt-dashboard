@@ -22,14 +22,40 @@ if [[ -z "$default_username" ]]; then
 fi
 export DEFAULT_USERNAME_CHOSEN="$default_username"
 
-enable_sheets_sync="$(printf '%s' "${ENABLE_SHEETS_SYNC:-n}" | tr '[:upper:]' '[:lower:]')"
+install_mode="$(printf '%s' "${INSTALL_MODE:-guided}" | tr '[:upper:]' '[:lower:]')"
+if [[ "$install_mode" != "guided" && "$install_mode" != "no-google" && "$install_mode" != "with-google" ]]; then
+  install_mode="guided"
+fi
+
+enable_sheets_sync="$(printf '%s' "${ENABLE_SHEETS_SYNC:-}" | tr '[:upper:]' '[:lower:]')"
+if [[ -z "$enable_sheets_sync" ]]; then
+  if [[ "$install_mode" == "with-google" ]]; then
+    enable_sheets_sync="y"
+  elif [[ "$install_mode" == "no-google" ]]; then
+    enable_sheets_sync="n"
+  else
+    enable_sheets_sync="n"
+  fi
+fi
+
 sheet_input="${SHEET_INPUT:-${GOOGLE_SHEETS_SOURCE:-}}"
 sheet_creds_path="${SHEET_CREDS_PATH:-${GOOGLE_SHEETS_CREDENTIALS_FILE:-}}"
 if [[ -t 0 ]]; then
-  if [[ "$enable_sheets_sync" != "y" && "$enable_sheets_sync" != "yes" && "$enable_sheets_sync" != "true" && "$enable_sheets_sync" != "1" ]]; then
-    read -r -p "Set up Google Sheets sync now? [y/N]: " sync_choice
-    enable_sheets_sync="$(printf '%s' "${sync_choice:-}" | tr '[:upper:]' '[:lower:]')"
+  if [[ "$install_mode" == "guided" ]]; then
+    echo
+    echo "Choose install mode:"
+    echo "  1) No Google sync (Recommended for easiest setup)"
+    echo "  2) With Google sync (for shared spreadsheet workflows)"
+    read -r -p "Enter 1 or 2 [1]: " mode_choice
+    if [[ "${mode_choice:-1}" == "2" ]]; then
+      enable_sheets_sync="y"
+      install_mode="with-google"
+    else
+      enable_sheets_sync="n"
+      install_mode="no-google"
+    fi
   fi
+
   if [[ "$enable_sheets_sync" == "y" || "$enable_sheets_sync" == "yes" || "$enable_sheets_sync" == "true" || "$enable_sheets_sync" == "1" ]]; then
     enable_sheets_sync="y"
     echo
@@ -155,6 +181,11 @@ docker compose up --build -d
 echo
 echo "Job Hunt Dashboard is starting in Docker mode."
 echo "Open: http://localhost:8080"
+if [[ "$enable_sheets_sync" == "y" ]]; then
+  echo "Install mode: With Google sync"
+else
+  echo "Install mode: No Google sync"
+fi
 echo "Default login (session mode): ${default_username} / jobhunt2026"
 echo "First sign-in will force a password change."
 echo "Data persists in: ./data/app.db"
