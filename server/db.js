@@ -60,6 +60,15 @@ async function ensureUserSchema() {
   await db.execute('CREATE UNIQUE INDEX IF NOT EXISTS users_email_unique_idx ON users(email) WHERE email IS NOT NULL')
 }
 
+async function ensureInterviewSchema() {
+  const res = await db.execute('PRAGMA table_info(interviews)')
+  const columns = new Set((res.rows || []).map(r => String(r.name || '').toLowerCase()))
+  if (!columns.has('pipeline_entry_id')) {
+    await db.execute('ALTER TABLE interviews ADD COLUMN pipeline_entry_id TEXT')
+  }
+  await db.execute('CREATE UNIQUE INDEX IF NOT EXISTS interviews_pipeline_entry_unique_idx ON interviews(pipeline_entry_id) WHERE pipeline_entry_id IS NOT NULL')
+}
+
 function toUser(row) {
   if (!row) return null
   return {
@@ -271,6 +280,7 @@ export async function initDb() {
   ])
 
   await ensureUserSchema()
+  await ensureInterviewSchema()
 
   const seedUsername = String(process.env.DEFAULT_USERNAME || 'jason').trim().toLowerCase() || 'jason'
   const userCountRes = await db.execute('SELECT COUNT(*) AS count FROM users')
@@ -940,6 +950,14 @@ export async function getPipeline() {
   return toPlainRows(res).map(pipelineRowToRecord)
 }
 
+export async function getPipelineEntryById(id) {
+  const res = await db.execute({
+    sql: 'SELECT * FROM pipeline_entries WHERE id = ? LIMIT 1',
+    args: [String(id)]
+  })
+  return pipelineRowToRecord(firstRow(res))
+}
+
 export async function createPipelineEntry(data = {}) {
   const ts = now()
   const id = String(data.id || crypto.randomUUID())
@@ -1034,6 +1052,58 @@ export async function updatePipelineStage(id, stage) {
     sql: 'UPDATE pipeline_entries SET stage = ?, updated_at = ? WHERE id = ?',
     args: [stage, now(), String(id)]
   })
+}
+
+const INTERVIEW_TRIGGER_STAGES = new Set(['📞 Interview Scheduled', '🎯 Interviewing'])
+
+export async function ensureInterviewForPipelineStage(pipelineId, stageOverride = null) {
+  const pipeline = await getPipelineEntryById(pipelineId)
+  if (!pipeline) return { created: false, reason: 'pipeline_not_found' }
+
+  const stage = stageOverride || pipeline.Stage
+  if (!INTERVIEW_TRIGGER_STAGES.has(stage)) {
+    return { created: false, reason: 'not_interview_stage' }
+  }
+
+  const existing = await db.execute({
+    sql: 'SELECT id FROM interviews WHERE pipeline_entry_id = ? LIMIT 1',
+    args: [String(pipeline.id)]
+  })
+  const existingRow = firstRow(existing)
+  if (existingRow?.id) {
+    return { created: false, reason: 'already_exists', interviewId: String(existingRow.id) }
+  }
+
+  const ts = now()
+  const id = crypto.randomUUID()
+  const round = stage === '📞 Interview Scheduled' ? '1st Interview' : 'In Progress'
+  const date = pipeline['Follow-Up Date'] || null
+  await db.execute({
+    sql: `
+      INSERT INTO interviews (
+        id, company, job_title, date, round, format, outcome, interviewer,
+        questions_asked, feedback_received, follow_up_sent, notes, pipeline_entry_id, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `,
+    args: [
+      id,
+      pipeline.Company || '',
+      pipeline.Role || null,
+      date,
+      round,
+      null,
+      'Pending',
+      pipeline['Contact Name'] || null,
+      null,
+      null,
+      0,
+      pipeline.Notes || null,
+      String(pipeline.id),
+      ts,
+      ts
+    ]
+  })
+  return { created: true, interviewId: id }
 }
 
 export async function updatePipelineFollowUp(id, date) {
@@ -1186,8 +1256,8 @@ export async function createInterview(data = {}) {
     sql: `
       INSERT INTO interviews (
         id, company, job_title, date, round, format, outcome, interviewer,
-        questions_asked, feedback_received, follow_up_sent, notes, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        questions_asked, feedback_received, follow_up_sent, notes, pipeline_entry_id, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     args: [
       id,
@@ -1202,6 +1272,7 @@ export async function createInterview(data = {}) {
       data['Feedback Received'] || null,
       data['Follow-Up Sent'] ? 1 : 0,
       data.Notes || null,
+      data['Pipeline Entry ID'] || null,
       ts,
       ts
     ]
