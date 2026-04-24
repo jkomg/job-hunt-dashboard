@@ -53,13 +53,22 @@ fi
 if gcloud secrets describe jobhunt-sheets-sync-cron-token --project "$PROJECT_ID" >/dev/null 2>&1; then
   SECRET_ARGS+=(--set-secrets SHEETS_SYNC_CRON_TOKEN=jobhunt-sheets-sync-cron-token:latest)
 fi
+if gcloud secrets describe jobhunt-gmail-oauth-client-id --project "$PROJECT_ID" >/dev/null 2>&1; then
+  SECRET_ARGS+=(--set-secrets GMAIL_OAUTH_CLIENT_ID=jobhunt-gmail-oauth-client-id:latest)
+fi
+if gcloud secrets describe jobhunt-gmail-oauth-client-secret --project "$PROJECT_ID" >/dev/null 2>&1; then
+  SECRET_ARGS+=(--set-secrets GMAIL_OAUTH_CLIENT_SECRET=jobhunt-gmail-oauth-client-secret:latest)
+fi
+if gcloud secrets describe jobhunt-gmail-oauth-redirect-uri --project "$PROJECT_ID" >/dev/null 2>&1; then
+  SECRET_ARGS+=(--set-secrets GMAIL_OAUTH_REDIRECT_URI=jobhunt-gmail-oauth-redirect-uri:latest)
+fi
 
 gcloud run deploy "$SERVICE_NAME" \
   --image "$IMAGE" \
   --region "$REGION" \
   --platform managed \
   --allow-unauthenticated \
-  --set-env-vars "AUTH_MODE=${AUTH_MODE},ADMIN_EMAILS=${ADMIN_EMAILS}" \
+  --set-env-vars "AUTH_MODE=${AUTH_MODE},ADMIN_EMAILS=${ADMIN_EMAILS},GMAIL_IMPORT_QUERY=newer_than:60d (filename:ics OR subject:(interview OR recruiter OR hiring))" \
   --cpu 1 \
   --memory 512Mi \
   --min-instances 0 \
