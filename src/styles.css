@@ -775,6 +775,7 @@ html, body, #root {
 
   /* Card padding */
   .card { padding: 14px; }
+  .card-title { margin-bottom: 10px; }
 
   /* Kanban: snap scroll */
   .kanban-scroll { scroll-snap-type: x mandatory; }
@@ -785,7 +786,8 @@ html, body, #root {
   .pipeline-header-row h1 { font-size: 20px; }
 
   /* Quick actions stack */
-  .quick-actions .btn { flex: 1; min-width: 0; font-size: 13px; padding: 10px 10px; }
+  .quick-actions { display: grid; grid-template-columns: 1fr; gap: 8px; }
+  .quick-actions .btn { width: 100%; min-width: 0; font-size: 14px; padding: 11px 10px; }
 
   /* Tabs: scroll on mobile */
   .tabs { gap: 0; }
@@ -797,6 +799,39 @@ html, body, #root {
 
   /* Login */
   .login-card { padding: 28px 20px; }
+
+  /* Dense form ergonomics */
+  .field { margin-bottom: 12px; }
+  .field label {
+    font-size: 12px;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+
+  /* Keep action buttons visible in long edit sheets */
+  .modal-footer {
+    position: sticky;
+    bottom: calc(-16px - var(--safe-bottom));
+    background: linear-gradient(180deg, color-mix(in srgb, var(--surface) 0%, transparent) 0%, var(--surface) 24%);
+    padding: 10px 0 calc(10px + var(--safe-bottom));
+    margin-top: 12px;
+    border-top: 1px solid var(--border);
+  }
+
+  /* Better touch flow for rows with multiple actions */
+  .contact-row {
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .contact-actions {
+    max-width: none;
+    width: 100%;
+    justify-content: flex-start;
+    margin-top: 6px;
+  }
+  .contact-info {
+    min-width: 0;
+  }
 }
 
 @media (min-width: 641px) {
