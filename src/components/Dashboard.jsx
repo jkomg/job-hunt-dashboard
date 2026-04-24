@@ -19,6 +19,40 @@ function pct(val, target) {
   return Math.min(100, Math.round((val / target) * 100))
 }
 
+function timeAgo(iso) {
+  if (!iso) return 'Never'
+  const ts = new Date(iso).getTime()
+  if (!Number.isFinite(ts)) return String(iso)
+  const mins = Math.floor((Date.now() - ts) / 60000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours}h ago`
+  return `${Math.floor(hours / 24)}d ago`
+}
+
+function mergeSummary(summary) {
+  if (!summary || typeof summary !== 'object') return null
+  if (summary.inbound || summary.outbound) {
+    return {
+      ...(summary.inbound || {}),
+      ...(summary.outbound || {})
+    }
+  }
+  return summary
+}
+
+function summaryText(run) {
+  const summary = mergeSummary(run?.summary)
+  if (!summary) return 'No details yet'
+  const parts = []
+  if (Number.isFinite(Number(summary.updatedRows))) parts.push(`${summary.updatedRows} updated`)
+  if (Number.isFinite(Number(summary.imported))) parts.push(`${summary.imported} imported`)
+  if (Number.isFinite(Number(summary.skippedUnchanged))) parts.push(`${summary.skippedUnchanged} skipped`)
+  if (Number(summary.conflicts) > 0) parts.push(`${summary.conflicts} conflicts`)
+  return parts.length ? parts.join(' • ') : 'No details yet'
+}
+
 function StatCard({ label, value, target, color }) {
   const p = pct(value, target)
   return (
@@ -115,11 +149,27 @@ export default function Dashboard({ onNavigate, me }) {
           <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>
             Last success: {syncStatus.health.lastSuccessAt ? new Date(syncStatus.health.lastSuccessAt).toLocaleString() : 'Never'}
           </div>
+          <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>
+            Last local save: {syncStatus?.freshness?.localLastSavedAt ? `${new Date(syncStatus.freshness.localLastSavedAt).toLocaleString()} (${timeAgo(syncStatus.freshness.localLastSavedAt)})` : 'Never'}
+          </div>
+          <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>
+            Last Google sync: {syncStatus?.freshness?.googleLastSyncedAt ? `${new Date(syncStatus.freshness.googleLastSyncedAt).toLocaleString()} (${timeAgo(syncStatus.freshness.googleLastSyncedAt)})` : 'Never'}
+          </div>
           {syncStatus.health.lastError?.details && (
             <div style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 6 }}>
               Last issue: {syncStatus.health.lastError.details}
             </div>
           )}
+          {[
+            ['Pipeline', syncStatus?.entities?.pipeline],
+            ['Networking', syncStatus?.entities?.contacts],
+            ['Interviews', syncStatus?.entities?.interviews],
+            ['Events', syncStatus?.entities?.events]
+          ].map(([label, run]) => (
+            <div key={label} style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 6 }}>
+              {label}: {run?.status || 'unknown'} {run?.createdAt ? `(${timeAgo(run.createdAt)})` : ''} · {summaryText(run)}
+            </div>
+          ))}
           <div style={{ marginTop: 10 }}>
             <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('settings')}>
               Open sync settings →

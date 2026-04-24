@@ -32,7 +32,7 @@ Work order:
 ## 3) Data Trust + Sync Confidence (must-have)
 
 - [x] Show “last saved locally” and “last synced to Google” separately in Settings
-- [ ] Add per-entity sync results summary card in dashboard
+- [x] Add per-entity sync results summary card in dashboard
 - [x] Add conflict-safe sync behavior before overwrite (local + sheet changed rows are skipped)
 - [x] Add downloadable sync logs for support and troubleshooting
 
