@@ -19,6 +19,31 @@ function now() {
   return Date.now()
 }
 
+function todayIso() {
+  return new Date().toISOString().slice(0, 10)
+}
+
+function addDaysIso(days) {
+  const d = new Date()
+  d.setDate(d.getDate() + Number(days || 0))
+  return d.toISOString().slice(0, 10)
+}
+
+const WEEKLY_TARGETS = {
+  outreach: 25,
+  responses: 5,
+  applications: 6
+}
+
+const PRIORITY_FRAMEWORK = [
+  { id: 'interview_readiness', label: '1) Interview Readiness', route: 'interviews' },
+  { id: 'follow_ups_due', label: '2) Follow-Ups Due', route: 'pipeline' },
+  { id: 'pipeline_momentum', label: '3) Pipeline Momentum', route: 'pipeline' },
+  { id: 'networking_consistency', label: '4) Networking Consistency', route: 'contacts' },
+  { id: 'application_throughput', label: '5) Application Throughput', route: 'pipeline' },
+  { id: 'events_market_presence', label: '6) Events & Market Presence', route: 'events' }
+]
+
 const BACKUP_TABLES = [
   'app_settings',
   'daily_logs',
@@ -67,6 +92,49 @@ async function ensureInterviewSchema() {
     await db.execute('ALTER TABLE interviews ADD COLUMN pipeline_entry_id TEXT')
   }
   await db.execute('CREATE UNIQUE INDEX IF NOT EXISTS interviews_pipeline_entry_unique_idx ON interviews(pipeline_entry_id) WHERE pipeline_entry_id IS NOT NULL')
+}
+
+async function ensureEventSchema() {
+  const res = await db.execute('PRAGMA table_info(events)')
+  const columns = new Set((res.rows || []).map(r => String(r.name || '').toLowerCase()))
+  if (!columns.has('source_key')) {
+    await db.execute('ALTER TABLE events ADD COLUMN source_key TEXT')
+  }
+  await db.execute('CREATE UNIQUE INDEX IF NOT EXISTS events_source_key_unique_idx ON events(source_key) WHERE source_key IS NOT NULL')
+}
+
+async function ensureActionSchema() {
+  const tableColumns = async (table) => {
+    const res = await db.execute(`PRAGMA table_info(${table})`)
+    return new Set((res.rows || []).map(r => String(r.name || '').toLowerCase()))
+  }
+
+  const pipelineCols = await tableColumns('pipeline_entries')
+  if (!pipelineCols.has('next_action')) {
+    await db.execute('ALTER TABLE pipeline_entries ADD COLUMN next_action TEXT')
+  }
+  if (!pipelineCols.has('next_action_date')) {
+    await db.execute('ALTER TABLE pipeline_entries ADD COLUMN next_action_date TEXT')
+  }
+  if (!pipelineCols.has('cover_letter')) {
+    await db.execute('ALTER TABLE pipeline_entries ADD COLUMN cover_letter TEXT')
+  }
+
+  const contactCols = await tableColumns('contacts')
+  if (!contactCols.has('next_action')) {
+    await db.execute('ALTER TABLE contacts ADD COLUMN next_action TEXT')
+  }
+  if (!contactCols.has('next_action_date')) {
+    await db.execute('ALTER TABLE contacts ADD COLUMN next_action_date TEXT')
+  }
+
+  const interviewCols = await tableColumns('interviews')
+  if (!interviewCols.has('next_action')) {
+    await db.execute('ALTER TABLE interviews ADD COLUMN next_action TEXT')
+  }
+  if (!interviewCols.has('next_action_date')) {
+    await db.execute('ALTER TABLE interviews ADD COLUMN next_action_date TEXT')
+  }
 }
 
 function toUser(row) {
@@ -194,6 +262,7 @@ export async function initDb() {
         filed_for_unemployment INTEGER NOT NULL DEFAULT 0,
         outcome TEXT,
         resume_url TEXT,
+        cover_letter TEXT,
         work_location TEXT,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
@@ -281,6 +350,8 @@ export async function initDb() {
 
   await ensureUserSchema()
   await ensureInterviewSchema()
+  await ensureEventSchema()
+  await ensureActionSchema()
 
   const seedUsername = String(process.env.DEFAULT_USERNAME || 'jason').trim().toLowerCase() || 'jason'
   const userCountRes = await db.execute('SELECT COUNT(*) AS count FROM users')
@@ -359,7 +430,10 @@ function pipelineRowToRecord(row) {
     'Filed for Unemployment': Number(row.filed_for_unemployment || 0) === 1,
     Outcome: row.outcome || '',
     'Resume URL': row.resume_url || '',
-    'Work Location': row.work_location || ''
+    'Cover Letter': row.cover_letter || '',
+    'Work Location': row.work_location || '',
+    'Next Action': row.next_action || '',
+    'Next Action Date': row.next_action_date || ''
   }
 }
 
@@ -379,7 +453,9 @@ function contactRowToRecord(row) {
     'Next Follow-Up': row.next_follow_up || '',
     'Last Contact': row.last_contact || '',
     'Resume Used': row.resume_used || '',
-    Notes: row.notes || ''
+    Notes: row.notes || '',
+    'Next Action': row.next_action || '',
+    'Next Action Date': row.next_action_date || ''
   }
 }
 
@@ -397,7 +473,9 @@ function interviewRowToRecord(row) {
     'Questions Asked': row.questions_asked || '',
     'Feedback Received': row.feedback_received || '',
     'Follow-Up Sent': Number(row.follow_up_sent || 0) === 1,
-    Notes: row.notes || ''
+    Notes: row.notes || '',
+    'Next Action': row.next_action || '',
+    'Next Action Date': row.next_action_date || ''
   }
 }
 
@@ -410,7 +488,8 @@ function eventRowToRecord(row) {
     Price: row.price || '',
     Status: row.status || '',
     'Registration Link': row.registration_link || '',
-    Notes: row.notes || ''
+    Notes: row.notes || '',
+    'Source Key': row.source_key || ''
   }
 }
 
@@ -968,8 +1047,8 @@ export async function createPipelineEntry(data = {}) {
         id, company, role, stage, priority, sector, job_source, job_url, salary_range,
         date_applied, follow_up_date, contact_name, contact_title, outreach_method, resume_version,
         company_address, company_phone, notes, research_notes, filed_for_unemployment, outcome,
-        resume_url, work_location, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        resume_url, cover_letter, work_location, next_action, next_action_date, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     args: [
       id,
@@ -994,7 +1073,10 @@ export async function createPipelineEntry(data = {}) {
       data['Filed for Unemployment'] ? 1 : 0,
       data.Outcome || null,
       data['Resume URL'] || null,
+      data['Cover Letter'] || null,
       data['Work Location'] || null,
+      data['Next Action'] || null,
+      data['Next Action Date'] || null,
       ts,
       ts
     ]
@@ -1035,7 +1117,10 @@ export async function updatePipelineEntry(id, data = {}) {
   setIfPresent('filed_for_unemployment', data['Filed for Unemployment'] === undefined ? undefined : (data['Filed for Unemployment'] ? 1 : 0))
   setIfPresent('outcome', data.Outcome === undefined ? undefined : (data.Outcome || null))
   setIfPresent('resume_url', data['Resume URL'] === undefined ? undefined : (data['Resume URL'] || null))
+  setIfPresent('cover_letter', data['Cover Letter'] === undefined ? undefined : (data['Cover Letter'] || null))
   setIfPresent('work_location', data['Work Location'] === undefined ? undefined : (data['Work Location'] || null))
+  setIfPresent('next_action', data['Next Action'] === undefined ? undefined : (data['Next Action'] || null))
+  setIfPresent('next_action_date', data['Next Action Date'] === undefined ? undefined : (data['Next Action Date'] || null))
 
   updates.push('updated_at = ?')
   args.push(now())
@@ -1082,8 +1167,8 @@ export async function ensureInterviewForPipelineStage(pipelineId, stageOverride 
     sql: `
       INSERT INTO interviews (
         id, company, job_title, date, round, format, outcome, interviewer,
-        questions_asked, feedback_received, follow_up_sent, notes, pipeline_entry_id, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        questions_asked, feedback_received, follow_up_sent, notes, pipeline_entry_id, next_action, next_action_date, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     args: [
       id,
@@ -1099,11 +1184,73 @@ export async function ensureInterviewForPipelineStage(pipelineId, stageOverride 
       0,
       pipeline.Notes || null,
       String(pipeline.id),
+      'Prepare interview talking points and STAR stories',
+      date || addDaysIso(1),
       ts,
       ts
     ]
   })
   return { created: true, interviewId: id }
+}
+
+const STAGE_AUTOMATION = {
+  '📨 Applied': { action: 'Send recruiter follow-up if no response', days: 5 },
+  '🤝 Warm Outreach Sent': { action: 'Follow up with warm contact', days: 3 },
+  '💬 In Conversation': { action: 'Keep momentum with next conversation step', days: 2 },
+  '📞 Interview Scheduled': { action: 'Prep interview and research interviewers', days: 1 },
+  '🎯 Interviewing': { action: 'Send thank-you note and debrief', days: 1 },
+  '📋 Offer': { action: 'Review offer details and questions', days: 1 }
+}
+
+export async function applyPipelineStageAutomation(pipelineId, stageOverride = null) {
+  const pipeline = await getPipelineEntryById(pipelineId)
+  if (!pipeline) return { updated: false, reason: 'pipeline_not_found' }
+  const stage = stageOverride || pipeline.Stage
+  const suggestion = STAGE_AUTOMATION[stage]
+  if (!suggestion) return { updated: false, reason: 'no_suggestion' }
+
+  const needsAction = !String(pipeline['Next Action'] || '').trim()
+  const needsDate = !String(pipeline['Next Action Date'] || '').trim()
+  const updates = {}
+  if (needsAction) updates['Next Action'] = suggestion.action
+  if (needsDate) updates['Next Action Date'] = addDaysIso(suggestion.days)
+  if (Object.keys(updates).length === 0) {
+    return { updated: false, reason: 'already_has_next_action' }
+  }
+
+  await updatePipelineEntry(pipelineId, updates)
+  return { updated: true, updates }
+}
+
+export async function backfillInterviewsFromPipeline() {
+  const pipeline = await getPipeline()
+  let created = 0
+  let alreadyExists = 0
+  let skipped = 0
+
+  for (const item of pipeline) {
+    if (!INTERVIEW_TRIGGER_STAGES.has(item.Stage)) {
+      skipped += 1
+      continue
+    }
+    const result = await ensureInterviewForPipelineStage(item.id, item.Stage)
+    if (result?.created) {
+      created += 1
+      continue
+    }
+    if (result?.reason === 'already_exists') {
+      alreadyExists += 1
+      continue
+    }
+    skipped += 1
+  }
+
+  return {
+    scanned: pipeline.length,
+    created,
+    alreadyExists,
+    skipped
+  }
 }
 
 export async function updatePipelineFollowUp(id, date) {
@@ -1177,8 +1324,8 @@ export async function createContact(data = {}) {
     sql: `
       INSERT INTO contacts (
         id, name, title, company, email, phone, warmth, status, how_we_know_each_other,
-        linkedin_url, next_follow_up, last_contact, resume_used, notes, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        linkedin_url, next_follow_up, last_contact, resume_used, notes, next_action, next_action_date, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     args: [
       id,
@@ -1195,6 +1342,8 @@ export async function createContact(data = {}) {
       data['Last Contact'] || null,
       data['Resume Used'] || null,
       data.Notes || null,
+      data['Next Action'] || null,
+      data['Next Action Date'] || null,
       ts,
       ts
     ]
@@ -1225,6 +1374,8 @@ export async function updateContact(id, data = {}) {
   setIfPresent('last_contact', data['Last Contact'] === undefined ? undefined : (data['Last Contact'] || null))
   setIfPresent('resume_used', data['Resume Used'] === undefined ? undefined : (data['Resume Used'] || null))
   setIfPresent('notes', data.Notes === undefined ? undefined : (data.Notes || null))
+  setIfPresent('next_action', data['Next Action'] === undefined ? undefined : (data['Next Action'] || null))
+  setIfPresent('next_action_date', data['Next Action Date'] === undefined ? undefined : (data['Next Action Date'] || null))
 
   updates.push('updated_at = ?')
   args.push(now())
@@ -1256,8 +1407,8 @@ export async function createInterview(data = {}) {
     sql: `
       INSERT INTO interviews (
         id, company, job_title, date, round, format, outcome, interviewer,
-        questions_asked, feedback_received, follow_up_sent, notes, pipeline_entry_id, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        questions_asked, feedback_received, follow_up_sent, notes, pipeline_entry_id, next_action, next_action_date, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     args: [
       id,
@@ -1273,6 +1424,8 @@ export async function createInterview(data = {}) {
       data['Follow-Up Sent'] ? 1 : 0,
       data.Notes || null,
       data['Pipeline Entry ID'] || null,
+      data['Next Action'] || null,
+      data['Next Action Date'] || null,
       ts,
       ts
     ]
@@ -1301,6 +1454,8 @@ export async function updateInterview(id, data = {}) {
   setIfPresent('feedback_received', data['Feedback Received'] === undefined ? undefined : (data['Feedback Received'] || null))
   setIfPresent('follow_up_sent', data['Follow-Up Sent'] === undefined ? undefined : (data['Follow-Up Sent'] ? 1 : 0))
   setIfPresent('notes', data.Notes === undefined ? undefined : (data.Notes || null))
+  setIfPresent('next_action', data['Next Action'] === undefined ? undefined : (data['Next Action'] || null))
+  setIfPresent('next_action_date', data['Next Action Date'] === undefined ? undefined : (data['Next Action Date'] || null))
 
   updates.push('updated_at = ?')
   args.push(now())
@@ -1331,8 +1486,8 @@ export async function createEvent(data = {}) {
   await db.execute({
     sql: `
       INSERT INTO events (
-        id, name, date, price, status, registration_link, notes, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        id, name, date, price, status, registration_link, notes, source_key, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     args: [
       id,
@@ -1342,11 +1497,21 @@ export async function createEvent(data = {}) {
       data.Status || 'Interested',
       data['Registration Link'] || null,
       data.Notes || null,
+      data['Source Key'] || null,
       ts,
       ts
     ]
   })
   return { id }
+}
+
+export async function getEventBySourceKey(sourceKey) {
+  if (!sourceKey) return null
+  const res = await db.execute({
+    sql: 'SELECT * FROM events WHERE source_key = ? LIMIT 1',
+    args: [String(sourceKey)]
+  })
+  return eventRowToRecord(firstRow(res))
 }
 
 export async function updateEvent(id, data = {}) {
@@ -1505,15 +1670,52 @@ export async function updateWatchlistEntry(id, data = {}) {
 }
 
 export async function getDashboardData() {
-  const [overdueContacts, recentLogs, pipeline] = await Promise.all([
+  const [overdueContacts, recentLogs, pipeline, interviews, events, contacts] = await Promise.all([
     getOverdueFollowUps(),
     getRecentLogs(8),
-    getPipeline()
+    getPipeline(),
+    getInterviews(),
+    getEvents(),
+    getContacts()
   ])
+  const today = new Date().toISOString().slice(0, 10)
+  const weekAhead = addDaysIso(7)
 
   const activeItems = pipeline.filter(p =>
     ['💬 In Conversation', '📞 Interview Scheduled', '🎯 Interviewing'].includes(p.Stage)
   )
+  const duePipelineFollowUps = pipeline
+    .filter(p => {
+      const due = String(p['Follow-Up Date'] || '').trim()
+      const stage = String(p.Stage || '')
+      if (!due) return false
+      if (stage.includes('Closed')) return false
+      return due <= today
+    })
+    .sort((a, b) => String(a['Follow-Up Date']).localeCompare(String(b['Follow-Up Date'])))
+
+  const dueInterviewActions = interviews
+    .filter(i => i.Outcome === 'Pending' && i['Next Action Date'] && i['Next Action Date'] <= today)
+    .sort((a, b) => String(a['Next Action Date']).localeCompare(String(b['Next Action Date'])))
+
+  const upcomingInterviews = interviews
+    .filter(i => i.Outcome === 'Pending' && i.Date && i.Date >= today && i.Date <= weekAhead)
+    .sort((a, b) => String(a.Date).localeCompare(String(b.Date)))
+
+  const upcomingEvents = events
+    .filter(e => e.Status !== 'Attended' && e.Status !== 'Skipped' && e.Date && e.Date >= today && e.Date <= weekAhead)
+    .sort((a, b) => String(a.Date).localeCompare(String(b.Date)))
+
+  const stalledPipeline = pipeline.filter(p => {
+    const stage = String(p.Stage || '')
+    if (stage.includes('Closed')) return false
+    return !String(p['Next Action'] || '').trim() || !String(p['Next Action Date'] || '').trim()
+  })
+  const stalledContacts = contacts.filter(c => {
+    if (['Gone cold', 'Referred me'].includes(String(c.Status || ''))) return false
+    return !String(c['Next Action'] || '').trim() || !String(c['Next Action Date'] || '').trim()
+  })
+  const stalledInterviews = interviews.filter(i => i.Outcome === 'Pending' && (!String(i['Next Action'] || '').trim() || !String(i['Next Action Date'] || '').trim()))
 
   const weekStats = recentLogs.slice(0, 7).reduce((acc, log) => {
     acc.outreach += log['Outreach Sent'] || 0
@@ -1523,10 +1725,196 @@ export async function getDashboardData() {
     return acc
   }, { outreach: 0, responses: 0, applications: 0, linkedInPosts: 0 })
 
+  const followUpItems = [
+    ...overdueContacts.map(c => ({
+      id: `contact-${c.id}`,
+      entityId: c.id,
+      type: 'contact_follow_up',
+      pillarId: 'follow_ups_due',
+      title: `Follow up with ${c.Name}`,
+      subtitle: c.Company ? `${c.Title || 'Contact'} @ ${c.Company}` : (c.Title || 'Contact'),
+      dueDate: c['Next Follow-Up'] || today,
+      reason: `Contact follow-up is due (${c['Next Follow-Up'] || 'today'}).`,
+      actionLabel: 'Open Contacts',
+      route: 'contacts',
+      priority: 2
+    })),
+    ...duePipelineFollowUps.map(p => ({
+      id: `pipeline-followup-${p.id}`,
+      entityId: p.id,
+      type: 'pipeline_follow_up',
+      pillarId: 'follow_ups_due',
+      title: `${p.Company}: ${p['Next Action'] || 'Follow up on application'}`,
+      subtitle: p.Role || p.Stage,
+      dueDate: p['Follow-Up Date'],
+      reason: `Pipeline follow-up date is due (${p['Follow-Up Date']}).`,
+      actionLabel: 'Open Pipeline',
+      route: 'pipeline',
+      priority: 2
+    }))
+  ]
+
+  const interviewItems = [
+    ...dueInterviewActions.map(i => ({
+      id: `interview-action-${i.id}`,
+      entityId: i.id,
+      type: 'interview_action',
+      pillarId: 'interview_readiness',
+      title: `${i.Company}: ${i['Next Action'] || 'Complete interview follow-up task'}`,
+      subtitle: [i.Round, i.Date].filter(Boolean).join(' · '),
+      dueDate: i['Next Action Date'],
+      reason: `Interview next action is due (${i['Next Action Date']}).`,
+      actionLabel: 'Open Interviews',
+      route: 'interviews',
+      priority: 1
+    })),
+    ...upcomingInterviews.map(i => ({
+      id: `upcoming-interview-${i.id}`,
+      entityId: i.id,
+      type: 'upcoming_interview',
+      pillarId: 'interview_readiness',
+      title: `${i.Company}: Upcoming interview`,
+      subtitle: [i.Round, i.Format].filter(Boolean).join(' · ') || 'Interview',
+      dueDate: i.Date,
+      reason: `Interview is coming up on ${i.Date}.`,
+      actionLabel: 'Open Interviews',
+      route: 'interviews',
+      priority: 1
+    }))
+  ]
+
+  const momentumItems = stalledPipeline.slice(0, 5).map(p => ({
+    id: `pipeline-stalled-${p.id}`,
+    entityId: p.id,
+    type: 'pipeline_stalled',
+    pillarId: 'pipeline_momentum',
+    title: `${p.Company}: define next action`,
+    subtitle: p.Role || p.Stage,
+    dueDate: p['Follow-Up Date'] || today,
+    reason: 'This active pipeline item is missing next action details.',
+    actionLabel: 'Open Pipeline',
+    route: 'pipeline',
+    priority: 3
+  }))
+
+  const networkingItems = []
+  if (weekStats.outreach < WEEKLY_TARGETS.outreach) {
+    networkingItems.push({
+      id: 'networking-weekly-outreach',
+      entityId: 'weekly-outreach',
+      type: 'networking_goal',
+      pillarId: 'networking_consistency',
+      title: `Send ${WEEKLY_TARGETS.outreach - weekStats.outreach} more outreach messages this week`,
+      subtitle: `Progress: ${weekStats.outreach}/${WEEKLY_TARGETS.outreach}`,
+      dueDate: addDaysIso(1),
+      reason: 'Weekly networking target is behind pace.',
+      actionLabel: 'Open Contacts',
+      route: 'contacts',
+      priority: 4
+    })
+  }
+  if (stalledContacts.length > 0) {
+    networkingItems.push({
+      id: 'networking-stalled-contacts',
+      entityId: 'stalled-contacts',
+      type: 'networking_stalled',
+      pillarId: 'networking_consistency',
+      title: `${stalledContacts.length} contact records need a next action`,
+      subtitle: 'Add next action/date to keep outreach moving',
+      dueDate: today,
+      reason: 'Contacts without next actions often get lost.',
+      actionLabel: 'Open Contacts',
+      route: 'contacts',
+      priority: 4
+    })
+  }
+
+  const applicationItems = []
+  if (weekStats.applications < WEEKLY_TARGETS.applications) {
+    applicationItems.push({
+      id: 'applications-weekly-target',
+      entityId: 'weekly-applications',
+      type: 'application_goal',
+      pillarId: 'application_throughput',
+      title: `Submit ${WEEKLY_TARGETS.applications - weekStats.applications} more applications this week`,
+      subtitle: `Progress: ${weekStats.applications}/${WEEKLY_TARGETS.applications}`,
+      dueDate: addDaysIso(2),
+      reason: 'Application throughput is below weekly goal.',
+      actionLabel: 'Open Pipeline',
+      route: 'pipeline',
+      priority: 5
+    })
+  }
+
+  const eventsItems = upcomingEvents.map(e => ({
+    id: `upcoming-event-${e.id}`,
+    entityId: e.id,
+    type: 'upcoming_event',
+    pillarId: 'events_market_presence',
+    title: e.Name,
+    subtitle: e.Status || 'Event',
+    dueDate: e.Date,
+    reason: `Event is scheduled for ${e.Date}.`,
+    actionLabel: 'Open Events',
+    route: 'events',
+    priority: 6
+  }))
+  if (eventsItems.length === 0) {
+    eventsItems.push({
+      id: 'events-none-upcoming',
+      entityId: 'events-empty',
+      type: 'events_gap',
+      pillarId: 'events_market_presence',
+      title: 'Add one networking event for this week',
+      subtitle: 'Keep market visibility and momentum',
+      dueDate: addDaysIso(3),
+      reason: 'No upcoming events are currently scheduled.',
+      actionLabel: 'Open Events',
+      route: 'events',
+      priority: 6
+    })
+  }
+
+  const todayQueue = [
+    ...followUpItems,
+    ...interviewItems,
+    ...momentumItems,
+    ...networkingItems,
+    ...applicationItems,
+    ...eventsItems
+  ].sort((a, b) => {
+    const p = (a.priority || 9) - (b.priority || 9)
+    if (p !== 0) return p
+    return String(a.dueDate || '').localeCompare(String(b.dueDate || ''))
+  })
+
+  const suggestedTop3 = todayQueue.slice(0, 3).map((item, idx) => `${idx + 1}. ${item.title}`)
+
+  const queueByPillar = Object.fromEntries(PRIORITY_FRAMEWORK.map(p => [p.id, 0]))
+  for (const item of todayQueue) {
+    if (item?.pillarId && queueByPillar[item.pillarId] != null) queueByPillar[item.pillarId] += 1
+  }
+
   return {
     overdueContacts,
+    duePipelineFollowUps,
+    dueInterviewActions,
+    upcomingInterviews,
+    upcomingEvents,
     recentLogs,
     activeItems,
-    weekStats
+    weekStats,
+    todayQueue,
+    suggestedTop3,
+    priorityFramework: PRIORITY_FRAMEWORK.map(p => ({ ...p, count: queueByPillar[p.id] || 0 })),
+    health: {
+      queueSize: todayQueue.length,
+      stale: {
+        pipeline: stalledPipeline.length,
+        contacts: stalledContacts.length,
+        interviews: stalledInterviews.length
+      },
+      staleTotal: stalledPipeline.length + stalledContacts.length + stalledInterviews.length
+    }
   }
 }

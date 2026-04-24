@@ -365,7 +365,10 @@ html, body, #root {
 .field textarea:focus { border-color: var(--accent); }
 .field textarea { resize: vertical; min-height: 80px; }
 .field select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%237b82a0' d='M6 8L0 0h12z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 14px center; padding-right: 36px; }
-.field select option { background: #1a1d27; }
+.field select option {
+  background: var(--surface);
+  color: var(--text);
+}
 
 /* Slider */
 .slider-wrap { display: flex; align-items: center; gap: 14px; }

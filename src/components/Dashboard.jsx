@@ -7,17 +7,12 @@ const WEEKLY_TARGETS = {
   linkedInPosts: 2
 }
 
-function warmthColor(warmth) {
-  if (warmth?.includes('Hot')) return 'badge-red'
-  if (warmth?.includes('Warm')) return 'badge-orange'
-  return 'badge-gray'
-}
-
-function stageColor(stage) {
-  if (stage?.includes('Conversation')) return 'badge-yellow'
-  if (stage?.includes('Interview Scheduled')) return 'badge-orange'
-  if (stage?.includes('Interviewing')) return 'badge-red'
-  return 'badge-blue'
+function queueIcon(type) {
+  if (type === 'contact_follow_up') return '👥'
+  if (type === 'pipeline_follow_up') return '🎯'
+  if (type === 'interview_action' || type === 'upcoming_interview') return '📞'
+  if (type === 'upcoming_event') return '🗓️'
+  return '•'
 }
 
 function pct(val, target) {
@@ -59,18 +54,50 @@ export default function Dashboard({ onNavigate, me }) {
   if (loading) return <div className="loading"><div className="spin" />Loading your briefing…</div>
   if (error) return <div className="error-msg">{error}</div>
 
-  const { overdueContacts, recentLogs, activeItems, weekStats } = data
+  const {
+    overdueContacts = [],
+    duePipelineFollowUps = [],
+    dueInterviewActions = [],
+    upcomingInterviews = [],
+    recentLogs = [],
+    weekStats = { outreach: 0, responses: 0, applications: 0, linkedInPosts: 0 },
+    todayQueue = [],
+    priorityFramework = [],
+    health
+  } = data
 
-  // Find yesterday's entry using the browser's local timezone
+  const followUpsTotal = overdueContacts.length + duePipelineFollowUps.length
+
+  const todayDate = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
   const yesterdayLabel = new Date(Date.now() - 864e5).toLocaleDateString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric', year: 'numeric'
   })
-  const todayDate = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
+  const todayLabel = new Date().toLocaleDateString('en-US', {
+    weekday: 'long', month: 'long', day: 'numeric', year: 'numeric'
+  })
 
-  const yesterdayLog = recentLogs?.find(l => (l.Date || '').trim() === yesterdayLabel) ||
-    recentLogs?.find(l => l._createdTime && new Date(l._createdTime).toDateString() === new Date(Date.now() - 864e5).toDateString())
-  const yesterdayTop3 = yesterdayLog?.["Tomorrow's Top 3"] || null
-  const top3Lines = yesterdayTop3 ? yesterdayTop3.split('\n').filter(Boolean) : []
+  const yesterdayLog = recentLogs.find(l => (l.Date || '').trim() === yesterdayLabel)
+  const todayLog = recentLogs.find(l => (l.Date || '').trim() === todayLabel)
+  const yesterdayTop3 = String(yesterdayLog?.["Tomorrow's Top 3"] || '').trim()
+  const todayTop3 = String(todayLog?.["Tomorrow's Top 3"] || '').trim()
+  const yesterdayTop3Lines = yesterdayTop3 ? yesterdayTop3.split('\n').map(s => s.trim()).filter(Boolean) : []
+  const todayTop3Lines = todayTop3 ? todayTop3.split('\n').map(s => s.trim()).filter(Boolean) : []
+
+  const topQueue = todayQueue.slice(0, 3)
+
+  function openItem(item) {
+    const intent = {}
+    if (item.type === 'pipeline_follow_up') intent.mode = 'due_followups'
+    if (item.type === 'pipeline_stalled') intent.mode = 'stale_actions'
+    if (item.entityId) intent.focusId = item.entityId
+    onNavigate(item.route, intent)
+  }
+
+  function openPriority(pillarId, route) {
+    if (pillarId === 'follow_ups_due') return onNavigate('pipeline', { mode: 'due_followups' })
+    if (pillarId === 'pipeline_momentum') return onNavigate('pipeline', { mode: 'stale_actions' })
+    return onNavigate(route)
+  }
 
   return (
     <div>
@@ -101,13 +128,16 @@ export default function Dashboard({ onNavigate, me }) {
         </div>
       )}
 
-      {/* Yesterday's Top 3 */}
       <div className="card mb-16">
         <div className="card-title">Yesterday's Top 3 — Today's Agenda</div>
-        {top3Lines.length > 0 ? (
+        {yesterdayTop3Lines.length > 0 ? (
           <ul className="top3-list">
-            {top3Lines.map((line, i) => <li key={i}>{line}</li>)}
+            {yesterdayTop3Lines.map((line, i) => <li key={i}>{line}</li>)}
           </ul>
+        ) : todayTop3Lines.length >= 3 ? (
+          <div style={{ color: 'var(--green)', fontSize: 13 }}>
+            Top 3 is set for tomorrow in today's check-in. You're good.
+          </div>
         ) : (
           <div>
             <p style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 12 }}>No Top 3 logged yesterday.</p>
@@ -118,63 +148,61 @@ export default function Dashboard({ onNavigate, me }) {
         )}
       </div>
 
-      {/* Overdue follow-ups */}
-      {overdueContacts.length > 0 && (
-        <div className="card mb-16" style={{ borderColor: 'var(--red)' }}>
-          <div className="card-title" style={{ color: 'var(--red)' }}>
-            🔔 Follow-ups Due ({overdueContacts.length})
+      <div className="card mb-16" style={{ borderColor: 'var(--accent)' }}>
+        <div className="card-title" style={{ color: 'var(--accent)' }}>Focus Now</div>
+        <div className="contact-row" style={{ padding: '8px 0' }}>
+          <div className="contact-info">
+            <div className="contact-name">📞 Interviews</div>
+            <div className="contact-meta">{dueInterviewActions.length} due actions · {upcomingInterviews.length} upcoming</div>
           </div>
-          {overdueContacts.slice(0, 5).map(c => (
-            <div key={c.id} className="contact-row" style={{ padding: '10px 0' }}>
-              <div className="contact-avatar">{(c.Name || '?')[0].toUpperCase()}</div>
-              <div className="contact-info">
-                <div className="contact-name">{c.Name}</div>
-                <div className="contact-meta">
-                  {[c.Title, c.Company && `@ ${c.Company}`].filter(Boolean).join(' ')}
-                </div>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-                <span className={`badge ${warmthColor(c.Warmth)}`}>{c.Warmth?.split('—')[0].trim()}</span>
-                {c['Next Follow-Up'] && (
-                  <span className="overdue-badge">Due {c['Next Follow-Up']}</span>
-                )}
-              </div>
-            </div>
-          ))}
-          {overdueContacts.length > 5 && (
-            <div style={{ marginTop: 10 }}>
-              <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('contacts')}>
-                +{overdueContacts.length - 5} more → View all
-              </button>
-            </div>
-          )}
+          <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('interviews')}>Open</button>
         </div>
-      )}
-
-      {/* Active pipeline items */}
-      {activeItems.length > 0 && (
-        <div className="card mb-16" style={{ borderColor: 'var(--yellow)' }}>
-          <div className="card-title" style={{ color: 'var(--yellow)' }}>
-            ⚡ Active Pipeline ({activeItems.length})
+        <div className="contact-row" style={{ padding: '8px 0' }}>
+          <div className="contact-info">
+            <div className="contact-name">🔁 Follow-ups</div>
+            <div className="contact-meta">{followUpsTotal} due ({duePipelineFollowUps.length} pipeline, {overdueContacts.length} contacts)</div>
           </div>
-          {activeItems.map(item => (
+          <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('pipeline', { mode: 'due_followups' })}>Open in Pipeline</button>
+        </div>
+        <div className="contact-row" style={{ padding: '8px 0' }}>
+          <div className="contact-info">
+            <div className="contact-name">🧭 Queue</div>
+            <div className="contact-meta">{todayQueue.length} total items · {health?.staleTotal || 0} stalled</div>
+          </div>
+          <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('pipeline', { mode: 'stale_actions' })}>Stale items</button>
+        </div>
+      </div>
+
+      {!!topQueue.length && (
+        <div className="card mb-16">
+          <div className="card-title">Top 3 Actions</div>
+          {topQueue.map(item => (
             <div key={item.id} className="contact-row" style={{ padding: '10px 0' }}>
               <div className="contact-info">
-                <div className="contact-name">{item.Company}</div>
-                <div className="contact-meta">{item.Role}</div>
+                <div className="contact-name">{queueIcon(item.type)} {item.title}</div>
+                <div className="contact-meta">{item.reason}</div>
               </div>
-              <span className={`badge ${stageColor(item.Stage)}`} style={{ fontSize: 10, marginLeft: 8, flexShrink: 0 }}>{item.Stage}</span>
+              <button className="btn btn-ghost btn-sm" onClick={() => openItem(item)}>Open</button>
             </div>
           ))}
-          <div style={{ marginTop: 10 }}>
-            <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('pipeline')}>
-              View full pipeline →
-            </button>
-          </div>
         </div>
       )}
 
-      {/* This week's numbers */}
+      {!!priorityFramework.length && (
+        <div className="card mb-16">
+          <div className="card-title">6 Priorities</div>
+          {priorityFramework.map(p => (
+            <div key={p.id} className="contact-row" style={{ padding: '8px 0' }}>
+              <div className="contact-info">
+                <div className="contact-name">{p.label}</div>
+                <div className="contact-meta">{p.count} item{p.count === 1 ? '' : 's'}</div>
+              </div>
+              <button className="btn btn-ghost btn-sm" onClick={() => openPriority(p.id, p.route)}>Open</button>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="mb-16">
         <div className="card-title" style={{ marginBottom: 10 }}>This Week's Numbers</div>
         <div className="stats-grid">
@@ -185,7 +213,6 @@ export default function Dashboard({ onNavigate, me }) {
         </div>
       </div>
 
-      {/* Quick actions */}
       <div className="card">
         <div className="card-title">Quick Actions</div>
         <div className="quick-actions">

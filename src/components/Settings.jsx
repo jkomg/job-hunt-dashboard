@@ -67,8 +67,12 @@ export default function Settings({ me, onProfileUpdated }) {
   const [savingProfile, setSavingProfile] = useState(false)
   const [testing, setTesting] = useState(false)
   const [syncing, setSyncing] = useState(false)
+  const [reconcilingInterviews, setReconcilingInterviews] = useState(false)
   const [exportingBackup, setExportingBackup] = useState(false)
   const [restoringBackup, setRestoringBackup] = useState(false)
+  const [gmailStatus, setGmailStatus] = useState(null)
+  const [gmailConnecting, setGmailConnecting] = useState(false)
+  const [gmailImporting, setGmailImporting] = useState(false)
   const [status, setStatus] = useState(null)
   const [runs, setRuns] = useState([])
   const [error, setError] = useState(null)
@@ -94,12 +98,14 @@ export default function Settings({ me, onProfileUpdated }) {
     setLoading(true)
     setError(null)
     try {
-      const [statusRes, runsRes] = await Promise.all([
+      const [statusRes, runsRes, gmailRes] = await Promise.all([
         api('/api/sheets/status'),
-        api('/api/sheets/sync/runs')
+        api('/api/sheets/sync/runs'),
+        api('/api/gmail/status')
       ])
       setStatus(statusRes)
       setRuns(runsRes || [])
+      setGmailStatus(gmailRes || null)
 
       const cfg = statusRes?.config || {}
       setEnabled(cfg.enabled !== false)
@@ -191,14 +197,80 @@ export default function Settings({ me, onProfileUpdated }) {
     setError(null)
     setSuccess('')
     try {
-      await api('/api/sheets/sync', { method: 'POST' })
-      setSuccess('Sync completed successfully.')
+      const result = await api('/api/sheets/sync', { method: 'POST' })
+      const created = Number(result?.interviewBackfill?.created || 0)
+      if (created > 0) {
+        setSuccess(`Sync completed. Backfilled ${created} interview entr${created === 1 ? 'y' : 'ies'} from Pipeline.`)
+      } else {
+        setSuccess('Sync completed successfully.')
+      }
       await load()
     } catch (e) {
       setError(e.payload || { error: e.message })
       await load()
     } finally {
       setSyncing(false)
+    }
+  }
+
+  async function reconcileInterviews() {
+    setReconcilingInterviews(true)
+    setError(null)
+    setSuccess('')
+    try {
+      const result = await api('/api/interviews/reconcile', { method: 'POST' })
+      setSuccess(
+        `Interview repair complete: ${result.created} created, ${result.alreadyExists} already linked, ${result.skipped} skipped.`
+      )
+      await load()
+    } catch (e) {
+      setError(e.payload || { error: e.message })
+    } finally {
+      setReconcilingInterviews(false)
+    }
+  }
+
+  async function connectGmail() {
+    setGmailConnecting(true)
+    setError(null)
+    setSuccess('')
+    try {
+      const result = await api('/api/gmail/auth-url', { method: 'POST' })
+      window.location.href = result.url
+    } catch (e) {
+      setError(e.payload || { error: e.message })
+      setGmailConnecting(false)
+    }
+  }
+
+  async function disconnectGmail() {
+    setError(null)
+    setSuccess('')
+    try {
+      await api('/api/gmail/disconnect', { method: 'POST' })
+      setSuccess('Gmail disconnected.')
+      await load()
+    } catch (e) {
+      setError(e.payload || { error: e.message })
+    }
+  }
+
+  async function importFromGmail() {
+    setGmailImporting(true)
+    setError(null)
+    setSuccess('')
+    try {
+      const result = await api('/api/gmail/import-events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ maxMessages: 80 })
+      })
+      setSuccess(`Gmail import complete: ${result.created} new events, ${result.deduped} already imported.`)
+    } catch (e) {
+      setError(e.payload || { error: e.message })
+    } finally {
+      setGmailImporting(false)
+      await load()
     }
   }
 
@@ -366,6 +438,49 @@ export default function Settings({ me, onProfileUpdated }) {
           </button>
           <button className="btn btn-ghost" onClick={syncNow} disabled={syncing}>
             {syncing ? 'Syncing…' : 'Run Sync Now'}
+          </button>
+          <button className="btn btn-ghost" onClick={reconcileInterviews} disabled={reconcilingInterviews}>
+            {reconcilingInterviews ? 'Repairing…' : 'Repair Interviews from Pipeline'}
+          </button>
+        </div>
+      </div>
+
+      <div className="card mb-16">
+        <div className="card-title">Email Event Import (Gmail)</div>
+        <div style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 10 }}>
+          Imports interview/calendar invite events from Gmail into the Events section.
+        </div>
+        {!gmailStatus?.configured && (
+          <div style={{ color: 'var(--text-muted)', fontSize: 12, marginBottom: 10 }}>
+            Gmail import is not configured on this deployment yet.
+          </div>
+        )}
+        {gmailStatus?.configured && (
+          <div style={{ fontSize: 13, marginBottom: 10 }}>
+            Connection: <strong>{gmailStatus.connected ? `Connected (${gmailStatus.email || 'Unknown account'})` : 'Not connected'}</strong>
+          </div>
+        )}
+        <div className="quick-actions">
+          <button
+            className="btn btn-primary"
+            onClick={connectGmail}
+            disabled={gmailConnecting || !gmailStatus?.configured}
+          >
+            {gmailConnecting ? 'Connecting…' : gmailStatus?.connected ? 'Reconnect Gmail' : 'Connect Gmail'}
+          </button>
+          <button
+            className="btn btn-ghost"
+            onClick={importFromGmail}
+            disabled={gmailImporting || !gmailStatus?.connected}
+          >
+            {gmailImporting ? 'Importing…' : 'Import Events from Gmail'}
+          </button>
+          <button
+            className="btn btn-ghost"
+            onClick={disconnectGmail}
+            disabled={!gmailStatus?.connected}
+          >
+            Disconnect
           </button>
         </div>
       </div>

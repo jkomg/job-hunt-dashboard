@@ -15,7 +15,7 @@ function emptyForm(defaults = {}) {
   return {
     Company: '', 'Job Title': '', Date: '', Round: '', Format: '',
     Interviewer: '', 'Questions Asked': '', Outcome: 'Pending',
-    'Feedback Received': '', 'Follow-Up Sent': false, Notes: '',
+    'Feedback Received': '', 'Follow-Up Sent': false, Notes: '', 'Next Action': '', 'Next Action Date': '',
     ...defaults
   }
 }
@@ -34,6 +34,10 @@ function InterviewForm({ form, set }) {
       </div>
       <div className="field"><label>Questions Asked</label><textarea value={form['Questions Asked']} onChange={e => set('Questions Asked', e.target.value)} placeholder="Questions asked during the interview — useful for future prep" style={{ minHeight: 80 }} /></div>
       <div className="field"><label>Feedback Received</label><textarea value={form['Feedback Received']} onChange={e => set('Feedback Received', e.target.value)} placeholder="Any feedback from the interviewer or recruiter" /></div>
+      <div className="checkin-grid">
+        <div className="field"><label>Next Action</label><input value={form['Next Action']} onChange={e => set('Next Action', e.target.value)} placeholder="Thank-you note, prep, follow-up, etc." /></div>
+        <div className="field"><label>Next Action Date</label><input type="date" value={form['Next Action Date']} onChange={e => set('Next Action Date', e.target.value)} /></div>
+      </div>
       <div className="field"><label>Notes</label><textarea value={form.Notes} onChange={e => set('Notes', e.target.value)} /></div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
         <input type="checkbox" id="followup-sent" checked={!!form['Follow-Up Sent']} onChange={e => set('Follow-Up Sent', e.target.checked)} style={{ width: 16, height: 16, margin: 0, appearance: 'auto', flexShrink: 0 }} />
@@ -97,7 +101,9 @@ function EditModal({ interview, onClose, onUpdate }) {
     'Questions Asked': interview['Questions Asked'] || '',
     'Feedback Received': interview['Feedback Received'] || '',
     'Follow-Up Sent': interview['Follow-Up Sent'] || false,
-    Notes: interview.Notes || ''
+    Notes: interview.Notes || '',
+    'Next Action': interview['Next Action'] || '',
+    'Next Action Date': interview['Next Action Date'] || ''
   }))
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -212,6 +218,11 @@ export default function Interviews() {
                 <div className="contact-meta">
                   {[i['Job Title'], i.Round, i.Format].filter(Boolean).join(' · ')}
                 </div>
+                {i['Next Action'] && (
+                  <div className="contact-meta">
+                    Next: {i['Next Action']}{i['Next Action Date'] ? ` (${i['Next Action Date']})` : ''}
+                  </div>
+                )}
               </div>
               <div className="contact-actions">
                 {i.Date && <span className="text-muted text-sm">{i.Date}</span>}

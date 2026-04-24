@@ -41,7 +41,8 @@ function emptyForm(defaults = {}) {
     'Job Source': '', 'Job URL': '', 'Salary Range': '', 'Date Applied': '', 'Follow-Up Date': '',
     'Contact Name': '', 'Contact Title': '', 'Outreach Method': '', 'Resume Version': '',
     'Company Address': '', 'Company Phone': '', Notes: '', 'Research Notes': '',
-    'Filed for Unemployment': false, Outcome: '', 'Resume URL': '', 'Work Location': '',
+    'Filed for Unemployment': false, Outcome: '', 'Resume URL': '', 'Cover Letter': '', 'Work Location': '',
+    'Next Action': '', 'Next Action Date': '',
     ...defaults
   }
 }
@@ -73,7 +74,10 @@ function PipelineForm({ form, set }) {
         <div className="field"><label>Outreach Method</label><select value={form['Outreach Method']} onChange={e => set('Outreach Method', e.target.value)}><option value="">—</option>{OUTREACH_METHODS.map(o => <option key={o}>{o}</option>)}</select></div>
         <div className="field"><label>Resume Version</label><select value={form['Resume Version']} onChange={e => set('Resume Version', e.target.value)}><option value="">—</option>{RESUME_VERSIONS.map(v => <option key={v}>{v}</option>)}</select></div>
         {form['Resume Version'] === 'Tailored' && (
-          <div className="field"><label>Resume URL</label><input value={form['Resume URL']} onChange={e => set('Resume URL', e.target.value)} placeholder="https://docs.google.com/…" /></div>
+          <>
+            <div className="field"><label>Resume URL</label><input value={form['Resume URL']} onChange={e => set('Resume URL', e.target.value)} placeholder="https://docs.google.com/…" /></div>
+            <div className="field"><label>Cover Letter</label><input value={form['Cover Letter']} onChange={e => set('Cover Letter', e.target.value)} placeholder="https://docs.google.com/… or notes" /></div>
+          </>
         )}
         <div className="field"><label>Company Address</label><input value={form['Company Address']} onChange={e => set('Company Address', e.target.value)} placeholder="123 Main St, City, ST" /></div>
         <div className="field"><label>Company Phone</label><input type="tel" value={form['Company Phone']} onChange={e => set('Company Phone', e.target.value)} placeholder="(555) 555-5555" /></div>
@@ -81,6 +85,10 @@ function PipelineForm({ form, set }) {
       <div className="field"><label>Job URL</label><input value={form['Job URL']} onChange={e => set('Job URL', e.target.value)} placeholder="https://…" /></div>
       <div className="field"><label>Notes</label><textarea value={form.Notes} onChange={e => set('Notes', e.target.value)} /></div>
       <div className="field"><label>Research Notes</label><textarea value={form['Research Notes']} onChange={e => set('Research Notes', e.target.value)} placeholder="Company background, culture, products, interview prep…" /></div>
+      <div className="checkin-grid">
+        <div className="field"><label>Next Action</label><input value={form['Next Action']} onChange={e => set('Next Action', e.target.value)} placeholder="What should happen next for this job?" /></div>
+        <div className="field"><label>Next Action Date</label><input type="date" value={form['Next Action Date']} onChange={e => set('Next Action Date', e.target.value)} /></div>
+      </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
         <input type="checkbox" id="filed-ue" checked={!!form['Filed for Unemployment']} onChange={e => set('Filed for Unemployment', e.target.checked)} style={{ width: 16, height: 16, margin: 0, appearance: 'auto', flexShrink: 0 }} />
         <label htmlFor="filed-ue" style={{ fontSize: 13, color: 'var(--text)', cursor: 'pointer', margin: 0 }}>Filed for Unemployment</label>
@@ -163,7 +171,10 @@ function CardModal({ card, onClose, onUpdate }) {
     'Filed for Unemployment': card['Filed for Unemployment'] || false,
     Outcome: card.Outcome || '',
     'Resume URL': card['Resume URL'] || '',
-    'Work Location': card['Work Location'] || ''
+    'Cover Letter': card['Cover Letter'] || '',
+    'Work Location': card['Work Location'] || '',
+    'Next Action': card['Next Action'] || '',
+    'Next Action Date': card['Next Action Date'] || ''
   }))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -209,7 +220,7 @@ function CardModal({ card, onClose, onUpdate }) {
   )
 }
 
-export default function Pipeline() {
+export default function Pipeline({ navIntent }) {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState(null)
@@ -226,6 +237,18 @@ export default function Pipeline() {
   }
 
   useEffect(load, [])
+
+  useEffect(() => {
+    if (!navIntent) return
+    if (navIntent.mode === 'due_followups') setFilter('due_followups')
+    if (navIntent.mode === 'stale_actions') setFilter('stale_actions')
+  }, [navIntent])
+
+  useEffect(() => {
+    if (!navIntent?.focusId) return
+    const hit = items.find(i => i.id === navIntent.focusId)
+    if (hit) setSelected(hit)
+  }, [navIntent, items])
 
   function handleUpdate(id, updatedFields) {
     setItems(prev => prev.map(item => item.id === id ? { ...item, ...updatedFields } : item))
@@ -268,8 +291,22 @@ export default function Pipeline() {
 
   // ─── Render ──────────────────────────────────────────
 
+  const today = new Date().toISOString().slice(0, 10)
+  const isDueFollowup = (i) => {
+    const due = String(i['Follow-Up Date'] || '').trim()
+    if (!due) return false
+    if (i.Stage?.includes('Closed')) return false
+    return due <= today
+  }
+  const isStaleAction = (i) => {
+    if (i.Stage?.includes('Closed')) return false
+    return !String(i['Next Action'] || '').trim() || !String(i['Next Action Date'] || '').trim()
+  }
+
   const visible = filter === 'all' ? items
     : filter === 'active' ? items.filter(i => !i.Stage?.includes('Closed'))
+    : filter === 'due_followups' ? items.filter(isDueFollowup)
+    : filter === 'stale_actions' ? items.filter(isStaleAction)
     : items.filter(i => i.Stage === filter)
 
   const byStage = STAGES.reduce((acc, s) => {
@@ -298,6 +335,8 @@ export default function Pipeline() {
       <div className="tabs">
         <button className={`tab${filter === 'active' ? ' active' : ''}`} onClick={() => setFilter('active')}>Active</button>
         <button className={`tab${filter === 'all' ? ' active' : ''}`} onClick={() => setFilter('all')}>All</button>
+        <button className={`tab${filter === 'due_followups' ? ' active' : ''}`} onClick={() => setFilter('due_followups')}>Due Follow-ups</button>
+        <button className={`tab${filter === 'stale_actions' ? ' active' : ''}`} onClick={() => setFilter('stale_actions')}>Missing Next Action</button>
         {['💬 In Conversation', '📞 Interview Scheduled', '🎯 Interviewing'].map(s => (
           <button key={s} className={`tab${filter === s ? ' active' : ''}`} onClick={() => setFilter(s)}>{s}</button>
         ))}
@@ -347,6 +386,12 @@ export default function Pipeline() {
                   >
                     <div className="kanban-card-company">{card.Company}</div>
                     {card.Role && <div className="kanban-card-role">{card.Role}</div>}
+                    {card['Next Action'] && (
+                      <div className="kanban-card-role" style={{ color: 'var(--text)', marginBottom: 6 }}>
+                        Next: {card['Next Action']}
+                        {card['Next Action Date'] ? ` (${card['Next Action Date']})` : ''}
+                      </div>
+                    )}
                     <div className="kanban-card-meta">
                       {card.Priority && <span className={`badge ${priorityColor(card.Priority)}`} style={{ fontSize: 10 }}>{card.Priority}</span>}
                       {card['Follow-Up Date'] && <span className="text-muted text-sm">↩ {card['Follow-Up Date']}</span>}
@@ -355,6 +400,9 @@ export default function Pipeline() {
                       {card['Work Location'] && <span className={`badge ${card['Work Location'].startsWith('Remote') ? 'badge-green' : 'badge-gray'}`} style={{ fontSize: 10 }}>{card['Work Location']}</span>}
                       {card['Resume Version'] === 'Tailored' && card['Resume URL'] && (
                         <a href={card['Resume URL']} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ fontSize: 11, color: 'var(--accent)', textDecoration: 'none' }} title="View tailored resume">📄 Resume</a>
+                      )}
+                      {card['Resume Version'] === 'Tailored' && card['Cover Letter'] && (
+                        <span style={{ fontSize: 11, color: 'var(--text-muted)' }} title={card['Cover Letter']}>✉️ Cover Letter</span>
                       )}
                     </div>
                   </div>

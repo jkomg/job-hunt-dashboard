@@ -5,13 +5,45 @@ A free, self-hostable job search dashboard designed to be simple enough for non-
 ## What This App Does
 
 - Daily briefing: yesterday's Top 3, overdue follow-ups, active pipeline, weekly activity
+- Command-center Today Queue with reasoned priorities and one-click actions
 - Pipeline tracking with stages and follow-up dates
 - Networking tracker (contacts + follow-ups)
 - Interview tracker
 - Events tracker
 - Outreach templates and company watchlist
 - Daily check-in habit tracker
+- Next Action + Next Action Date fields across pipeline, contacts, and interviews
 - Optional Google Sheets bi-directional sync for team workflows
+
+## Command Center Workflow (Recommended)
+
+Use the app as a daily command center, not just a tracker.
+
+### The 6 Priorities Engine
+
+`Today Queue` is automatically ranked by these six priorities:
+
+1. Interview Readiness
+2. Follow-Ups Due
+3. Pipeline Momentum
+4. Networking Consistency
+5. Application Throughput
+6. Events & Market Presence
+
+Each queue item includes:
+- a clear reason (`Why now`)
+- one-click action button
+- mapped priority pillar
+
+### Daily Routine (fast)
+
+1. Open `Dashboard` and use `Focus Now` first (Interviews, Follow-ups, Stale items).
+2. Use `Top 3 Actions` for direct record-level links (opens the specific card when available).
+3. Open each item and set/update `Next Action` and `Next Action Date`.
+4. End day in `Daily Check-in` and use `Auto-fill from Today Queue` for tomorrow’s top 3.
+
+Tip:
+- If `System Health` shows stalled items, clear those first. Stalled items are records missing next action/date.
 
 ## Start Here: Easy Local Install (Recommended)
 
@@ -108,12 +140,18 @@ docker compose restart
 
 3. Run sync manually from app/API (`POST /api/sheets/sync`) or configure daily scheduler in cloud mode.
 
+Pipeline sync notes (Remote Rebellion template):
+- `Date Applied` in app writes to sheet `App Date`.
+- `Resume URL` and `Cover Letter` fields on pipeline cards sync to matching sheet columns.
+- Column `O` formula is maintained as `=TODAY()-I{row}` during pipeline outbound sync.
+
 ## Sync Troubleshooting (In-App)
 
 Use `Settings` in the app sidebar:
 - `Save Settings` to update sheet ID/tab mappings.
 - `Test Connection` to validate credentials, sharing, and tab names.
 - `Run Sync Now` to force a sync and see immediate result.
+- `Repair Interviews from Pipeline` to backfill missing interview entries from cards already in interview stages.
 
 Common errors and fixes:
 - `MISSING_SHEET_ID`: add Sheet URL/ID in Settings and save.
@@ -123,6 +161,37 @@ Common errors and fixes:
 - `TAB_NOT_FOUND`: fix tab names in Settings to match exact sheet tab titles.
 - `GOOGLE_API_DISABLED`: enable Google Sheets API in Google Cloud project.
 - `GOOGLE_TEMPORARY`: retry later (rate-limit/outage/timeout).
+
+## Optional: Import Events from Gmail
+
+This can pull interview/calendar invite emails into the `Events` section.
+
+### Configure once
+
+1. In Google Cloud Console, open `APIs & Services` -> `Credentials`.
+2. Create OAuth Client ID as `Web application`.
+3. Add authorized redirect URI:
+   - local Docker: `http://localhost:8080/api/gmail/oauth/callback`
+   - cloud domain: `https://hunt.jkomg.us/api/gmail/oauth/callback`
+4. Add to `.env`:
+
+```env
+GMAIL_OAUTH_CLIENT_ID=...
+GMAIL_OAUTH_CLIENT_SECRET=...
+GMAIL_OAUTH_REDIRECT_URI=...
+```
+
+5. Restart app (`docker compose restart` or redeploy Cloud Run).
+
+### Use it
+
+In `Settings`:
+- `Connect Gmail` (read-only scope)
+- `Import Events from Gmail`
+
+Notes:
+- Current importer prioritizes `.ics`/calendar invite emails for accuracy.
+- Imports are deduped, so reruns do not create duplicate events.
 
 ## Screenshot Plan
 
@@ -193,6 +262,7 @@ Requires optional `NOTION_*` vars in `.env`.
 
 - Additional scripts and usage notes: [scripts/README.md](./scripts/README.md)
 - Shareable one-page beginner guide: [docs/REMOTE_REBELLION_HANDOUT.md](./docs/REMOTE_REBELLION_HANDOUT.md)
+- Command center implementation roadmap: [docs/COMMAND_CENTER_ROADMAP.md](./docs/COMMAND_CENTER_ROADMAP.md)
 - Deployment helpers: `deploy.sh`, `setup-secrets.sh`, `scripts/setup-iap-lb.sh`, `scripts/setup-daily-sheets-sync.sh`
 
 ## License
