@@ -1562,10 +1562,20 @@ export async function getDashboardData() {
     getRecentLogs(8),
     getPipeline()
   ])
+  const today = new Date().toISOString().slice(0, 10)
 
   const activeItems = pipeline.filter(p =>
     ['💬 In Conversation', '📞 Interview Scheduled', '🎯 Interviewing'].includes(p.Stage)
   )
+  const duePipelineFollowUps = pipeline
+    .filter(p => {
+      const due = String(p['Follow-Up Date'] || '').trim()
+      const stage = String(p.Stage || '')
+      if (!due) return false
+      if (stage.includes('Closed')) return false
+      return due <= today
+    })
+    .sort((a, b) => String(a['Follow-Up Date']).localeCompare(String(b['Follow-Up Date'])))
 
   const weekStats = recentLogs.slice(0, 7).reduce((acc, log) => {
     acc.outreach += log['Outreach Sent'] || 0
@@ -1577,6 +1587,7 @@ export async function getDashboardData() {
 
   return {
     overdueContacts,
+    duePipelineFollowUps,
     recentLogs,
     activeItems,
     weekStats

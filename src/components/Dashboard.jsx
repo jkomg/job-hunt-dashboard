@@ -59,7 +59,7 @@ export default function Dashboard({ onNavigate, me }) {
   if (loading) return <div className="loading"><div className="spin" />Loading your briefing…</div>
   if (error) return <div className="error-msg">{error}</div>
 
-  const { overdueContacts, recentLogs, activeItems, weekStats } = data
+  const { overdueContacts, duePipelineFollowUps = [], recentLogs, activeItems, weekStats } = data
 
   // Find yesterday's entry using the browser's local timezone
   const yesterdayLabel = new Date(Date.now() - 864e5).toLocaleDateString('en-US', {
@@ -148,6 +148,32 @@ export default function Dashboard({ onNavigate, me }) {
               </button>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Due pipeline follow-ups */}
+      {duePipelineFollowUps.length > 0 && (
+        <div className="card mb-16" style={{ borderColor: 'var(--orange)' }}>
+          <div className="card-title" style={{ color: 'var(--orange)' }}>
+            🔁 Pipeline Follow-ups Due ({duePipelineFollowUps.length})
+          </div>
+          {duePipelineFollowUps.slice(0, 6).map(item => (
+            <div key={item.id} className="contact-row" style={{ padding: '10px 0' }}>
+              <div className="contact-info">
+                <div className="contact-name">{item.Company}</div>
+                <div className="contact-meta">{item.Role}</div>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+                <span className={`badge ${stageColor(item.Stage)}`} style={{ fontSize: 10 }}>{item.Stage}</span>
+                <span className="overdue-badge">Due {item['Follow-Up Date']}</span>
+              </div>
+            </div>
+          ))}
+          <div style={{ marginTop: 10 }}>
+            <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('pipeline')}>
+              Review in pipeline →
+            </button>
+          </div>
         </div>
       )}
 
