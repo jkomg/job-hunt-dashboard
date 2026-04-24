@@ -45,6 +45,7 @@ const PRIORITY_FRAMEWORK = [
 ]
 
 const BACKUP_TABLES = [
+  'schema_migrations',
   'app_settings',
   'daily_logs',
   'pipeline_entries',
@@ -137,6 +138,37 @@ async function ensureActionSchema() {
   }
 }
 
+async function listAppliedMigrations() {
+  const res = await db.execute('SELECT id FROM schema_migrations')
+  return new Set((res.rows || []).map(r => String(r.id)))
+}
+
+async function markMigrationApplied(id, description) {
+  await db.execute({
+    sql: `
+      INSERT INTO schema_migrations (id, description, applied_at)
+      VALUES (?, ?, ?)
+    `,
+    args: [String(id), String(description || ''), now()]
+  })
+}
+
+async function runMigrations() {
+  const applied = await listAppliedMigrations()
+  const migrations = [
+    { id: '2026-04-24-001-user-schema', description: 'users email/admin/password-change fields', up: ensureUserSchema },
+    { id: '2026-04-24-002-interview-schema', description: 'interview pipeline link + index', up: ensureInterviewSchema },
+    { id: '2026-04-24-003-event-schema', description: 'event source key + index', up: ensureEventSchema },
+    { id: '2026-04-24-004-action-schema', description: 'next action fields across entities', up: ensureActionSchema }
+  ]
+
+  for (const migration of migrations) {
+    if (applied.has(migration.id)) continue
+    await migration.up()
+    await markMigrationApplied(migration.id, migration.description)
+  }
+}
+
 function toUser(row) {
   if (!row) return null
   return {
@@ -165,6 +197,13 @@ export async function initDb() {
         token TEXT PRIMARY KEY,
         user_id INTEGER NOT NULL,
         created_at INTEGER NOT NULL
+      )
+    `,
+    `
+      CREATE TABLE IF NOT EXISTS schema_migrations (
+        id TEXT PRIMARY KEY,
+        description TEXT,
+        applied_at INTEGER NOT NULL
       )
     `,
     `
@@ -348,10 +387,7 @@ export async function initDb() {
     `
   ])
 
-  await ensureUserSchema()
-  await ensureInterviewSchema()
-  await ensureEventSchema()
-  await ensureActionSchema()
+  await runMigrations()
 
   const seedUsername = String(process.env.DEFAULT_USERNAME || 'jason').trim().toLowerCase() || 'jason'
   const userCountRes = await db.execute('SELECT COUNT(*) AS count FROM users')
@@ -790,6 +826,17 @@ export async function getRecentSheetSyncRuns(limit = 20) {
   })
 
   return toPlainRows(res)
+}
+
+export async function getLocalDataLastUpdatedAt() {
+  const tables = ['daily_logs', 'pipeline_entries', 'contacts', 'interviews', 'events', 'templates', 'watchlist']
+  let latest = 0
+  for (const table of tables) {
+    const res = await db.execute(`SELECT MAX(updated_at) AS max_ts FROM ${table}`)
+    const value = Number(firstRow(res)?.max_ts || 0)
+    if (value > latest) latest = value
+  }
+  return latest > 0 ? new Date(latest).toISOString() : null
 }
 
 export async function getAppSetting(key) {

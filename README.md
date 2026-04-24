@@ -151,6 +151,9 @@ Use `Settings` in the app sidebar:
 - `Save Settings` to update sheet ID/tab mappings.
 - `Test Connection` to validate credentials, sharing, and tab names.
 - `Run Sync Now` to force a sync and see immediate result.
+- `Sync Health` now shows both `Last saved locally` and `Last synced to Google`.
+- `Sync Details` shows per-entity outcomes (pipeline/networking/interviews/events), including conflict counts.
+- `Download Sync Logs (CSV)` exports recent sync history for troubleshooting/support.
 - `Repair Interviews from Pipeline` to backfill missing interview entries from cards already in interview stages.
 
 Common errors and fixes:

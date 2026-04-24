@@ -25,6 +25,34 @@ function timeAgo(iso) {
   return `${day}d ago`
 }
 
+function formatDateTime(iso) {
+  if (!iso) return 'Never'
+  const ts = new Date(iso)
+  if (!Number.isFinite(ts.getTime())) return String(iso)
+  return `${ts.toLocaleString()} (${timeAgo(iso)})`
+}
+
+function describeRun(run) {
+  if (!run?.summary) return 'No summary yet.'
+  const summary = run.summary
+  const merged = (summary && typeof summary === 'object' && (summary.inbound || summary.outbound))
+    ? {
+      ...(summary.inbound || {}),
+      ...(summary.outbound || {})
+    }
+    : summary
+  const parts = []
+  if (Number.isFinite(Number(merged.updatedRows))) parts.push(`${merged.updatedRows} updated`)
+  if (Number.isFinite(Number(merged.imported))) parts.push(`${merged.imported} imported`)
+  if (Number.isFinite(Number(merged.linkedExisting))) parts.push(`${merged.linkedExisting} linked`)
+  if (Number.isFinite(Number(merged.skippedUnchanged))) parts.push(`${merged.skippedUnchanged} skipped`)
+  if (Number.isFinite(Number(merged.conflicts)) && Number(merged.conflicts) > 0) parts.push(`${merged.conflicts} conflicts`)
+  if (Number.isFinite(Number(merged.missingLinkedRecords)) && Number(merged.missingLinkedRecords) > 0) {
+    parts.push(`${merged.missingLinkedRecords} missing`)
+  }
+  return parts.length ? parts.join(' • ') : 'No summary details.'
+}
+
 async function api(path, options = {}) {
   const res = await fetch(path, { credentials: 'include', ...options })
   let data = null
@@ -86,6 +114,7 @@ export default function Settings({ me, onProfileUpdated }) {
   const [contactsTabsText, setContactsTabsText] = useState('Networking Tracker')
   const [interviewsTabsText, setInterviewsTabsText] = useState('Interview Tracker')
   const [eventsTabsText, setEventsTabsText] = useState('Events')
+  const [downloadingLogs, setDownloadingLogs] = useState(false)
 
   const healthState = status?.health?.status || 'unknown'
   const healthColor = useMemo(() => {
@@ -198,18 +227,53 @@ export default function Settings({ me, onProfileUpdated }) {
     setSuccess('')
     try {
       const result = await api('/api/sheets/sync', { method: 'POST' })
-      const created = Number(result?.interviewBackfill?.created || 0)
-      if (created > 0) {
-        setSuccess(`Sync completed. Backfilled ${created} interview entr${created === 1 ? 'y' : 'ies'} from Pipeline.`)
-      } else {
-        setSuccess('Sync completed successfully.')
-      }
+      const conflicts = Number(result?.pipeline?.outbound?.conflicts || 0)
+        + Number(result?.contacts?.conflicts || 0)
+        + Number(result?.interviews?.conflicts || 0)
+        + Number(result?.events?.conflicts || 0)
+      setSuccess(
+        conflicts > 0
+          ? `Sync completed with ${conflicts} conflict${conflicts === 1 ? '' : 's'} (skipped to avoid overwrites).`
+          : 'Sync completed successfully.'
+      )
       await load()
     } catch (e) {
       setError(e.payload || { error: e.message })
       await load()
     } finally {
       setSyncing(false)
+    }
+  }
+
+  async function downloadSyncLogs() {
+    setDownloadingLogs(true)
+    setError(null)
+    setSuccess('')
+    try {
+      const res = await fetch('/api/sheets/sync/logs.csv', { credentials: 'include' })
+      if (!res.ok) {
+        let payload = null
+        try {
+          payload = await res.json()
+        } catch {
+          payload = null
+        }
+        throw new Error(payload?.error || `Download failed (${res.status})`)
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `sync-logs-${new Date().toISOString().slice(0, 10)}.csv`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+      setSuccess('Sync logs downloaded.')
+    } catch (e) {
+      setError({ error: e.message || 'Could not download sync logs' })
+    } finally {
+      setDownloadingLogs(false)
     }
   }
 
@@ -370,16 +434,52 @@ export default function Settings({ me, onProfileUpdated }) {
           </strong>
         </div>
         <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-          Last success: {status?.health?.lastSuccessAt ? `${new Date(status.health.lastSuccessAt).toLocaleString()} (${timeAgo(status.health.lastSuccessAt)})` : 'Never'}
+          Last success: {formatDateTime(status?.health?.lastSuccessAt)}
         </div>
         <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-          Last error: {status?.health?.lastErrorAt ? `${new Date(status.health.lastErrorAt).toLocaleString()} (${timeAgo(status.health.lastErrorAt)})` : 'None'}
+          Last error: {status?.health?.lastErrorAt ? formatDateTime(status.health.lastErrorAt) : 'None'}
+        </div>
+        <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>
+          Last saved locally: {formatDateTime(status?.freshness?.localLastSavedAt)}
+        </div>
+        <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+          Last synced to Google: {formatDateTime(status?.freshness?.googleLastSyncedAt)}
         </div>
         {status?.health?.lastError?.details && (
           <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-muted)' }}>
             Last error detail: {status.health.lastError.details}
           </div>
         )}
+      </div>
+
+      <div className="card mb-16">
+        <div className="card-title">Sync Details</div>
+        {[
+          ['Pipeline', status?.entities?.pipeline],
+          ['Networking', status?.entities?.contacts],
+          ['Interviews', status?.entities?.interviews],
+          ['Events', status?.entities?.events]
+        ].map(([label, run]) => (
+          <div key={label} className="contact-row" style={{ padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
+            <div className="contact-info">
+              <div className="contact-name">{label}</div>
+              <div className="contact-meta">{run?.createdAt ? formatDateTime(run.createdAt) : 'No sync run yet'}</div>
+            </div>
+            <div style={{ textAlign: 'right', maxWidth: 360 }}>
+              <span className={`badge ${run?.status === 'ok' ? 'badge-green' : run?.status === 'error' ? 'badge-red' : ''}`}>
+                {run?.status || 'unknown'}
+              </span>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
+                {describeRun(run)}
+              </div>
+            </div>
+          </div>
+        ))}
+        <div className="quick-actions" style={{ marginTop: 12 }}>
+          <button className="btn btn-ghost" onClick={downloadSyncLogs} disabled={downloadingLogs}>
+            {downloadingLogs ? 'Downloading…' : 'Download Sync Logs (CSV)'}
+          </button>
+        </div>
       </div>
 
       <div className="card mb-16">
