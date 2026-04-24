@@ -1,13 +1,31 @@
 #!/usr/bin/env node
 import { spawn } from 'child_process'
 import { mkdtemp, rm } from 'fs/promises'
+import net from 'net'
 import os from 'os'
 import path from 'path'
 
 const TEST_USERNAME = 'smoke'
 const DEFAULT_PASSWORD = 'jobhunt2026'
 const NEXT_PASSWORD = 'smoke-password-2026!'
-const PORT = 4300 + Math.floor(Math.random() * 200)
+
+async function reserveAvailablePort() {
+  return await new Promise((resolve, reject) => {
+    const srv = net.createServer()
+    srv.once('error', reject)
+    srv.listen(0, '127.0.0.1', () => {
+      const addr = srv.address()
+      const port = (addr && typeof addr === 'object') ? addr.port : null
+      srv.close(err => {
+        if (err) return reject(err)
+        if (!port) return reject(new Error('Could not reserve local port'))
+        resolve(port)
+      })
+    })
+  })
+}
+
+const PORT = await reserveAvailablePort()
 
 const tempDir = await mkdtemp(path.join(os.tmpdir(), 'job-hunt-smoke-'))
 const dbPath = path.join(tempDir, 'app.db')
@@ -16,6 +34,7 @@ const baseUrl = `http://127.0.0.1:${PORT}`
 let server = null
 let stdoutBuf = ''
 let stderrBuf = ''
+let serverClosed = null
 
 function note(msg) {
   process.stdout.write(`[smoke] ${msg}\n`)
@@ -102,6 +121,9 @@ async function api(pathname, { method = 'GET', body, allowStatuses = [200] } = {
 async function waitForServerReady(timeoutMs = 25000) {
   const started = Date.now()
   while (Date.now() - started < timeoutMs) {
+    if (serverClosed) {
+      throw new Error(`Server exited before becoming healthy (code=${serverClosed.code ?? 'null'}, signal=${serverClosed.signal ?? 'null'})`)
+    }
     try {
       const res = await fetch(`${baseUrl}/api/health`)
       if (res.ok) return
@@ -131,6 +153,7 @@ async function run() {
 
   server.stdout.on('data', d => { stdoutBuf = appendLog(stdoutBuf, d) })
   server.stderr.on('data', d => { stderrBuf = appendLog(stderrBuf, d) })
+  server.on('close', (code, signal) => { serverClosed = { code, signal } })
 
   await waitForServerReady()
   note('Server is healthy')
