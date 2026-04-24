@@ -19,7 +19,7 @@ Work order:
 - [ ] Add optional scheduled backup export job for cloud deploys
 - [ ] Add database file export option (`.db`) in admin tools
 - [ ] Add end-to-end smoke tests: install, login, save check-in, sync
-- [ ] Add versioned DB migration tracking table and migration runner
+- [x] Add versioned DB migration tracking table and migration runner
 
 ## 2) Onboarding + UX (must-have)
 
@@ -31,10 +31,10 @@ Work order:
 
 ## 3) Data Trust + Sync Confidence (must-have)
 
-- [ ] Show “last saved locally” and “last synced to Google” separately in all entities
+- [x] Show “last saved locally” and “last synced to Google” separately in Settings
 - [ ] Add per-entity sync results summary card in dashboard
-- [ ] Add conflict indicators before overwrite (local vs sheet changed)
-- [ ] Add downloadable sync logs for support and troubleshooting
+- [x] Add conflict-safe sync behavior before overwrite (local + sheet changed rows are skipped)
+- [x] Add downloadable sync logs for support and troubleshooting
 
 ## 4) Security + Safety (must-have if public)
 

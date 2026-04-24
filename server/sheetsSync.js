@@ -553,6 +553,13 @@ function colToA1(colNum) {
   return out
 }
 
+function hasSyncConflict({ lastInboundHash, currentInboundHash, lastOutboundHash, nextOutboundHash }) {
+  if (!lastInboundHash || !currentInboundHash || !lastOutboundHash || !nextOutboundHash) return false
+  const sheetChanged = currentInboundHash !== lastInboundHash
+  const localChanged = nextOutboundHash !== lastOutboundHash
+  return sheetChanged && localChanged
+}
+
 function patchOutboundValues(headers, rowValues, pipelineItem) {
   const headerIndex = buildHeaderIndex(headers)
   const out = [...rowValues]
@@ -673,13 +680,14 @@ async function runOutboundSync({ sheets, spreadsheetId, tabs }) {
   const summary = {
     updatedRows: 0,
     skippedUnchanged: 0,
+    conflicts: 0,
     missingLinkedRecords: 0,
     tabs: {}
   }
 
   for (const tab of tabs) {
     const tabLinks = links.filter(link => link.tab_name === tab)
-    if (!summary.tabs[tab]) summary.tabs[tab] = { updated: 0, skipped: 0, missing: 0 }
+    if (!summary.tabs[tab]) summary.tabs[tab] = { updated: 0, skipped: 0, conflicts: 0, missing: 0 }
     if (!tabLinks.length) continue
 
     const { headers, rows } = await readTabRows(sheets, spreadsheetId, tab)
@@ -709,6 +717,22 @@ async function runOutboundSync({ sheets, spreadsheetId, tabs }) {
         coverLetter: item['Cover Letter'] || null
       }
       const outboundHash = hashObject(outboundFingerprint)
+
+      const currentRowObj = toRowObject(headers, currentRow)
+      const currentInboundPayload = pickInboundFields(tab, currentRowObj)
+      const currentInboundHash = currentInboundPayload
+        ? hashObject({ payload: currentInboundPayload, tab, rowNumber: link.row_number })
+        : null
+      if (hasSyncConflict({
+        lastInboundHash: link.last_inbound_hash,
+        currentInboundHash,
+        lastOutboundHash: link.last_outbound_hash,
+        nextOutboundHash: outboundHash
+      })) {
+        summary.conflicts++
+        summary.tabs[tab].conflicts++
+        continue
+      }
 
       if (link.last_outbound_hash === outboundHash) {
         summary.skippedUnchanged++
@@ -798,11 +822,11 @@ async function runContactsSync({ sheets, spreadsheetId, tabs }) {
   const latestContacts = await getContacts()
   const byId = new Map(latestContacts.map(item => [item.id, item]))
   const latestLinks = await getEntitySheetSyncLinks(spreadsheetId, 'contacts')
-  const outbound = { updatedRows: 0, skippedUnchanged: 0, missingLinkedRecords: 0, tabs: {} }
+  const outbound = { updatedRows: 0, skippedUnchanged: 0, conflicts: 0, missingLinkedRecords: 0, tabs: {} }
 
   for (const tab of tabs) {
     const tabLinks = latestLinks.filter(link => link.tab_name === tab)
-    outbound.tabs[tab] = { updated: 0, skipped: 0, missing: 0 }
+    outbound.tabs[tab] = { updated: 0, skipped: 0, conflicts: 0, missing: 0 }
     if (!tabLinks.length) continue
 
     const { headers, rows } = await readTabRows(sheets, spreadsheetId, tab)
@@ -823,6 +847,22 @@ async function runContactsSync({ sheets, spreadsheetId, tabs }) {
         nextFollowUp: item['Next Follow-Up'] || null,
         notes: item.Notes || null
       })
+
+      const currentRowObj = toRowObject(headers, currentRow)
+      const currentInboundPayload = pickInboundContactFields(currentRowObj)
+      const currentInboundHash = currentInboundPayload
+        ? hashObject({ payload: currentInboundPayload, tab, rowNumber: link.row_number, entity: 'contacts' })
+        : null
+      if (hasSyncConflict({
+        lastInboundHash: link.last_inbound_hash,
+        currentInboundHash,
+        lastOutboundHash: link.last_outbound_hash,
+        nextOutboundHash: outboundHash
+      })) {
+        outbound.conflicts++
+        outbound.tabs[tab].conflicts++
+        continue
+      }
       if (link.last_outbound_hash === outboundHash) {
         outbound.skippedUnchanged++; outbound.tabs[tab].skipped++; continue
       }
@@ -898,11 +938,11 @@ async function runInterviewsSync({ sheets, spreadsheetId, tabs }) {
   const latestInterviews = await getInterviews()
   const byId = new Map(latestInterviews.map(item => [item.id, item]))
   const latestLinks = await getEntitySheetSyncLinks(spreadsheetId, 'interviews')
-  const outbound = { updatedRows: 0, skippedUnchanged: 0, missingLinkedRecords: 0, tabs: {} }
+  const outbound = { updatedRows: 0, skippedUnchanged: 0, conflicts: 0, missingLinkedRecords: 0, tabs: {} }
 
   for (const tab of tabs) {
     const tabLinks = latestLinks.filter(link => link.tab_name === tab)
-    outbound.tabs[tab] = { updated: 0, skipped: 0, missing: 0 }
+    outbound.tabs[tab] = { updated: 0, skipped: 0, conflicts: 0, missing: 0 }
     if (!tabLinks.length) continue
 
     const { headers, rows } = await readTabRows(sheets, spreadsheetId, tab)
@@ -925,6 +965,21 @@ async function runInterviewsSync({ sheets, spreadsheetId, tabs }) {
         followUpSent: !!item['Follow-Up Sent'],
         notes: item.Notes || null
       })
+      const currentRowObj = toRowObject(headers, currentRow)
+      const currentInboundPayload = pickInboundInterviewFields(currentRowObj)
+      const currentInboundHash = currentInboundPayload
+        ? hashObject({ payload: currentInboundPayload, tab, rowNumber: link.row_number, entity: 'interviews' })
+        : null
+      if (hasSyncConflict({
+        lastInboundHash: link.last_inbound_hash,
+        currentInboundHash,
+        lastOutboundHash: link.last_outbound_hash,
+        nextOutboundHash: outboundHash
+      })) {
+        outbound.conflicts++
+        outbound.tabs[tab].conflicts++
+        continue
+      }
       if (link.last_outbound_hash === outboundHash) {
         outbound.skippedUnchanged++; outbound.tabs[tab].skipped++; continue
       }
@@ -1000,11 +1055,11 @@ async function runEventsSync({ sheets, spreadsheetId, tabs }) {
   const latestEvents = await getEvents()
   const byId = new Map(latestEvents.map(item => [item.id, item]))
   const latestLinks = await getEntitySheetSyncLinks(spreadsheetId, 'events')
-  const outbound = { updatedRows: 0, skippedUnchanged: 0, missingLinkedRecords: 0, tabs: {} }
+  const outbound = { updatedRows: 0, skippedUnchanged: 0, conflicts: 0, missingLinkedRecords: 0, tabs: {} }
 
   for (const tab of tabs) {
     const tabLinks = latestLinks.filter(link => link.tab_name === tab)
-    outbound.tabs[tab] = { updated: 0, skipped: 0, missing: 0 }
+    outbound.tabs[tab] = { updated: 0, skipped: 0, conflicts: 0, missing: 0 }
     if (!tabLinks.length) continue
 
     const { headers, rows } = await readTabRows(sheets, spreadsheetId, tab)
@@ -1025,6 +1080,21 @@ async function runEventsSync({ sheets, spreadsheetId, tabs }) {
         registrationLink: item['Registration Link'] || null,
         notes: item.Notes || null
       })
+      const currentRowObj = toRowObject(headers, currentRow)
+      const currentInboundPayload = pickInboundEventFields(currentRowObj)
+      const currentInboundHash = currentInboundPayload
+        ? hashObject({ payload: currentInboundPayload, tab, rowNumber: link.row_number, entity: 'events' })
+        : null
+      if (hasSyncConflict({
+        lastInboundHash: link.last_inbound_hash,
+        currentInboundHash,
+        lastOutboundHash: link.last_outbound_hash,
+        nextOutboundHash: outboundHash
+      })) {
+        outbound.conflicts++
+        outbound.tabs[tab].conflicts++
+        continue
+      }
       if (link.last_outbound_hash === outboundHash) {
         outbound.skippedUnchanged++; outbound.tabs[tab].skipped++; continue
       }

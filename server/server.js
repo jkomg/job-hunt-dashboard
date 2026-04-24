@@ -11,7 +11,7 @@ import { fileURLToPath } from 'url'
 import {
   initDb,
   getUserByUsername, getUserByEmail, getUserById,
-  createSession, getSession, deleteSession, updatePassword, getRecentSheetSyncRuns,
+  createSession, getSession, deleteSession, updatePassword, getRecentSheetSyncRuns, getLocalDataLastUpdatedAt,
   getAppSetting, getAppSettings, setAppSetting, exportBackupSnapshot, restoreBackupSnapshot,
   getDashboardData,
   getContacts, markContacted, updateContactStatus, createContact, updateContact,
@@ -232,6 +232,12 @@ function formatSyncRun(row) {
     summary,
     errorText: row.error_text || null
   }
+}
+
+function csvEscape(value) {
+  const raw = value == null ? '' : String(value)
+  if (!/[",\n]/.test(raw)) return raw
+  return `"${raw.replace(/"/g, '""')}"`
 }
 
 app.use(express.json())
@@ -851,10 +857,31 @@ app.get('/api/sheets/status', requireAuth, async (_req, res) => {
     const latestSuccess = latestRun?.status === 'ok' ? latestRun : null
     const latestError = latestRun?.status === 'error' ? latestRun : null
     const hasConfigIssue = config?.ok === false
+    const localLastSavedAt = await getLocalDataLastUpdatedAt()
+    const googleLastSyncedAt = formattedRuns.find(run => run.status === 'ok')?.createdAt || null
+    const summaryByDirection = {}
+    for (const run of formattedRuns) {
+      if (summaryByDirection[run.direction]) continue
+      summaryByDirection[run.direction] = {
+        status: run.status,
+        createdAt: run.createdAt,
+        summary: run.summary || null
+      }
+    }
 
     res.json({
       ok: true,
       config,
+      freshness: {
+        localLastSavedAt,
+        googleLastSyncedAt
+      },
+      entities: {
+        pipeline: summaryByDirection.outbound || null,
+        contacts: summaryByDirection.contacts || null,
+        interviews: summaryByDirection.interviews || null,
+        events: summaryByDirection.events || null
+      },
       health: {
         status: (hasConfigIssue || latestError) ? 'needs_attention' : 'healthy',
         lastSuccessAt: latestSuccess?.createdAt || null,
@@ -869,6 +896,40 @@ app.get('/api/sheets/status', requireAuth, async (_req, res) => {
   } catch (e) {
     console.error('sheets.status failed', e)
     res.status(500).json({ error: 'Could not load sync status' })
+  }
+})
+
+app.get('/api/sheets/sync/logs.csv', requireAuth, async (_req, res) => {
+  try {
+    const runs = await getRecentSheetSyncRuns(200)
+    const rows = runs.map(row => {
+      const createdAtIso = new Date(Number(row.created_at)).toISOString()
+      let summary = ''
+      try {
+        summary = row.summary_json ? JSON.stringify(JSON.parse(String(row.summary_json))) : ''
+      } catch {
+        summary = row.summary_json ? String(row.summary_json) : ''
+      }
+      return [
+        row.id,
+        row.direction,
+        row.status,
+        createdAtIso,
+        row.error_text || '',
+        summary
+      ].map(csvEscape).join(',')
+    })
+    const csv = [
+      ['id', 'direction', 'status', 'createdAt', 'errorText', 'summaryJson'].join(','),
+      ...rows
+    ].join('\n')
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8')
+    res.setHeader('Content-Disposition', `attachment; filename=\"sync-logs-${new Date().toISOString().slice(0, 10)}.csv\"`)
+    res.send(csv)
+  } catch (e) {
+    console.error('sheets.sync.logs.csv failed', e)
+    res.status(500).json({ error: 'Could not export sync logs' })
   }
 })
 
