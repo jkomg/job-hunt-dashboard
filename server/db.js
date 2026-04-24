@@ -397,7 +397,7 @@ export async function initDb() {
     const hash = bcrypt.hashSync('jobhunt2026', 10)
     await db.execute({
       sql: 'INSERT INTO users (username, password_hash, is_admin, must_change_password) VALUES (?, ?, ?, ?)',
-      args: [seedUsername, hash, 1, 0]
+      args: [seedUsername, hash, 1, 1]
     })
     console.log(`Default user created: ${seedUsername} / jobhunt2026`)
   }

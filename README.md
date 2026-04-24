@@ -73,6 +73,7 @@ Default login (session mode):
 
 - username: whatever you chose during setup (default is `jason`)
 - password: `jobhunt2026`
+- first sign-in requires you to change the default password
 - first login opens a quick setup wizard to set:
   - dashboard display name
   - username (local sign-in)
@@ -98,6 +99,7 @@ Default login (session mode):
 
 - username: whatever you chose during setup (default is `jason`)
 - password: `jobhunt2026`
+- first sign-in requires you to change the default password
 - first login opens a quick setup wizard to set:
   - dashboard display name
   - username (local sign-in)
@@ -225,6 +227,10 @@ Admin users can use in-app `Settings`:
 Recommended:
 - export a backup before major upgrades
 - keep at least one weekly backup copy
+
+## Security Checklist (Self-Hosters)
+
+Before exposing the app publicly, follow [docs/SECURITY_CHECKLIST.md](./docs/SECURITY_CHECKLIST.md).
 
 ## Alternative Install Paths
 

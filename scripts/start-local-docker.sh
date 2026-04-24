@@ -156,4 +156,5 @@ echo
 echo "Job Hunt Dashboard is starting in Docker mode."
 echo "Open: http://localhost:8080"
 echo "Default login (session mode): ${default_username} / jobhunt2026"
+echo "First sign-in will force a password change."
 echo "Data persists in: ./data/app.db"

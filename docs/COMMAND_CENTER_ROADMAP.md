@@ -41,8 +41,8 @@ Work order:
 - [x] API rate limiting in place
 - [x] CSRF protection in session mode in place
 - [x] Force-change-password support exists
-- [ ] Enforce force-change-password by default for all session-mode first users
-- [ ] Add `docs/SECURITY_CHECKLIST.md` for self-hosters
+- [x] Enforce force-change-password by default for all session-mode first users
+- [x] Add `docs/SECURITY_CHECKLIST.md` for self-hosters
 
 ## 5) Distribution for non-technical users (high value)
 

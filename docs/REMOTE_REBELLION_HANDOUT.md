@@ -81,6 +81,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start-local-docker.ps1
 - Sign in:
   - username: the one you chose in setup (default `jason`)
   - password: `jobhunt2026`
+- On first sign-in, you must change the default password before using the app.
 
 ## Where Your Data Lives
 

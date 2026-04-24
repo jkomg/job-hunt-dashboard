@@ -20,6 +20,7 @@ Recommended end-user setup script (non-technical friendly).
   - `GOOGLE_SHEETS_EVENTS_SYNC_TABS`
   - `GOOGLE_SHEETS_CREDENTIALS_JSON` (base64 from service-account JSON file)
 - Starts Docker stack with build (`docker compose up --build -d`)
+- Default seed account is created with forced password change on first sign-in
 
 ### Running
 
