@@ -5,6 +5,8 @@ import cors from 'cors'
 import crypto from 'crypto'
 import bcrypt from 'bcryptjs'
 import { existsSync } from 'fs'
+import { mkdtemp, rm } from 'fs/promises'
+import os from 'os'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { Storage } from '@google-cloud/storage'
@@ -13,7 +15,7 @@ import {
   initDb,
   getUserByUsername, getUserByEmail, getUserById,
   createSession, getSession, deleteSession, updatePassword, updateUsername, getRecentSheetSyncRuns, getLocalDataLastUpdatedAt,
-  getAppSetting, getAppSettings, setAppSetting, exportBackupSnapshot, restoreBackupSnapshot,
+  getAppSetting, getAppSettings, setAppSetting, exportBackupSnapshot, restoreBackupSnapshot, createLocalDatabaseSnapshot,
   getDashboardData,
   getContacts, markContacted, updateContactStatus, createContact, updateContact,
   getInterviews, createInterview, updateInterview,
@@ -1099,6 +1101,39 @@ app.get('/api/admin/backup/export', requireAuth, requireAdmin, async (_req, res)
   } catch (e) {
     console.error('backup.export failed', e)
     res.status(500).json({ error: 'Could not export backup' })
+  }
+})
+
+app.get('/api/admin/backup/export-db', requireAuth, requireAdmin, async (_req, res) => {
+  let tempDir = null
+  let cleaned = false
+  const cleanup = async () => {
+    if (cleaned || !tempDir) return
+    cleaned = true
+    await rm(tempDir, { recursive: true, force: true })
+  }
+
+  try {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), 'job-hunt-db-export-'))
+    const snapshotPath = path.join(tempDir, `backup-${Date.now()}.db`)
+    await createLocalDatabaseSnapshot(snapshotPath)
+
+    res.setHeader('Content-Type', 'application/x-sqlite3')
+    res.setHeader('Content-Disposition', `attachment; filename=\"job-hunt-backup-${new Date().toISOString().slice(0, 10)}.db\"`)
+    res.on('finish', () => {
+      cleanup().catch(err => console.error('backup.export-db cleanup failed', err))
+    })
+    res.on('close', () => {
+      cleanup().catch(err => console.error('backup.export-db cleanup failed', err))
+    })
+    res.sendFile(snapshotPath)
+  } catch (e) {
+    await cleanup().catch(() => {})
+    console.error('backup.export-db failed', e)
+    const msg = String(e?.message || '')
+    if (msg.includes('local SQLite mode')) return res.status(400).json({ error: msg })
+    if (msg.includes('database file not found')) return res.status(404).json({ error: msg })
+    res.status(500).json({ error: 'Could not export database file' })
   }
 })
 

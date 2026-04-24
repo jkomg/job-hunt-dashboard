@@ -2,6 +2,8 @@ import { createClient } from '@libsql/client'
 import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
 import { existsSync, mkdirSync } from 'fs'
+import path from 'path'
+import { fileURLToPath } from 'url'
 
 if (!existsSync('./data')) mkdirSync('./data')
 
@@ -922,6 +924,23 @@ export async function exportBackupSnapshot() {
     databaseUrl: DATABASE_URL,
     tables
   }
+}
+
+export function getLocalDatabaseFilePath() {
+  const rawUrl = String(DATABASE_URL || '').trim()
+  if (!rawUrl.startsWith('file:')) return null
+
+  if (rawUrl.startsWith('file://')) {
+    try {
+      return fileURLToPath(rawUrl)
+    } catch {
+      return null
+    }
+  }
+
+  const filePart = rawUrl.slice('file:'.length)
+  if (!filePart) return null
+  return path.resolve(process.cwd(), filePart)
 }
 
 export async function restoreBackupSnapshot(snapshot) {

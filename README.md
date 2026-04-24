@@ -222,11 +222,15 @@ Recommended filenames:
 
 Admin users can use in-app `Settings`:
 - `Export Backup` downloads a full JSON snapshot of app data/settings
+- `Export DB File (.db)` downloads the raw SQLite file when running local file mode
 - `Restore Backup` imports a previously exported JSON snapshot
 
 Recommended:
 - export a backup before major upgrades
 - keep at least one weekly backup copy
+
+Note:
+- `.db` export is available only when `DATABASE_URL` uses local file mode (for example `file:./data/app.db`).
 
 ## Security Checklist (Self-Hosters)
 

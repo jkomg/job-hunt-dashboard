@@ -169,7 +169,8 @@ docker compose up -d
   - download `Sync Logs (CSV)` if something fails
   - run `Repair Interviews from Pipeline` if interview cards are missing from Interview Tracker
   - optionally connect Gmail and run `Import Events from Gmail`
-  - export and restore backups (admin users)
+  - export/restore JSON backups (admin users)
+  - export raw `.db` file backups in local mode (admin users)
 
 ## Screenshot Placeholders
 
