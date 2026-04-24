@@ -251,6 +251,30 @@ npm run dev
 AUTH_MODE=iap ADMIN_EMAILS=you@example.com ./deploy.sh
 ```
 
+### Optional: Daily Cloud Backup Export (Cloud Run)
+
+1. Configure in `.env` (or secrets):
+   - `BACKUP_EXPORT_CRON_TOKEN`
+   - `BACKUP_GCS_BUCKET`
+   - optional `BACKUP_GCS_PREFIX`
+2. Ensure Cloud Run runtime service account can write to your bucket:
+   - grant `roles/storage.objectCreator` on the target bucket
+3. Sync secrets + deploy:
+
+```bash
+./setup-secrets.sh
+./deploy.sh
+```
+
+4. Create/update scheduler job:
+
+```bash
+chmod +x ./scripts/setup-daily-backup-export.sh
+CRON_TOKEN="$(grep '^BACKUP_EXPORT_CRON_TOKEN=' .env | cut -d'=' -f2-)" \
+DOMAIN="hunt.jkomg.us" \
+./scripts/setup-daily-backup-export.sh
+```
+
 ### One-time Legacy Notion Import (optional)
 
 Only if you are migrating old data from Notion into Turso:
@@ -278,7 +302,7 @@ Requires optional `NOTION_*` vars in `.env`.
 - Additional scripts and usage notes: [scripts/README.md](./scripts/README.md)
 - Shareable one-page beginner guide: [docs/REMOTE_REBELLION_HANDOUT.md](./docs/REMOTE_REBELLION_HANDOUT.md)
 - Command center implementation roadmap: [docs/COMMAND_CENTER_ROADMAP.md](./docs/COMMAND_CENTER_ROADMAP.md)
-- Deployment helpers: `deploy.sh`, `setup-secrets.sh`, `scripts/setup-iap-lb.sh`, `scripts/setup-daily-sheets-sync.sh`
+- Deployment helpers: `deploy.sh`, `setup-secrets.sh`, `scripts/setup-iap-lb.sh`, `scripts/setup-daily-sheets-sync.sh`, `scripts/setup-daily-backup-export.sh`
 
 ## License
 

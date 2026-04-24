@@ -53,6 +53,15 @@ fi
 if gcloud secrets describe jobhunt-sheets-sync-cron-token --project "$PROJECT_ID" >/dev/null 2>&1; then
   SECRET_ARGS+=(--set-secrets SHEETS_SYNC_CRON_TOKEN=jobhunt-sheets-sync-cron-token:latest)
 fi
+if gcloud secrets describe jobhunt-backup-export-cron-token --project "$PROJECT_ID" >/dev/null 2>&1; then
+  SECRET_ARGS+=(--set-secrets BACKUP_EXPORT_CRON_TOKEN=jobhunt-backup-export-cron-token:latest)
+fi
+if gcloud secrets describe jobhunt-backup-gcs-bucket --project "$PROJECT_ID" >/dev/null 2>&1; then
+  SECRET_ARGS+=(--set-secrets BACKUP_GCS_BUCKET=jobhunt-backup-gcs-bucket:latest)
+fi
+if gcloud secrets describe jobhunt-backup-gcs-prefix --project "$PROJECT_ID" >/dev/null 2>&1; then
+  SECRET_ARGS+=(--set-secrets BACKUP_GCS_PREFIX=jobhunt-backup-gcs-prefix:latest)
+fi
 if gcloud secrets describe jobhunt-gmail-oauth-client-id --project "$PROJECT_ID" >/dev/null 2>&1; then
   SECRET_ARGS+=(--set-secrets GMAIL_OAUTH_CLIENT_ID=jobhunt-gmail-oauth-client-id:latest)
 fi

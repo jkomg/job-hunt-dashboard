@@ -47,6 +47,9 @@ upsert_secret "jobhunt-google-sheets-interviews-tabs" "$(get_env GOOGLE_SHEETS_I
 upsert_secret "jobhunt-google-sheets-events-tabs" "$(get_env GOOGLE_SHEETS_EVENTS_SYNC_TABS)"
 upsert_secret "jobhunt-google-sheets-creds" "$(get_env GOOGLE_SHEETS_CREDENTIALS_JSON)"
 upsert_secret "jobhunt-sheets-sync-cron-token" "$(get_env SHEETS_SYNC_CRON_TOKEN)"
+upsert_secret "jobhunt-backup-export-cron-token" "$(get_env BACKUP_EXPORT_CRON_TOKEN)"
+upsert_secret "jobhunt-backup-gcs-bucket" "$(get_env BACKUP_GCS_BUCKET)"
+upsert_secret "jobhunt-backup-gcs-prefix" "$(get_env BACKUP_GCS_PREFIX)"
 
 SA_EMAIL="$(gcloud run services describe "$SERVICE_NAME" --region "$REGION" --format='value(spec.template.spec.serviceAccountName)' 2>/dev/null || true)"
 if [[ -z "$SA_EMAIL" ]]; then
@@ -62,7 +65,10 @@ for s in \
   jobhunt-google-sheets-interviews-tabs \
   jobhunt-google-sheets-events-tabs \
   jobhunt-google-sheets-creds \
-  jobhunt-sheets-sync-cron-token; do
+  jobhunt-sheets-sync-cron-token \
+  jobhunt-backup-export-cron-token \
+  jobhunt-backup-gcs-bucket \
+  jobhunt-backup-gcs-prefix; do
   if gcloud secrets describe "$s" --project "$PROJECT_ID" >/dev/null 2>&1; then
     gcloud secrets add-iam-policy-binding "$s" \
       --member="serviceAccount:${SA_EMAIL}" \

@@ -143,3 +143,32 @@ CRON_TOKEN="$(grep '^SHEETS_SYNC_CRON_TOKEN=' .env | cut -d'=' -f2-)" \
 DOMAIN="hunt.jkomg.us" \
 ./scripts/setup-daily-sheets-sync.sh
 ```
+
+## setup-daily-backup-export.sh
+
+Creates/updates a Cloud Scheduler HTTP job that exports a JSON backup to Cloud Storage once per day.
+
+### What it does
+
+- Creates/reuses scheduler service account (`jobhunt-scheduler-invoker`)
+- Grants `roles/run.invoker` on the Cloud Run service
+- Creates or updates job `job-hunt-daily-backup-export`
+- Calls `/api/internal/backup/export` with:
+  - OIDC auth to Cloud Run
+  - `x-backup-token` header (must match `BACKUP_EXPORT_CRON_TOKEN`)
+
+### Prerequisites
+
+- `BACKUP_EXPORT_CRON_TOKEN` configured in app env/secrets
+- `BACKUP_GCS_BUCKET` configured in app env/secrets
+- Cloud Run runtime service account has bucket write access:
+  - `roles/storage.objectCreator` (minimum)
+
+### Running
+
+```bash
+chmod +x ./scripts/setup-daily-backup-export.sh
+CRON_TOKEN="$(grep '^BACKUP_EXPORT_CRON_TOKEN=' .env | cut -d'=' -f2-)" \
+DOMAIN="hunt.jkomg.us" \
+./scripts/setup-daily-backup-export.sh
+```

@@ -9,6 +9,7 @@ Use this before exposing Job Hunt Dashboard beyond local-only use.
 - Set strong secrets in environment:
   - `SESSION_SECRET` (long random value)
   - `SHEETS_SYNC_CRON_TOKEN` (if scheduler is enabled)
+  - `BACKUP_EXPORT_CRON_TOKEN` (if backup scheduler is enabled)
   - OAuth client secrets (if Gmail import is enabled)
 - Keep default login temporary only:
   - first sign-in is forced to change password
@@ -25,6 +26,7 @@ Use this before exposing Job Hunt Dashboard beyond local-only use.
 
 - Run regular backups:
   - in-app `Export Backup` (JSON)
+  - optional daily Cloud Scheduler export to GCS
   - keep at least one offline copy
 - Never commit `.env`, credential JSON files, or exported backups.
 - Rotate service-account/OAuth credentials if exposed.

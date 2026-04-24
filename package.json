@@ -12,6 +12,7 @@
     "start:docker-local": "./scripts/start-local-docker.sh"
   },
   "dependencies": {
+    "@google-cloud/storage": "^7.19.0",
     "@libsql/client": "^0.15.15",
     "@notionhq/client": "^2.2.15",
     "bcryptjs": "^2.4.3",
