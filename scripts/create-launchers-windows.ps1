@@ -17,8 +17,8 @@ cd /d "$RootDir"
 powershell -ExecutionPolicy Bypass -File ".\scripts\stop-job-hunt.ps1"
 "@
 
-Set-Content -Path $StartBat -Value $startContent -Encoding ASCII
-Set-Content -Path $StopBat -Value $stopContent -Encoding ASCII
+Set-Content -Path $StartBat -Value $startContent -Encoding UTF8
+Set-Content -Path $StopBat -Value $stopContent -Encoding UTF8
 
 Write-Host "Created launchers:"
 Write-Host "  $StartBat"
