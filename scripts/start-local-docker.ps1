@@ -20,22 +20,35 @@ if ([string]::IsNullOrWhiteSpace($defaultUsername)) {
   $defaultUsername = "jason"
 }
 
+$installMode = if ($env:INSTALL_MODE) { $env:INSTALL_MODE.Trim().ToLower() } else { "guided" }
+if ($installMode -notin @("guided", "no-google", "with-google")) {
+  $installMode = "guided"
+}
+
 $enableSheetsSync = $false
 if (-not [string]::IsNullOrWhiteSpace($env:ENABLE_SHEETS_SYNC)) {
   $preset = $env:ENABLE_SHEETS_SYNC.Trim().ToLower()
   if ($preset -in @("y", "yes", "true", "1")) {
     $enableSheetsSync = $true
   }
+} elseif ($installMode -eq "with-google") {
+  $enableSheetsSync = $true
+} elseif ($installMode -eq "no-google") {
+  $enableSheetsSync = $false
 }
-if (-not $enableSheetsSync) {
-  if (-not [Console]::IsInputRedirected) {
-    $syncChoice = Read-Host "Set up Google Sheets sync now? [y/N]"
-    if (-not [string]::IsNullOrWhiteSpace($syncChoice)) {
-      $choice = $syncChoice.Trim().ToLower()
-      if ($choice -eq "y" -or $choice -eq "yes") {
-        $enableSheetsSync = $true
-      }
-    }
+
+if ($installMode -eq "guided" -and -not [Console]::IsInputRedirected) {
+  Write-Host ""
+  Write-Host "Choose install mode:"
+  Write-Host "  1) No Google sync (Recommended for easiest setup)"
+  Write-Host "  2) With Google sync (for shared spreadsheet workflows)"
+  $modeChoice = Read-Host "Enter 1 or 2 [1]"
+  if ($modeChoice.Trim() -eq "2") {
+    $enableSheetsSync = $true
+    $installMode = "with-google"
+  } else {
+    $enableSheetsSync = $false
+    $installMode = "no-google"
   }
 }
 
@@ -137,6 +150,11 @@ docker compose up --build -d
 Write-Host ""
 Write-Host "Job Hunt Dashboard is starting in Docker mode."
 Write-Host "Open: http://localhost:8080"
+if ($enableSheetsSync) {
+  Write-Host "Install mode: With Google sync"
+} else {
+  Write-Host "Install mode: No Google sync"
+}
 Write-Host "Default login (session mode): $defaultUsername / jobhunt2026"
 Write-Host "First sign-in will force a password change."
 Write-Host "Data persists in: .\data\app.db"

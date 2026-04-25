@@ -64,7 +64,9 @@ cd job-hunt-dashboard
 What this does:
 - downloads the app
 - asks you for a username
-- optionally links your Google Sheet for sync
+- asks you to choose install mode:
+  - `No Google sync` (recommended easiest path)
+  - `With Google sync` (shared spreadsheet workflow)
 - starts the app locally in Docker
 
 Then open [http://localhost:8080](http://localhost:8080).
@@ -90,7 +92,9 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start-local-docker.ps1
 What this does:
 - downloads the app
 - asks you for a username
-- optionally links your Google Sheet for sync
+- asks you to choose install mode:
+  - `No Google sync` (recommended easiest path)
+  - `With Google sync` (shared spreadsheet workflow)
 - starts the app locally in Docker
 
 Then open [http://localhost:8080](http://localhost:8080).
@@ -207,12 +211,16 @@ Notes:
 ## Screenshot Plan
 
 Store install screenshots in `docs/images/install/` and keep both this README and the handout pointing to the same image files.
+Detailed capture checklist: `docs/images/install/SHOT_LIST.md`.
 
 Recommended filenames:
 - `mac-terminal-run-script.png`
 - `windows-powershell-run-script.png`
+- `installer-install-mode-choice.png`
 - `installer-username-prompt.png`
 - `installer-google-sync-prompts.png`
+- `desktop-launchers-mac.png`
+- `desktop-launchers-windows.png`
 - `google-cloud-create-service-account.png`
 - `google-cloud-download-json-key.png`
 - `google-sheet-share-service-account.png`
@@ -247,6 +255,21 @@ npm run dev
 
 - UI: `http://localhost:3000`
 - API: `http://localhost:3001`
+
+### Launcher Shortcuts (Desktop Start/Stop)
+
+After first install, you can create clickable Desktop launchers:
+
+- macOS:
+```bash
+chmod +x ./scripts/create-launchers-mac.sh
+./scripts/create-launchers-mac.sh
+```
+
+- Windows:
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\create-launchers-windows.ps1
+```
 
 ### Cloud Run + IAP (advanced)
 

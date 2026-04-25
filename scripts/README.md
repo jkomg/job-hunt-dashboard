@@ -30,6 +30,7 @@ Recommended end-user setup script (non-technical friendly).
 
 Optional non-interactive presets:
 - `DEFAULT_USERNAME`
+- `INSTALL_MODE` (`guided`, `no-google`, `with-google`)
 - `ENABLE_SHEETS_SYNC` (`y/yes/true/1`)
 - `SHEET_INPUT` (sheet URL or ID)
 - `SHEET_CREDS_PATH` (path to service-account JSON)
@@ -46,9 +47,57 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start-local-docker.ps1
 
 Optional non-interactive presets:
 - `DEFAULT_USERNAME`
+- `INSTALL_MODE` (`guided`, `no-google`, `with-google`)
 - `ENABLE_SHEETS_SYNC` (`y/yes/true/1`)
 - `SHEET_INPUT` (sheet URL or ID)
 - `SHEET_CREDS_PATH` (path to service-account JSON)
+
+## start-job-hunt.sh / stop-job-hunt.sh
+
+Simple start/stop helpers for local Docker mode.
+
+### Running
+
+```bash
+./scripts/start-job-hunt.sh
+./scripts/stop-job-hunt.sh
+```
+
+## start-job-hunt.ps1 / stop-job-hunt.ps1
+
+Windows PowerShell start/stop helpers for local Docker mode.
+
+### Running
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\start-job-hunt.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\stop-job-hunt.ps1
+```
+
+## create-launchers-mac.sh
+
+Creates clickable Desktop launchers on macOS:
+- `Start Job Hunt.command`
+- `Stop Job Hunt.command`
+
+### Running
+
+```bash
+chmod +x ./scripts/create-launchers-mac.sh
+./scripts/create-launchers-mac.sh
+```
+
+## create-launchers-windows.ps1
+
+Creates Desktop launcher `.bat` files on Windows:
+- `Start Job Hunt.bat`
+- `Stop Job Hunt.bat`
+
+### Running
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\create-launchers-windows.ps1
+```
 
 ## bootstrap-local.sh
 
