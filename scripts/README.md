@@ -211,6 +211,25 @@ DOMAIN="hunt.jkomg.us" \
 ./scripts/setup-daily-sheets-sync.sh
 ```
 
+## setup-cloud-cost-controls.sh
+
+Applies the recommended Cloud Run cost guardrails for small/single-user deployments.
+
+### What it does
+
+- Applies `config/artifact-cleanup-policy.json` to keep image storage bounded.
+- Adds a Cloud Logging exclusion for successful static asset request logs.
+- Attempts to create a monthly project-scoped budget with 50%, 80%, 100%, and forecasted 100% alerts.
+
+Budget creation requires billing-account budget permissions. If the active Google account cannot create the budget, the script leaves the other controls in place and prints a warning.
+
+### Running
+
+```bash
+chmod +x ./scripts/setup-cloud-cost-controls.sh
+BUDGET_AMOUNT=15USD ./scripts/setup-cloud-cost-controls.sh
+```
+
 ## setup-daily-backup-export.sh
 
 Creates/updates a Cloud Scheduler HTTP job that exports a JSON backup to Cloud Storage once per day.

@@ -38,6 +38,7 @@ gcloud config set project "$PROJECT_ID" >/dev/null
 gcloud services enable secretmanager.googleapis.com run.googleapis.com artifactregistry.googleapis.com --project "$PROJECT_ID" >/dev/null
 
 upsert_secret "jobhunt-session-secret" "$(get_env SESSION_SECRET)"
+upsert_secret "jobhunt-default-password" "$(get_env DEFAULT_PASSWORD)"
 upsert_secret "jobhunt-database-url" "$(get_env DATABASE_URL)"
 upsert_secret "jobhunt-turso-auth-token" "$(get_env TURSO_AUTH_TOKEN)"
 upsert_secret "jobhunt-google-sheets-id" "$(get_env GOOGLE_SHEETS_ID)"
@@ -59,6 +60,7 @@ fi
 
 for s in \
   jobhunt-session-secret \
+  jobhunt-default-password \
   jobhunt-google-sheets-id \
   jobhunt-google-sheets-tabs \
   jobhunt-google-sheets-contacts-tabs \

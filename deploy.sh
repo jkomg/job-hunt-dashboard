@@ -6,7 +6,7 @@ REGION="${REGION:-us-central1}"
 SERVICE_NAME="${SERVICE_NAME:-job-hunt-dashboard}"
 REPO_NAME="${REPO_NAME:-jobhunt-repo}"
 IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${SERVICE_NAME}:latest"
-AUTH_MODE="${AUTH_MODE:-iap}"
+AUTH_MODE="${AUTH_MODE:-session}"
 ADMIN_EMAILS="${ADMIN_EMAILS:-kennjason@gmail.com}"
 
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -70,6 +70,15 @@ if gcloud secrets describe jobhunt-gmail-oauth-client-secret --project "$PROJECT
 fi
 if gcloud secrets describe jobhunt-gmail-oauth-redirect-uri --project "$PROJECT_ID" >/dev/null 2>&1; then
   SECRET_ARGS+=(--set-secrets GMAIL_OAUTH_REDIRECT_URI=jobhunt-gmail-oauth-redirect-uri:latest)
+fi
+
+if [[ "$AUTH_MODE" == "session" ]]; then
+  if ! gcloud secrets describe jobhunt-default-password --project "$PROJECT_ID" >/dev/null 2>&1; then
+    echo "Refusing session-mode Cloud Run deploy without jobhunt-default-password secret."
+    echo "Set DEFAULT_PASSWORD in .env, run ./setup-secrets.sh, then deploy again."
+    exit 1
+  fi
+  SECRET_ARGS+=(--set-secrets DEFAULT_PASSWORD=jobhunt-default-password:latest)
 fi
 
 gcloud run deploy "$SERVICE_NAME" \
