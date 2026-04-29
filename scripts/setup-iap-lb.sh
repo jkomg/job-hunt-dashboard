@@ -14,6 +14,7 @@ CERT_NAME="${CERT_NAME:-job-hunt-cert}"
 ADDRESS_NAME="${ADDRESS_NAME:-job-hunt-lb-ip}"
 HTTPS_PROXY_NAME="${HTTPS_PROXY_NAME:-job-hunt-https-proxy}"
 HTTPS_FWD_RULE_NAME="${HTTPS_FWD_RULE_NAME:-job-hunt-https-fr}"
+RUN_COST_CONTROLS="${RUN_COST_CONTROLS:-true}"
 
 echo "Using project: ${PROJECT_ID}"
 gcloud config set project "$PROJECT_ID" >/dev/null
@@ -106,6 +107,11 @@ gcloud run services update "$SERVICE_NAME" \
 LB_IP="$(gcloud compute addresses describe "$ADDRESS_NAME" --global --project "$PROJECT_ID" --format='value(address)')"
 echo
 echo "IAP setup complete."
+if [[ "$RUN_COST_CONTROLS" == "true" && -x "$(dirname "$0")/setup-cloud-cost-controls.sh" ]]; then
+  echo "Applying standard cost controls..."
+  "$(dirname "$0")/setup-cloud-cost-controls.sh"
+fi
+
 echo "Set DNS for ${DOMAIN}:"
 echo "  - remove any existing CNAME"
 echo "  - add A record -> ${LB_IP}"

@@ -3,7 +3,7 @@
 ## Project Snapshot
 - Name: `job-hunt-dashboard`
 - Purpose: personal job-search tracker with React frontend, Express API, Turso-backed data, and Google Sheets bi-directional sync.
-- Current operating mode: deployed on Cloud Run with Google IAP at `hunt.jkomg.us` and local dev support (`npm run dev`).
+- Current operating mode: deployed directly on Cloud Run with built-in session auth; `hunt.jkomg.us` uses a Cloud Run domain mapping, not IAP/LB.
 
 ## Architecture
 - Frontend: React 18 + Vite (`src/`)
@@ -29,14 +29,17 @@
 - Required runtime vars: Turso (`DATABASE_URL`, `TURSO_AUTH_TOKEN`), Sheets creds/tabs, session/auth vars.
 - Optional migration-only vars: `NOTION_TOKEN` + `NOTION_*_DB` used only by migration script.
 - Auth supports modes via `AUTH_MODE`: `session`, `iap`, or `hybrid`; seeds local default user (`jason`) for session mode.
-- Cloud Run deploy path uses Secret Manager via `setup-secrets.sh` + `deploy.sh`.
-- IAP mode (`AUTH_MODE=iap`) trusts `x-goog-authenticated-user-email`; `ADMIN_EMAILS` controls admin users.
+- Cloud Run deploy path uses Secret Manager via `setup-secrets.sh` + `deploy.sh`; default `AUTH_MODE` is `session`.
+- IAP mode (`AUTH_MODE=iap`) remains available through `scripts/setup-iap-lb.sh` for advanced deployments, but it creates a fixed-cost HTTPS load balancer.
 
 ## Runtime Validation Done
 - `npm run build` succeeds.
 - Module import checks succeed (`server/db.js`, `server/sheetsSync.js`).
-- Cloud Run revision `job-hunt-dashboard-00019-w2x` deployed at 100% traffic.
-- `hunt.jkomg.us` remains behind IAP and scheduler remains enabled for daily sync.
+- Cloud Run revision `job-hunt-dashboard-00035-lkm` deployed at 100% traffic with `AUTH_MODE=session`.
+- Removed job-hunt load balancer resources from GCP: global forwarding rules, backend service, NEG, SSL certs, and reserved global IP.
+- Created Cloud Run domain mapping for `hunt.jkomg.us`; DNS must point `hunt` CNAME to `ghs.googlehosted.com.` for certificate provisioning.
+- Scheduler remains enabled for daily sync and targets the direct Cloud Run URL.
+- Applied GCP cost controls: Artifact Registry cleanup policy, static asset logging exclusion, and `$15/month` budget alerts.
 
 ## Notable Risks / Follow-up Areas
 - Security hardening before exposing beyond localhost:

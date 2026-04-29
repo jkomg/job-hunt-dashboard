@@ -4,8 +4,9 @@ Use this before exposing Job Hunt Dashboard beyond local-only use.
 
 ## Required before public access
 
-- Use `AUTH_MODE=iap` for Cloud Run deployments.
-- Restrict IAP access to approved Google accounts/groups only.
+- Use `AUTH_MODE=session` for low-cost Cloud Run deployments.
+- Use `AUTH_MODE=iap` only when you need Google IAP and accept the load-balancer cost.
+- If IAP is enabled, restrict IAP access to approved Google accounts/groups only.
 - Set strong secrets in environment:
   - `SESSION_SECRET` (long random value)
   - `SHEETS_SYNC_CRON_TOKEN` (if scheduler is enabled)
@@ -43,7 +44,8 @@ Use this before exposing Job Hunt Dashboard beyond local-only use.
 
 - Keep dependencies patched (`npm audit`, dependency updates).
 - Monitor logs for repeated auth/sync failures.
-- Keep Cloud Run services private behind IAP; avoid unauthenticated access.
+- For direct Cloud Run deployments, keep app login enabled, use strong passwords, and keep `SESSION_SECRET` private.
+- For IAP deployments, keep Cloud Run ingress restricted to internal/load-balancer traffic.
 - Set sensible Cloud Run resource limits and min/max instances.
 
 ## Incident response

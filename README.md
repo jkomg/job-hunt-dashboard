@@ -271,11 +271,32 @@ chmod +x ./scripts/create-launchers-mac.sh
 powershell -ExecutionPolicy Bypass -File .\scripts\create-launchers-windows.ps1
 ```
 
+### Cloud Run (low-cost default)
+
+```bash
+./setup-secrets.sh
+AUTH_MODE=session ADMIN_EMAILS=you@example.com ./deploy.sh
+./scripts/setup-cloud-cost-controls.sh
+CRON_TOKEN="$(grep '^SHEETS_SYNC_CRON_TOKEN=' .env | cut -d'=' -f2-)" ./scripts/setup-daily-sheets-sync.sh
+```
+
+This deploys directly to Cloud Run with the app's built-in login. It avoids the fixed monthly cost of an external HTTPS load balancer. Point a custom domain at Cloud Run using a Cloud Run domain mapping; for `hunt.jkomg.us`, use a CNAME to `ghs.googlehosted.com.` after creating the mapping.
+
+The cost-control script:
+
+- keeps only the most recent container images and deletes old untagged images
+- adds a conservative logging exclusion for successful static asset reads
+- creates a project-scoped billing budget when the active Google account has billing-budget permissions
+
 ### Cloud Run + IAP (advanced)
+
+Use this only when you need Google IAP in front of the app. It creates a global external HTTPS load balancer, which adds a fixed monthly cost even at low traffic.
 
 ```bash
 ./setup-secrets.sh
 AUTH_MODE=iap ADMIN_EMAILS=you@example.com ./deploy.sh
+./scripts/setup-iap-lb.sh
+./scripts/setup-cloud-cost-controls.sh
 ```
 
 ### Optional: Daily Cloud Backup Export (Cloud Run)
@@ -317,8 +338,8 @@ Requires optional `NOTION_*` vars in `.env`.
 - Runtime data store: Turso/libSQL interface
 - Easy local mode: SQLite file (`DATABASE_URL=file:./data/app.db`) via Docker volume mount (`./data:/app/data`)
 - Auth modes:
-  - `session` (default local)
-  - `iap` (cloud)
+  - `session` (default local and low-cost cloud deployments)
+  - `iap` (advanced cloud deployment behind Google IAP and a load balancer)
   - `hybrid`
 - Session mode now includes:
   - CSRF protection for mutating API calls
@@ -329,7 +350,8 @@ Requires optional `NOTION_*` vars in `.env`.
 - Additional scripts and usage notes: [scripts/README.md](./scripts/README.md)
 - Shareable one-page beginner guide: [docs/REMOTE_REBELLION_HANDOUT.md](./docs/REMOTE_REBELLION_HANDOUT.md)
 - Command center implementation roadmap: [docs/COMMAND_CENTER_ROADMAP.md](./docs/COMMAND_CENTER_ROADMAP.md)
-- Deployment helpers: `deploy.sh`, `setup-secrets.sh`, `scripts/setup-iap-lb.sh`, `scripts/setup-daily-sheets-sync.sh`, `scripts/setup-daily-backup-export.sh`
+- Remote Rebellion hosted platform release plan: [docs/RR_PLATFORM_RELEASE_PLAN.md](./docs/RR_PLATFORM_RELEASE_PLAN.md)
+- Deployment helpers: `deploy.sh`, `setup-secrets.sh`, `scripts/setup-cloud-cost-controls.sh`, `scripts/setup-iap-lb.sh`, `scripts/setup-daily-sheets-sync.sh`, `scripts/setup-daily-backup-export.sh`
 
 ## License
 

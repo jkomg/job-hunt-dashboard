@@ -6,7 +6,7 @@ REGION="${REGION:-us-central1}"
 SERVICE_NAME="${SERVICE_NAME:-job-hunt-dashboard}"
 REPO_NAME="${REPO_NAME:-jobhunt-repo}"
 IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${SERVICE_NAME}:latest"
-AUTH_MODE="${AUTH_MODE:-iap}"
+AUTH_MODE="${AUTH_MODE:-session}"
 ADMIN_EMAILS="${ADMIN_EMAILS:-kennjason@gmail.com}"
 
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"

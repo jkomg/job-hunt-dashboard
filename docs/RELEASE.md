@@ -10,6 +10,19 @@ Ship a stable release that non-technical users can run locally with Docker and l
 - Primary install path: Docker local mode (`scripts/start-local-docker.sh`)
 - Optional paths: Cloud Run, legacy Notion import
 
+## Next Release Track
+
+The next major release track is the Remote Rebellion hosted platform shift:
+
+- Multi-tenant data model with `Remote Rebellion` as the first organization
+- Job seeker, staff, and admin roles
+- RR staff workspace for adding jobs and flagging follow-ups
+- Database-first job intake
+- Google Sheets as import/export/backup, not the source of truth
+- Low-cost Cloud Run deployment by default
+
+See [RR_PLATFORM_RELEASE_PLAN.md](./RR_PLATFORM_RELEASE_PLAN.md).
+
 ## Pre-Release Checklist
 
 1. Validate local easy install from scratch:
