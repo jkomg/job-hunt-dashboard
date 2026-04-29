@@ -491,6 +491,7 @@ export async function createStaffAssignment({ organizationId = DEFAULT_ORG_ID, s
   const seekerMembership = await getMembership(orgId, seekerId)
   if (!staffMembership || !seekerMembership) throw new Error('Both users must belong to the organization')
   if (!['staff', 'admin'].includes(staffMembership.role)) throw new Error('Assigned staff user must have staff or admin role')
+  if (seekerMembership.role !== 'job_seeker') throw new Error('Assigned user must have job_seeker role')
 
   const ts = now()
   const id = `${orgId}:${staffId}:${seekerId}`
@@ -507,10 +508,11 @@ export async function createStaffAssignment({ organizationId = DEFAULT_ORG_ID, s
 }
 
 export async function deleteStaffAssignment({ organizationId = DEFAULT_ORG_ID, staffUserId, jobSeekerUserId }) {
-  await db.execute({
+  const res = await db.execute({
     sql: 'DELETE FROM staff_assignments WHERE organization_id = ? AND staff_user_id = ? AND job_seeker_user_id = ?',
     args: [String(organizationId), Number(staffUserId), Number(jobSeekerUserId)]
   })
+  return Number(res.rowsAffected || 0) > 0
 }
 
 export async function createAuditLog({

@@ -13,6 +13,8 @@ const NEXT_PASSWORD = 'smoke-password-2026!'
 const SECOND_TEMP_PASSWORD = 'smoke2-temp-password-2026!'
 const SECOND_NEXT_PASSWORD = 'smoke2-password-2026!'
 const THIRD_TEMP_PASSWORD = 'smoke3-temp-password-2026!'
+const FOURTH_USERNAME = 'smoke4'
+const FOURTH_TEMP_PASSWORD = 'smoke4-temp-password-2026!'
 
 async function reserveAvailablePort() {
   return await new Promise((resolve, reject) => {
@@ -241,6 +243,17 @@ async function run() {
   })
   if (!createThirdUser.body?.ok || !createThirdUser.body?.id) throw new Error('Admin third-user create failed')
 
+  const createFourthUser = await api('/api/admin/users', {
+    method: 'POST',
+    body: {
+      username: FOURTH_USERNAME,
+      password: FOURTH_TEMP_PASSWORD,
+      role: 'staff'
+    },
+    allowStatuses: [200]
+  })
+  if (!createFourthUser.body?.ok || !createFourthUser.body?.id) throw new Error('Admin fourth-user create failed')
+
   const assignment = await api('/api/admin/staff-assignments', {
     method: 'POST',
     body: {
@@ -253,10 +266,50 @@ async function run() {
     throw new Error(`Staff assignment failed: ${JSON.stringify(assignment.body)}`)
   }
 
+  const badAssignment = await api('/api/admin/staff-assignments', {
+    method: 'POST',
+    body: {
+      staffUserId: createUser.body.id,
+      jobSeekerUserId: createFourthUser.body.id
+    },
+    allowStatuses: [400]
+  })
+  if (!String(badAssignment.body?.error || '').includes('job_seeker')) {
+    throw new Error(`Expected role/identity guard on assignment, got ${JSON.stringify(badAssignment.body)}`)
+  }
+
   const audit = await api('/api/admin/audit-log', { allowStatuses: [200] })
   const actions = new Set((audit.body?.logs || []).map(log => log.action))
   if (!actions.has('admin.user.created') || !actions.has('admin.staff_assignment.created')) {
     throw new Error(`Expected audit entries missing: ${JSON.stringify(audit.body)}`)
+  }
+
+  const deleteAssignment = await api('/api/admin/staff-assignments', {
+    method: 'DELETE',
+    body: {
+      staffUserId: createUser.body.id,
+      jobSeekerUserId: createThirdUser.body.id
+    },
+    allowStatuses: [200]
+  })
+  if (!deleteAssignment.body?.ok) throw new Error('Expected assignment delete to succeed')
+
+  const deleteMissingAssignment = await api('/api/admin/staff-assignments', {
+    method: 'DELETE',
+    body: {
+      staffUserId: createUser.body.id,
+      jobSeekerUserId: createThirdUser.body.id
+    },
+    allowStatuses: [404]
+  })
+  if (!String(deleteMissingAssignment.body?.error || '').includes('not found')) {
+    throw new Error(`Expected assignment delete miss to be 404, got ${JSON.stringify(deleteMissingAssignment.body)}`)
+  }
+
+  const auditAfterDelete = await api('/api/admin/audit-log', { allowStatuses: [200] })
+  const deleteActions = (auditAfterDelete.body?.logs || []).filter(log => log.action === 'admin.staff_assignment.deleted')
+  if (deleteActions.length !== 1) {
+    throw new Error(`Expected exactly one deletion audit record, got ${deleteActions.length}`)
   }
   note('Staff assignment and audit log passed')
 
@@ -282,8 +335,8 @@ async function run() {
   })
   const assignedUsers = await api('/api/staff/assigned-users', { allowStatuses: [200] })
   const assignedUsernames = (assignedUsers.body?.users || []).map(user => user.username)
-  if (assignedUsernames.length !== 1 || assignedUsernames[0] !== THIRD_USERNAME) {
-    throw new Error(`Expected staff to see only assigned user, got ${JSON.stringify(assignedUsers.body)}`)
+  if (assignedUsernames.length !== 0) {
+    throw new Error(`Expected staff to see no assigned users after delete, got ${JSON.stringify(assignedUsers.body)}`)
   }
 
   const secondDaily = await api('/api/daily', { allowStatuses: [200] })

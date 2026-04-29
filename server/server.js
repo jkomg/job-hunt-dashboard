@@ -523,7 +523,7 @@ app.post('/api/admin/staff-assignments', requireAuth, requireAdmin, async (req, 
   } catch (e) {
     console.error('admin.staffAssignments.create failed', e)
     const message = String(e?.message || '')
-    if (message.includes('required') || message.includes('different') || message.includes('belong') || message.includes('staff')) {
+    if (message.includes('required') || message.includes('different') || message.includes('belong') || message.includes('staff') || message.includes('job_seeker')) {
       return res.status(400).json({ error: message })
     }
     res.status(500).json({ error: 'Could not create staff assignment' })
@@ -534,11 +534,14 @@ app.delete('/api/admin/staff-assignments', requireAuth, requireAdmin, async (req
   try {
     const staffUserId = Number(req.body?.staffUserId)
     const jobSeekerUserId = Number(req.body?.jobSeekerUserId)
-    await deleteStaffAssignment({
+    const removed = await deleteStaffAssignment({
       organizationId: req.organizationId,
       staffUserId,
       jobSeekerUserId
     })
+    if (!removed) {
+      return res.status(404).json({ error: 'Staff assignment not found' })
+    }
     await createAuditLog({
       organizationId: req.organizationId,
       actorUserId: req.userId,
