@@ -6,8 +6,11 @@ import os from 'os'
 import path from 'path'
 
 const TEST_USERNAME = 'smoke'
+const SECOND_USERNAME = 'smoke2'
 const DEFAULT_PASSWORD = 'jobhunt2026'
 const NEXT_PASSWORD = 'smoke-password-2026!'
+const SECOND_TEMP_PASSWORD = 'smoke2-temp-password-2026!'
+const SECOND_NEXT_PASSWORD = 'smoke2-password-2026!'
 
 async function reserveAvailablePort() {
   return await new Promise((resolve, reject) => {
@@ -200,6 +203,81 @@ async function run() {
 
   const today = await api('/api/daily/today?date_label=Smoke%20Test%20Day', { allowStatuses: [200] })
   if (!today.body?.id) throw new Error('Could not read back saved daily check-in')
+
+  const createPipeline = await api('/api/pipeline', {
+    method: 'POST',
+    body: {
+      Company: 'Smoke Co',
+      Role: 'Tester',
+      Stage: '🔍 Researching'
+    },
+    allowStatuses: [200]
+  })
+  if (!createPipeline.body?.ok || !createPipeline.body?.id) throw new Error('Pipeline create failed')
+  note('Pipeline create passed')
+
+  const createUser = await api('/api/admin/users', {
+    method: 'POST',
+    body: {
+      username: SECOND_USERNAME,
+      password: SECOND_TEMP_PASSWORD,
+      role: 'staff'
+    },
+    allowStatuses: [200]
+  })
+  if (!createUser.body?.ok) throw new Error('Admin user create failed')
+  note('Admin-created second user passed')
+
+  await api('/api/logout', { method: 'POST', allowStatuses: [200] })
+  cookieJar.clear()
+
+  const secondLogin = await api('/api/login', {
+    method: 'POST',
+    body: { username: SECOND_USERNAME, password: SECOND_TEMP_PASSWORD },
+    allowStatuses: [200]
+  })
+  if (!secondLogin.body?.mustChangePassword) {
+    throw new Error('Expected second user to require password change')
+  }
+  const secondProfile = await api('/api/me', { allowStatuses: [200] })
+  if (secondProfile.body?.role !== 'staff') {
+    throw new Error(`Expected second user to retain staff role, got ${JSON.stringify(secondProfile.body)}`)
+  }
+  await api('/api/change-password', {
+    method: 'POST',
+    body: { currentPassword: SECOND_TEMP_PASSWORD, newPassword: SECOND_NEXT_PASSWORD },
+    allowStatuses: [200]
+  })
+
+  const secondDaily = await api('/api/daily', { allowStatuses: [200] })
+  if (secondDaily.body?.length !== 0) {
+    throw new Error(`Second user can see first user's daily logs: ${JSON.stringify(secondDaily.body)}`)
+  }
+  const secondPipeline = await api('/api/pipeline', { allowStatuses: [200] })
+  if (secondPipeline.body?.length !== 0) {
+    throw new Error(`Second user can see first user's pipeline: ${JSON.stringify(secondPipeline.body)}`)
+  }
+  await api(`/api/pipeline/${createPipeline.body.id}`, {
+    method: 'PATCH',
+    body: { Company: 'Leaked Edit' },
+    allowStatuses: [200]
+  })
+  note('Cross-user isolation read checks passed')
+
+  await api('/api/logout', { method: 'POST', allowStatuses: [200] })
+  cookieJar.clear()
+
+  await api('/api/login', {
+    method: 'POST',
+    body: { username: TEST_USERNAME, password: NEXT_PASSWORD },
+    allowStatuses: [200]
+  })
+  const ownerPipeline = await api('/api/pipeline', { allowStatuses: [200] })
+  const ownerEntry = ownerPipeline.body?.find(item => item.id === createPipeline.body.id)
+  if (!ownerEntry || ownerEntry.Company !== 'Smoke Co') {
+    throw new Error(`Second user changed first user's pipeline: ${JSON.stringify(ownerPipeline.body)}`)
+  }
+  note('Cross-user write isolation passed')
 
   const sync = await api('/api/sheets/sync', {
     method: 'POST',
