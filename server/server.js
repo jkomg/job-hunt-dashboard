@@ -872,7 +872,7 @@ app.post('/api/sheets/test-connection', requireAuth, async (_req, res) => {
 app.post('/api/sheets/sync', requireAuth, async (req, res) => {
   try {
     const overrides = await getSheetsConfigOverrides()
-    const result = await runSheetsSync(overrides)
+    const result = await runSheetsSync(overrides, dataScope(req))
     res.json(result)
   } catch (e) {
     const normalized = e?.normalized || normalizeSheetsSyncError(e)
@@ -895,8 +895,20 @@ app.post('/api/internal/sheets/sync', async (req, res) => {
   }
 
   try {
+    await initDb()
+    const serviceUser = await getUserByUsername(String(process.env.SHEETS_SYNC_USERNAME || process.env.DEFAULT_USERNAME || 'jason').trim().toLowerCase())
+    if (!serviceUser) {
+      return res.status(503).json({ error: 'No service user available for scheduled Sheets sync' })
+    }
+    const membership = await getPrimaryMembershipForUser(serviceUser.id)
+    const scope = {
+      organizationId: membership?.organizationId,
+      userId: serviceUser.id,
+      role: membership?.role || (serviceUser.isAdmin ? 'admin' : 'job_seeker'),
+      isAdmin: !!serviceUser.isAdmin
+    }
     const overrides = await getSheetsConfigOverrides()
-    const result = await runSheetsSync(overrides)
+    const result = await runSheetsSync(overrides, scope)
     res.json(result)
   } catch (e) {
     console.error('internal.sheets.sync failed', e)

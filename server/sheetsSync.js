@@ -597,8 +597,8 @@ async function readTabRows(sheets, spreadsheetId, tabName) {
   return { headers, rows }
 }
 
-async function runInboundSync({ sheets, spreadsheetId, tabs }) {
-  const pipeline = await getPipeline()
+async function runInboundSync({ sheets, spreadsheetId, tabs, scope }) {
+  const pipeline = await getPipeline(scope)
   const index = buildPipelineIndex(pipeline)
 
   const summary = {
@@ -649,7 +649,7 @@ async function runInboundSync({ sheets, spreadsheetId, tabs }) {
       if (matched) {
         pageId = matched.id
       } else {
-        const created = await createPipelineEntry(payload)
+        const created = await createPipelineEntry(payload, scope)
         pageId = created.id
         index.byId.set(created.id, { id: created.id, ...payload })
         if (payload['Job URL']) index.byUrl.set(normalizeUrl(payload['Job URL']), { id: created.id, ...payload })
@@ -672,9 +672,9 @@ async function runInboundSync({ sheets, spreadsheetId, tabs }) {
   return summary
 }
 
-async function runOutboundSync({ sheets, spreadsheetId, tabs }) {
+async function runOutboundSync({ sheets, spreadsheetId, tabs, scope }) {
   const links = await getSheetSyncLinks(spreadsheetId)
-  const pipeline = await getPipeline()
+  const pipeline = await getPipeline(scope)
   const byId = new Map(pipeline.map(item => [item.id, item]))
 
   const summary = {
@@ -764,10 +764,10 @@ function rowUpdateRange(tabName, rowNumber, headers, patched) {
   return `${tabName}!A${rowNumber}:${colToA1(width)}${rowNumber}`
 }
 
-async function runContactsSync({ sheets, spreadsheetId, tabs }) {
+async function runContactsSync({ sheets, spreadsheetId, tabs, scope }) {
   if (!tabs.length) return { inbound: null, outbound: null }
 
-  const contacts = await getContacts()
+  const contacts = await getContacts(scope)
   const index = buildContactsIndex(contacts)
   const links = await getEntitySheetSyncLinks(spreadsheetId, 'contacts')
   const linkByTabRow = new Map(links.map(l => [`${l.tab_name}::${l.row_number}`, l]))
@@ -803,7 +803,7 @@ async function runContactsSync({ sheets, spreadsheetId, tabs }) {
       if (matched) {
         entityId = matched.id
       } else {
-        const created = await createContact(payload)
+        const created = await createContact(payload, scope)
         entityId = created.id
         inbound.imported++; inbound.tabs[tab].imported++
       }
@@ -819,7 +819,7 @@ async function runContactsSync({ sheets, spreadsheetId, tabs }) {
     }
   }
 
-  const latestContacts = await getContacts()
+  const latestContacts = await getContacts(scope)
   const byId = new Map(latestContacts.map(item => [item.id, item]))
   const latestLinks = await getEntitySheetSyncLinks(spreadsheetId, 'contacts')
   const outbound = { updatedRows: 0, skippedUnchanged: 0, conflicts: 0, missingLinkedRecords: 0, tabs: {} }
@@ -881,10 +881,10 @@ async function runContactsSync({ sheets, spreadsheetId, tabs }) {
   return { inbound, outbound }
 }
 
-async function runInterviewsSync({ sheets, spreadsheetId, tabs }) {
+async function runInterviewsSync({ sheets, spreadsheetId, tabs, scope }) {
   if (!tabs.length) return { inbound: null, outbound: null }
 
-  const interviews = await getInterviews()
+  const interviews = await getInterviews(scope)
   const index = buildInterviewsIndex(interviews)
   const links = await getEntitySheetSyncLinks(spreadsheetId, 'interviews')
   const linkByTabRow = new Map(links.map(l => [`${l.tab_name}::${l.row_number}`, l]))
@@ -919,7 +919,7 @@ async function runInterviewsSync({ sheets, spreadsheetId, tabs }) {
       if (matched) {
         entityId = matched.id
       } else {
-        const created = await createInterview(payload)
+        const created = await createInterview(payload, scope)
         entityId = created.id
         inbound.imported++; inbound.tabs[tab].imported++
       }
@@ -935,7 +935,7 @@ async function runInterviewsSync({ sheets, spreadsheetId, tabs }) {
     }
   }
 
-  const latestInterviews = await getInterviews()
+  const latestInterviews = await getInterviews(scope)
   const byId = new Map(latestInterviews.map(item => [item.id, item]))
   const latestLinks = await getEntitySheetSyncLinks(spreadsheetId, 'interviews')
   const outbound = { updatedRows: 0, skippedUnchanged: 0, conflicts: 0, missingLinkedRecords: 0, tabs: {} }
@@ -998,10 +998,10 @@ async function runInterviewsSync({ sheets, spreadsheetId, tabs }) {
   return { inbound, outbound }
 }
 
-async function runEventsSync({ sheets, spreadsheetId, tabs }) {
+async function runEventsSync({ sheets, spreadsheetId, tabs, scope }) {
   if (!tabs.length) return { inbound: null, outbound: null }
 
-  const events = await getEvents()
+  const events = await getEvents(scope)
   const index = buildEventsIndex(events)
   const links = await getEntitySheetSyncLinks(spreadsheetId, 'events')
   const linkByTabRow = new Map(links.map(l => [`${l.tab_name}::${l.row_number}`, l]))
@@ -1036,7 +1036,7 @@ async function runEventsSync({ sheets, spreadsheetId, tabs }) {
       if (matched) {
         entityId = matched.id
       } else {
-        const created = await createEvent(payload)
+        const created = await createEvent(payload, scope)
         entityId = created.id
         inbound.imported++; inbound.tabs[tab].imported++
       }
@@ -1052,7 +1052,7 @@ async function runEventsSync({ sheets, spreadsheetId, tabs }) {
     }
   }
 
-  const latestEvents = await getEvents()
+  const latestEvents = await getEvents(scope)
   const byId = new Map(latestEvents.map(item => [item.id, item]))
   const latestLinks = await getEntitySheetSyncLinks(spreadsheetId, 'events')
   const outbound = { updatedRows: 0, skippedUnchanged: 0, conflicts: 0, missingLinkedRecords: 0, tabs: {} }
@@ -1201,24 +1201,27 @@ export async function testSheetsConnection(configOverrides = {}) {
   }
 }
 
-export async function runSheetsSync(configOverrides = {}) {
+export async function runSheetsSync(configOverrides = {}, scope = null) {
+  if (!scope?.organizationId || !scope?.userId) {
+    throw new Error('Tenant data scope is required for Sheets sync')
+  }
   const { credentials, spreadsheetId, tabs, contactsTabs, interviewsTabs, eventsTabs } = buildSyncContext(configOverrides)
   const sheets = await getSheetsClient(credentials)
 
   try {
-    const inbound = await runInboundSync({ sheets, spreadsheetId, tabs })
+    const inbound = await runInboundSync({ sheets, spreadsheetId, tabs, scope })
     await createSheetSyncRun('inbound', 'ok', inbound)
 
-    const outbound = await runOutboundSync({ sheets, spreadsheetId, tabs })
+    const outbound = await runOutboundSync({ sheets, spreadsheetId, tabs, scope })
     await createSheetSyncRun('outbound', 'ok', outbound)
 
-    const contacts = await runContactsSync({ sheets, spreadsheetId, tabs: contactsTabs })
+    const contacts = await runContactsSync({ sheets, spreadsheetId, tabs: contactsTabs, scope })
     await createSheetSyncRun('contacts', 'ok', contacts)
 
-    const interviews = await runInterviewsSync({ sheets, spreadsheetId, tabs: interviewsTabs })
+    const interviews = await runInterviewsSync({ sheets, spreadsheetId, tabs: interviewsTabs, scope })
     await createSheetSyncRun('interviews', 'ok', interviews)
 
-    const events = await runEventsSync({ sheets, spreadsheetId, tabs: eventsTabs })
+    const events = await runEventsSync({ sheets, spreadsheetId, tabs: eventsTabs, scope })
     await createSheetSyncRun('events', 'ok', events)
 
     return { ok: true, pipeline: { inbound, outbound }, contacts, interviews, events }

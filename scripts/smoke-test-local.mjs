@@ -221,7 +221,7 @@ async function run() {
     body: {
       username: SECOND_USERNAME,
       password: SECOND_TEMP_PASSWORD,
-      role: 'job_seeker'
+      role: 'staff'
     },
     allowStatuses: [200]
   })
@@ -238,6 +238,10 @@ async function run() {
   })
   if (!secondLogin.body?.mustChangePassword) {
     throw new Error('Expected second user to require password change')
+  }
+  const secondProfile = await api('/api/me', { allowStatuses: [200] })
+  if (secondProfile.body?.role !== 'staff') {
+    throw new Error(`Expected second user to retain staff role, got ${JSON.stringify(secondProfile.body)}`)
   }
   await api('/api/change-password', {
     method: 'POST',

@@ -240,6 +240,11 @@ async function getDefaultUserId() {
 async function backfillDefaultOrganizationMemberships() {
   const res = await db.execute('SELECT id, is_admin FROM users')
   for (const row of res.rows || []) {
+    const existing = await db.execute({
+      sql: 'SELECT id FROM memberships WHERE user_id = ? LIMIT 1',
+      args: [Number(row.id)]
+    })
+    if (firstRow(existing)) continue
     await ensureUserMembership(Number(row.id), {
       organizationId: DEFAULT_ORG_ID,
       role: Number(row.is_admin || 0) === 1 ? 'admin' : 'job_seeker'
@@ -365,16 +370,7 @@ async function resolveDataScope(scope = {}) {
       userId: Number(scope.userId)
     }
   }
-
-  const userId = await getDefaultUserId()
-  if (!userId) {
-    throw new Error('No default user available for data scope')
-  }
-  const membership = await getPrimaryMembershipForUser(userId)
-  return {
-    organizationId: membership?.organizationId || DEFAULT_ORG_ID,
-    userId
-  }
+  throw new Error('Tenant data scope is required')
 }
 
 async function scopedOwnerWhere(scope, prefix = '') {
