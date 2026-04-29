@@ -72,6 +72,15 @@ if gcloud secrets describe jobhunt-gmail-oauth-redirect-uri --project "$PROJECT_
   SECRET_ARGS+=(--set-secrets GMAIL_OAUTH_REDIRECT_URI=jobhunt-gmail-oauth-redirect-uri:latest)
 fi
 
+if [[ "$AUTH_MODE" == "session" ]]; then
+  if ! gcloud secrets describe jobhunt-default-password --project "$PROJECT_ID" >/dev/null 2>&1; then
+    echo "Refusing session-mode Cloud Run deploy without jobhunt-default-password secret."
+    echo "Set DEFAULT_PASSWORD in .env, run ./setup-secrets.sh, then deploy again."
+    exit 1
+  fi
+  SECRET_ARGS+=(--set-secrets DEFAULT_PASSWORD=jobhunt-default-password:latest)
+fi
+
 gcloud run deploy "$SERVICE_NAME" \
   --image "$IMAGE" \
   --region "$REGION" \

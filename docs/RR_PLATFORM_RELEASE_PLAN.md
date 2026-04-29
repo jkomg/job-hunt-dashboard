@@ -98,6 +98,7 @@ Initial rollout:
 - Username/password.
 - Invite-only account creation.
 - Forced password change on first login.
+- Public session-mode deploys require a non-default seeded password secret.
 - Admin-created staff accounts.
 - Strong `SESSION_SECRET`, rate limiting, CSRF, and session expiration.
 

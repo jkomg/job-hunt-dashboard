@@ -274,13 +274,14 @@ powershell -ExecutionPolicy Bypass -File .\scripts\create-launchers-windows.ps1
 ### Cloud Run (low-cost default)
 
 ```bash
+# set DEFAULT_PASSWORD in .env to a strong temporary password first
 ./setup-secrets.sh
 AUTH_MODE=session ADMIN_EMAILS=you@example.com ./deploy.sh
 ./scripts/setup-cloud-cost-controls.sh
 CRON_TOKEN="$(grep '^SHEETS_SYNC_CRON_TOKEN=' .env | cut -d'=' -f2-)" ./scripts/setup-daily-sheets-sync.sh
 ```
 
-This deploys directly to Cloud Run with the app's built-in login. It avoids the fixed monthly cost of an external HTTPS load balancer. Point a custom domain at Cloud Run using a Cloud Run domain mapping; for `hunt.jkomg.us`, use a CNAME to `ghs.googlehosted.com.` after creating the mapping.
+This deploys directly to Cloud Run with the app's built-in login. It avoids the fixed monthly cost of an external HTTPS load balancer. Session-mode Cloud Run deploys require a `DEFAULT_PASSWORD` secret so a fresh public database cannot be claimed with the local-only default password. Point a custom domain at Cloud Run using a Cloud Run domain mapping; for `hunt.jkomg.us`, use a CNAME to `ghs.googlehosted.com.` after creating the mapping.
 
 The cost-control script:
 

@@ -5,6 +5,7 @@ Use this before exposing Job Hunt Dashboard beyond local-only use.
 ## Required before public access
 
 - Use `AUTH_MODE=session` for low-cost Cloud Run deployments.
+- Set a strong `DEFAULT_PASSWORD` before session-mode Cloud Run deploys; do not use the local-only default password on a public service.
 - Use `AUTH_MODE=iap` only when you need Google IAP and accept the load-balancer cost.
 - If IAP is enabled, restrict IAP access to approved Google accounts/groups only.
 - Set strong secrets in environment:

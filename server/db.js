@@ -396,12 +396,13 @@ export async function initDb() {
   const userCount = Number(firstRow(userCountRes)?.count || 0)
 
   if (userCount === 0) {
-    const hash = bcrypt.hashSync('jobhunt2026', 10)
+    const seedPassword = String(process.env.DEFAULT_PASSWORD || 'jobhunt2026')
+    const hash = bcrypt.hashSync(seedPassword, 10)
     await db.execute({
       sql: 'INSERT INTO users (username, password_hash, is_admin, must_change_password) VALUES (?, ?, ?, ?)',
       args: [seedUsername, hash, 1, 1]
     })
-    console.log(`Default user created: ${seedUsername} / jobhunt2026`)
+    console.log(`Default user created: ${seedUsername}`)
   }
 
   initialized = true
