@@ -322,6 +322,58 @@ function toMembership(row) {
   }
 }
 
+function toOrganizationUser(row) {
+  if (!row) return null
+  return {
+    id: Number(row.id),
+    username: row.username,
+    email: row.email || null,
+    isAdmin: Number(row.is_admin || 0) === 1,
+    mustChangePassword: Number(row.must_change_password || 0) === 1,
+    organizationId: row.organization_id,
+    role: row.role,
+    createdAt: row.membership_created_at || null
+  }
+}
+
+function toStaffAssignment(row) {
+  if (!row) return null
+  return {
+    id: row.id,
+    organizationId: row.organization_id,
+    staffUserId: Number(row.staff_user_id),
+    jobSeekerUserId: Number(row.job_seeker_user_id),
+    staffUsername: row.staff_username || null,
+    jobSeekerUsername: row.job_seeker_username || null,
+    createdAt: Number(row.created_at || 0),
+    updatedAt: Number(row.updated_at || 0)
+  }
+}
+
+function toAuditLog(row) {
+  if (!row) return null
+  return {
+    id: row.id,
+    organizationId: row.organization_id,
+    actorUserId: row.actor_user_id == null ? null : Number(row.actor_user_id),
+    targetUserId: row.target_user_id == null ? null : Number(row.target_user_id),
+    action: row.action,
+    entityType: row.entity_type || null,
+    entityId: row.entity_id || null,
+    metadata: parseJsonSafe(row.metadata_json, {}),
+    createdAt: Number(row.created_at || 0)
+  }
+}
+
+function parseJsonSafe(raw, fallback = null) {
+  if (!raw) return fallback
+  try {
+    return JSON.parse(raw)
+  } catch {
+    return fallback
+  }
+}
+
 export async function ensureUserMembership(userId, { organizationId = DEFAULT_ORG_ID, role = 'job_seeker' } = {}) {
   if (!userId) return null
   const ts = now()
@@ -361,6 +413,178 @@ export async function getPrimaryMembershipForUser(userId) {
     args: [Number(userId)]
   })
   return toMembership(firstRow(res)) || ensureUserMembership(userId)
+}
+
+export async function listOrganizationUsers(organizationId = DEFAULT_ORG_ID) {
+  const res = await db.execute({
+    sql: `
+      SELECT
+        u.id,
+        u.username,
+        u.email,
+        u.is_admin,
+        u.must_change_password,
+        m.organization_id,
+        m.role,
+        m.created_at AS membership_created_at
+      FROM memberships m
+      JOIN users u ON u.id = m.user_id
+      WHERE m.organization_id = ?
+      ORDER BY
+        CASE m.role WHEN 'admin' THEN 0 WHEN 'staff' THEN 1 ELSE 2 END,
+        u.username ASC
+    `,
+    args: [String(organizationId)]
+  })
+  return toPlainRows(res).map(toOrganizationUser)
+}
+
+export async function listAssignedUsersForStaff(staffUserId, organizationId = DEFAULT_ORG_ID) {
+  const res = await db.execute({
+    sql: `
+      SELECT
+        u.id,
+        u.username,
+        u.email,
+        u.is_admin,
+        u.must_change_password,
+        m.organization_id,
+        m.role,
+        m.created_at AS membership_created_at
+      FROM staff_assignments sa
+      JOIN users u ON u.id = sa.job_seeker_user_id
+      JOIN memberships m ON m.user_id = u.id AND m.organization_id = sa.organization_id
+      WHERE sa.organization_id = ? AND sa.staff_user_id = ?
+      ORDER BY u.username ASC
+    `,
+    args: [String(organizationId), Number(staffUserId)]
+  })
+  return toPlainRows(res).map(toOrganizationUser)
+}
+
+export async function listStaffAssignments(organizationId = DEFAULT_ORG_ID) {
+  const res = await db.execute({
+    sql: `
+      SELECT
+        sa.*,
+        staff.username AS staff_username,
+        seeker.username AS job_seeker_username
+      FROM staff_assignments sa
+      JOIN users staff ON staff.id = sa.staff_user_id
+      JOIN users seeker ON seeker.id = sa.job_seeker_user_id
+      WHERE sa.organization_id = ?
+      ORDER BY sa.created_at DESC
+    `,
+    args: [String(organizationId)]
+  })
+  return toPlainRows(res).map(toStaffAssignment)
+}
+
+export async function createStaffAssignment({ organizationId = DEFAULT_ORG_ID, staffUserId, jobSeekerUserId }) {
+  const orgId = String(organizationId)
+  const staffId = Number(staffUserId)
+  const seekerId = Number(jobSeekerUserId)
+  if (!staffId || !seekerId) throw new Error('staffUserId and jobSeekerUserId are required')
+  if (staffId === seekerId) throw new Error('staff and job seeker must be different users')
+
+  const staffMembership = await getMembership(orgId, staffId)
+  const seekerMembership = await getMembership(orgId, seekerId)
+  if (!staffMembership || !seekerMembership) throw new Error('Both users must belong to the organization')
+  if (!['staff', 'admin'].includes(staffMembership.role)) throw new Error('Assigned staff user must have staff or admin role')
+  if (seekerMembership.role !== 'job_seeker') throw new Error('Assigned user must have job_seeker role')
+
+  const ts = now()
+  const id = `${orgId}:${staffId}:${seekerId}`
+  await db.execute({
+    sql: `
+      INSERT INTO staff_assignments (id, organization_id, staff_user_id, job_seeker_user_id, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(organization_id, staff_user_id, job_seeker_user_id) DO UPDATE SET
+        updated_at = excluded.updated_at
+    `,
+    args: [id, orgId, staffId, seekerId, ts, ts]
+  })
+  return getStaffAssignment(orgId, staffId, seekerId)
+}
+
+export async function deleteStaffAssignment({ organizationId = DEFAULT_ORG_ID, staffUserId, jobSeekerUserId }) {
+  const res = await db.execute({
+    sql: 'DELETE FROM staff_assignments WHERE organization_id = ? AND staff_user_id = ? AND job_seeker_user_id = ?',
+    args: [String(organizationId), Number(staffUserId), Number(jobSeekerUserId)]
+  })
+  return Number(res.rowsAffected || 0) > 0
+}
+
+export async function createAuditLog({
+  organizationId = DEFAULT_ORG_ID,
+  actorUserId = null,
+  targetUserId = null,
+  action,
+  entityType = null,
+  entityId = null,
+  metadata = null
+} = {}) {
+  if (!action) throw new Error('audit action is required')
+  const id = crypto.randomUUID()
+  await db.execute({
+    sql: `
+      INSERT INTO audit_log (
+        id, organization_id, actor_user_id, target_user_id, action, entity_type, entity_id, metadata_json, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `,
+    args: [
+      id,
+      String(organizationId),
+      actorUserId == null ? null : Number(actorUserId),
+      targetUserId == null ? null : Number(targetUserId),
+      String(action),
+      entityType == null ? null : String(entityType),
+      entityId == null ? null : String(entityId),
+      metadata == null ? null : JSON.stringify(metadata),
+      now()
+    ]
+  })
+  return { id }
+}
+
+export async function getAuditLogs({ organizationId = DEFAULT_ORG_ID, limit = 100 } = {}) {
+  const safeLimit = Math.max(1, Math.min(500, Number(limit) || 100))
+  const res = await db.execute({
+    sql: `
+      SELECT * FROM audit_log
+      WHERE organization_id = ?
+      ORDER BY created_at DESC
+      LIMIT ?
+    `,
+    args: [String(organizationId), safeLimit]
+  })
+  return toPlainRows(res).map(toAuditLog)
+}
+
+async function getMembership(organizationId, userId) {
+  const res = await db.execute({
+    sql: 'SELECT * FROM memberships WHERE organization_id = ? AND user_id = ? LIMIT 1',
+    args: [String(organizationId), Number(userId)]
+  })
+  return toMembership(firstRow(res))
+}
+
+async function getStaffAssignment(organizationId, staffUserId, jobSeekerUserId) {
+  const res = await db.execute({
+    sql: `
+      SELECT
+        sa.*,
+        staff.username AS staff_username,
+        seeker.username AS job_seeker_username
+      FROM staff_assignments sa
+      JOIN users staff ON staff.id = sa.staff_user_id
+      JOIN users seeker ON seeker.id = sa.job_seeker_user_id
+      WHERE sa.organization_id = ? AND sa.staff_user_id = ? AND sa.job_seeker_user_id = ?
+      LIMIT 1
+    `,
+    args: [String(organizationId), Number(staffUserId), Number(jobSeekerUserId)]
+  })
+  return toStaffAssignment(firstRow(res))
 }
 
 async function resolveDataScope(scope = {}) {

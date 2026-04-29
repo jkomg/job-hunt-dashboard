@@ -14,7 +14,8 @@ import { Storage } from '@google-cloud/storage'
 import {
   initDb,
   getUserByUsername, getUserByEmail, getUserById,
-  getPrimaryMembershipForUser, createUserAccount,
+  getPrimaryMembershipForUser, createUserAccount, listOrganizationUsers, listAssignedUsersForStaff,
+  listStaffAssignments, createStaffAssignment, deleteStaffAssignment, createAuditLog, getAuditLogs,
   createSession, getSession, deleteSession, updatePassword, updateUsername, getRecentSheetSyncRuns, getLocalDataLastUpdatedAt,
   getAppSetting, getAppSettings, setAppSetting, exportBackupSnapshot, restoreBackupSnapshot, createLocalDatabaseSnapshot,
   getDashboardData,
@@ -302,6 +303,11 @@ function requireAdmin(req, res, next) {
   next()
 }
 
+function requireStaffOrAdmin(req, res, next) {
+  if (req.isAdmin || req.userRole === 'staff') return next()
+  return res.status(403).json({ error: 'Staff access required' })
+}
+
 function dataScope(req) {
   return {
     organizationId: req.organizationId,
@@ -434,6 +440,16 @@ app.get('/api/me', requireAuth, async (req, res) => {
   }
 })
 
+app.get('/api/admin/users', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const users = await listOrganizationUsers(req.organizationId)
+    res.json({ ok: true, users })
+  } catch (e) {
+    console.error('admin.users.list failed', e)
+    res.status(500).json({ error: 'Could not list users' })
+  }
+})
+
 app.post('/api/admin/users', requireAuth, requireAdmin, async (req, res) => {
   try {
     const username = String(req.body?.username || '').trim().toLowerCase()
@@ -456,6 +472,15 @@ app.post('/api/admin/users', requireAuth, requireAdmin, async (req, res) => {
       organizationId: req.organizationId,
       mustChangePassword: true
     })
+    await createAuditLog({
+      organizationId: req.organizationId,
+      actorUserId: req.userId,
+      targetUserId: user.id,
+      action: 'admin.user.created',
+      entityType: 'user',
+      entityId: String(user.id),
+      metadata: { username: user.username, role }
+    })
     res.json({ ok: true, id: Number(user.id), username: user.username, role })
   } catch (e) {
     console.error('admin.users.create failed', e)
@@ -463,6 +488,95 @@ app.post('/api/admin/users', requireAuth, requireAdmin, async (req, res) => {
       return res.status(409).json({ error: 'That username or email is already taken' })
     }
     res.status(500).json({ error: 'Could not create user' })
+  }
+})
+
+app.get('/api/admin/staff-assignments', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const assignments = await listStaffAssignments(req.organizationId)
+    res.json({ ok: true, assignments })
+  } catch (e) {
+    console.error('admin.staffAssignments.list failed', e)
+    res.status(500).json({ error: 'Could not list staff assignments' })
+  }
+})
+
+app.post('/api/admin/staff-assignments', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const staffUserId = Number(req.body?.staffUserId)
+    const jobSeekerUserId = Number(req.body?.jobSeekerUserId)
+    const assignment = await createStaffAssignment({
+      organizationId: req.organizationId,
+      staffUserId,
+      jobSeekerUserId
+    })
+    await createAuditLog({
+      organizationId: req.organizationId,
+      actorUserId: req.userId,
+      targetUserId: jobSeekerUserId,
+      action: 'admin.staff_assignment.created',
+      entityType: 'staff_assignment',
+      entityId: assignment.id,
+      metadata: { staffUserId, jobSeekerUserId }
+    })
+    res.json({ ok: true, assignment })
+  } catch (e) {
+    console.error('admin.staffAssignments.create failed', e)
+    const message = String(e?.message || '')
+    if (message.includes('required') || message.includes('different') || message.includes('belong') || message.includes('staff') || message.includes('job_seeker')) {
+      return res.status(400).json({ error: message })
+    }
+    res.status(500).json({ error: 'Could not create staff assignment' })
+  }
+})
+
+app.delete('/api/admin/staff-assignments', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const staffUserId = Number(req.body?.staffUserId)
+    const jobSeekerUserId = Number(req.body?.jobSeekerUserId)
+    const removed = await deleteStaffAssignment({
+      organizationId: req.organizationId,
+      staffUserId,
+      jobSeekerUserId
+    })
+    if (!removed) {
+      return res.status(404).json({ error: 'Staff assignment not found' })
+    }
+    await createAuditLog({
+      organizationId: req.organizationId,
+      actorUserId: req.userId,
+      targetUserId: jobSeekerUserId,
+      action: 'admin.staff_assignment.deleted',
+      entityType: 'staff_assignment',
+      entityId: `${req.organizationId}:${staffUserId}:${jobSeekerUserId}`,
+      metadata: { staffUserId, jobSeekerUserId }
+    })
+    res.json({ ok: true })
+  } catch (e) {
+    console.error('admin.staffAssignments.delete failed', e)
+    res.status(500).json({ error: 'Could not delete staff assignment' })
+  }
+})
+
+app.get('/api/admin/audit-log', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const logs = await getAuditLogs({ organizationId: req.organizationId, limit: req.query?.limit })
+    res.json({ ok: true, logs })
+  } catch (e) {
+    console.error('admin.auditLog.list failed', e)
+    res.status(500).json({ error: 'Could not list audit log' })
+  }
+})
+
+app.get('/api/staff/assigned-users', requireAuth, requireStaffOrAdmin, async (req, res) => {
+  try {
+    const users = req.isAdmin
+      ? await listOrganizationUsers(req.organizationId)
+      : await listAssignedUsersForStaff(req.userId, req.organizationId)
+    res.json({ ok: true, users })
+  } catch (e) {
+    console.error('staff.assignedUsers failed', e)
+    res.status(500).json({ error: 'Could not list assigned users' })
   }
 })
 
