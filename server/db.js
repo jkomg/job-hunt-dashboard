@@ -48,6 +48,10 @@ const PRIORITY_FRAMEWORK = [
 
 const BACKUP_TABLES = [
   'schema_migrations',
+  'organizations',
+  'memberships',
+  'staff_assignments',
+  'audit_log',
   'app_settings',
   'daily_logs',
   'pipeline_entries',
@@ -65,9 +69,25 @@ function normalizeEmail(email) {
   return (email || '').trim().toLowerCase()
 }
 
-async function getUserColumns() {
-  const res = await db.execute('PRAGMA table_info(users)')
+const DEFAULT_ORG_ID = 'remote-rebellion'
+const DEFAULT_ORG_NAME = 'Remote Rebellion'
+const USER_OWNED_TABLES = [
+  'daily_logs',
+  'pipeline_entries',
+  'contacts',
+  'interviews',
+  'events',
+  'templates',
+  'watchlist'
+]
+
+async function getTableColumnSet(table) {
+  const res = await db.execute(`PRAGMA table_info(${table})`)
   return new Set((res.rows || []).map(r => String(r.name || '').toLowerCase()))
+}
+
+async function getUserColumns() {
+  return getTableColumnSet('users')
 }
 
 async function ensureUserSchema() {
@@ -107,12 +127,7 @@ async function ensureEventSchema() {
 }
 
 async function ensureActionSchema() {
-  const tableColumns = async (table) => {
-    const res = await db.execute(`PRAGMA table_info(${table})`)
-    return new Set((res.rows || []).map(r => String(r.name || '').toLowerCase()))
-  }
-
-  const pipelineCols = await tableColumns('pipeline_entries')
+  const pipelineCols = await getTableColumnSet('pipeline_entries')
   if (!pipelineCols.has('next_action')) {
     await db.execute('ALTER TABLE pipeline_entries ADD COLUMN next_action TEXT')
   }
@@ -123,7 +138,7 @@ async function ensureActionSchema() {
     await db.execute('ALTER TABLE pipeline_entries ADD COLUMN cover_letter TEXT')
   }
 
-  const contactCols = await tableColumns('contacts')
+  const contactCols = await getTableColumnSet('contacts')
   if (!contactCols.has('next_action')) {
     await db.execute('ALTER TABLE contacts ADD COLUMN next_action TEXT')
   }
@@ -131,12 +146,120 @@ async function ensureActionSchema() {
     await db.execute('ALTER TABLE contacts ADD COLUMN next_action_date TEXT')
   }
 
-  const interviewCols = await tableColumns('interviews')
+  const interviewCols = await getTableColumnSet('interviews')
   if (!interviewCols.has('next_action')) {
     await db.execute('ALTER TABLE interviews ADD COLUMN next_action TEXT')
   }
   if (!interviewCols.has('next_action_date')) {
     await db.execute('ALTER TABLE interviews ADD COLUMN next_action_date TEXT')
+  }
+}
+
+async function ensureTenantSchema() {
+  await db.batch([
+    `
+      CREATE TABLE IF NOT EXISTS organizations (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        slug TEXT UNIQUE NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )
+    `,
+    `
+      CREATE TABLE IF NOT EXISTS memberships (
+        id TEXT PRIMARY KEY,
+        organization_id TEXT NOT NULL,
+        user_id INTEGER NOT NULL,
+        role TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        UNIQUE(organization_id, user_id)
+      )
+    `,
+    `
+      CREATE TABLE IF NOT EXISTS staff_assignments (
+        id TEXT PRIMARY KEY,
+        organization_id TEXT NOT NULL,
+        staff_user_id INTEGER NOT NULL,
+        job_seeker_user_id INTEGER NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        UNIQUE(organization_id, staff_user_id, job_seeker_user_id)
+      )
+    `,
+    `
+      CREATE TABLE IF NOT EXISTS audit_log (
+        id TEXT PRIMARY KEY,
+        organization_id TEXT NOT NULL,
+        actor_user_id INTEGER,
+        target_user_id INTEGER,
+        action TEXT NOT NULL,
+        entity_type TEXT,
+        entity_id TEXT,
+        metadata_json TEXT,
+        created_at INTEGER NOT NULL
+      )
+    `
+  ])
+
+  const ts = now()
+  await db.execute({
+    sql: `
+      INSERT INTO organizations (id, name, slug, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        name = excluded.name,
+        slug = excluded.slug,
+        updated_at = excluded.updated_at
+    `,
+    args: [DEFAULT_ORG_ID, DEFAULT_ORG_NAME, DEFAULT_ORG_ID, ts, ts]
+  })
+
+  for (const table of USER_OWNED_TABLES) {
+    const columns = await getTableColumnSet(table)
+    if (!columns.has('organization_id')) {
+      await db.execute(`ALTER TABLE ${table} ADD COLUMN organization_id TEXT`)
+    }
+    if (!columns.has('user_id')) {
+      await db.execute(`ALTER TABLE ${table} ADD COLUMN user_id INTEGER`)
+    }
+    await db.execute(`CREATE INDEX IF NOT EXISTS ${table}_tenant_user_idx ON ${table}(organization_id, user_id)`)
+  }
+
+  await backfillDefaultOrganizationMemberships()
+  await backfillTenantOwnership()
+}
+
+async function getDefaultUserId() {
+  const res = await db.execute('SELECT id FROM users ORDER BY is_admin DESC, id ASC LIMIT 1')
+  const row = firstRow(res)
+  return row?.id == null ? null : Number(row.id)
+}
+
+async function backfillDefaultOrganizationMemberships() {
+  const res = await db.execute('SELECT id, is_admin FROM users')
+  for (const row of res.rows || []) {
+    await ensureUserMembership(Number(row.id), {
+      organizationId: DEFAULT_ORG_ID,
+      role: Number(row.is_admin || 0) === 1 ? 'admin' : 'job_seeker'
+    })
+  }
+}
+
+async function backfillTenantOwnership() {
+  const defaultUserId = await getDefaultUserId()
+  if (!defaultUserId) return
+
+  for (const table of USER_OWNED_TABLES) {
+    await db.execute({
+      sql: `UPDATE ${table} SET organization_id = ? WHERE organization_id IS NULL OR organization_id = ''`,
+      args: [DEFAULT_ORG_ID]
+    })
+    await db.execute({
+      sql: `UPDATE ${table} SET user_id = ? WHERE user_id IS NULL`,
+      args: [defaultUserId]
+    })
   }
 }
 
@@ -161,7 +284,8 @@ async function runMigrations() {
     { id: '2026-04-24-001-user-schema', description: 'users email/admin/password-change fields', up: ensureUserSchema },
     { id: '2026-04-24-002-interview-schema', description: 'interview pipeline link + index', up: ensureInterviewSchema },
     { id: '2026-04-24-003-event-schema', description: 'event source key + index', up: ensureEventSchema },
-    { id: '2026-04-24-004-action-schema', description: 'next action fields across entities', up: ensureActionSchema }
+    { id: '2026-04-24-004-action-schema', description: 'next action fields across entities', up: ensureActionSchema },
+    { id: '2026-04-29-001-tenant-schema', description: 'organizations memberships and user-owned record scope', up: ensureTenantSchema }
   ]
 
   for (const migration of migrations) {
@@ -180,6 +304,86 @@ function toUser(row) {
     isAdmin: Number(row.is_admin || 0) === 1,
     must_change_password: Number(row.must_change_password || 0),
     mustChangePassword: Number(row.must_change_password || 0) === 1
+  }
+}
+
+function toMembership(row) {
+  if (!row) return null
+  return {
+    id: row.id,
+    organizationId: row.organization_id,
+    userId: Number(row.user_id),
+    role: row.role
+  }
+}
+
+export async function ensureUserMembership(userId, { organizationId = DEFAULT_ORG_ID, role = 'job_seeker' } = {}) {
+  if (!userId) return null
+  const ts = now()
+  const membershipId = `${organizationId}:${userId}`
+  await db.execute({
+    sql: `
+      INSERT INTO memberships (id, organization_id, user_id, role, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(organization_id, user_id) DO UPDATE SET
+        role = CASE
+          WHEN memberships.role = 'admin' THEN memberships.role
+          ELSE excluded.role
+        END,
+        updated_at = excluded.updated_at
+    `,
+    args: [membershipId, organizationId, Number(userId), role, ts, ts]
+  })
+
+  const res = await db.execute({
+    sql: 'SELECT * FROM memberships WHERE organization_id = ? AND user_id = ? LIMIT 1',
+    args: [organizationId, Number(userId)]
+  })
+  return toMembership(firstRow(res))
+}
+
+export async function getPrimaryMembershipForUser(userId) {
+  if (!userId) return null
+  const res = await db.execute({
+    sql: `
+      SELECT * FROM memberships
+      WHERE user_id = ?
+      ORDER BY
+        CASE role WHEN 'admin' THEN 0 WHEN 'staff' THEN 1 ELSE 2 END,
+        created_at ASC
+      LIMIT 1
+    `,
+    args: [Number(userId)]
+  })
+  return toMembership(firstRow(res)) || ensureUserMembership(userId)
+}
+
+async function resolveDataScope(scope = {}) {
+  if (scope?.organizationId && scope?.userId) {
+    return {
+      organizationId: String(scope.organizationId),
+      userId: Number(scope.userId)
+    }
+  }
+
+  const userId = await getDefaultUserId()
+  if (!userId) {
+    throw new Error('No default user available for data scope')
+  }
+  const membership = await getPrimaryMembershipForUser(userId)
+  return {
+    organizationId: membership?.organizationId || DEFAULT_ORG_ID,
+    userId
+  }
+}
+
+async function scopedOwnerWhere(scope, prefix = '') {
+  const resolved = await resolveDataScope(scope)
+  const columnPrefix = prefix ? `${prefix}.` : ''
+  return {
+    ...resolved,
+    clause: `${columnPrefix}organization_id = ? AND ${columnPrefix}user_id = ?`,
+    args: [resolved.organizationId, resolved.userId]
   }
 }
 
@@ -404,6 +608,9 @@ export async function initDb() {
     })
     console.log(`Default user created: ${seedUsername}`)
   }
+
+  await backfillDefaultOrganizationMemberships()
+  await backfillTenantOwnership()
 
   initialized = true
 }
@@ -634,6 +841,37 @@ export async function upsertLocalAdminUser(username, password, { mustChangePassw
   })
 
   return getUserByUsername(normalizedUsername)
+}
+
+export async function createUserAccount({
+  username,
+  password,
+  email = null,
+  role = 'job_seeker',
+  organizationId = DEFAULT_ORG_ID,
+  mustChangePassword = true
+} = {}) {
+  const normalizedUsername = String(username || '').trim().toLowerCase()
+  const rawPassword = String(password || '')
+  const normalizedEmail = normalizeEmail(email) || null
+  const safeRole = ['admin', 'staff', 'job_seeker'].includes(String(role)) ? String(role) : 'job_seeker'
+
+  if (!normalizedUsername || !rawPassword) {
+    throw new Error('username and password are required')
+  }
+
+  const hash = bcrypt.hashSync(rawPassword, 10)
+  await db.execute({
+    sql: `
+      INSERT INTO users (username, password_hash, email, is_admin, must_change_password)
+      VALUES (?, ?, ?, ?, ?)
+    `,
+    args: [normalizedUsername, hash, normalizedEmail, safeRole === 'admin' ? 1 : 0, mustChangePassword ? 1 : 0]
+  })
+
+  const user = await getUserByUsername(normalizedUsername)
+  await ensureUserMembership(user.id, { organizationId, role: safeRole })
+  return user
 }
 
 export async function createSession(token, userId) {
@@ -1004,57 +1242,63 @@ function todayLabel() {
   })
 }
 
-export async function getDailyLogs(limit = 30) {
+export async function getDailyLogs(limit = 30, scope = {}) {
   const safeLimit = Math.max(1, Math.min(365, Number(limit) || 30))
+  const owner = await scopedOwnerWhere(scope)
   const res = await db.execute({
     sql: `
       SELECT * FROM daily_logs
+      WHERE ${owner.clause}
       ORDER BY created_at DESC
       LIMIT ?
     `,
-    args: [safeLimit]
+    args: [...owner.args, safeLimit]
   })
   return toPlainRows(res).map(dailyRowToRecord)
 }
 
-export async function getTodayLog(dateLabel = todayLabel()) {
+export async function getTodayLog(dateLabel = todayLabel(), scope = {}) {
   const targetDateLabel = String(dateLabel || '').trim() || todayLabel()
+  const owner = await scopedOwnerWhere(scope)
   const res = await db.execute({
     sql: `
       SELECT * FROM daily_logs
-      WHERE date_label = ?
+      WHERE date_label = ? AND ${owner.clause}
       ORDER BY updated_at DESC
       LIMIT 1
     `,
-    args: [targetDateLabel]
+    args: [targetDateLabel, ...owner.args]
   })
   return dailyRowToRecord(firstRow(res))
 }
 
-export async function getRecentLogs(n = 8) {
+export async function getRecentLogs(n = 8, scope = {}) {
   const safeLimit = Math.max(1, Math.min(100, Number(n) || 8))
+  const owner = await scopedOwnerWhere(scope)
   const res = await db.execute({
     sql: `
       SELECT * FROM daily_logs
+      WHERE ${owner.clause}
       ORDER BY created_at DESC
       LIMIT ?
     `,
-    args: [safeLimit]
+    args: [...owner.args, safeLimit]
   })
   return toPlainRows(res).map(dailyRowToRecord)
 }
 
-export async function createDailyLog(data = {}) {
+export async function createDailyLog(data = {}, scope = {}) {
   const ts = now()
   const id = String(data.id || crypto.randomUUID())
+  const owner = await resolveDataScope(scope)
 
   await db.execute({
     sql: `
       INSERT INTO daily_logs (
         id, date_label, mindset, energy, outreach_sent, responses_received, applications_submitted,
         conversations_calls, linkedin_posts, volunteer_activity, exercise, cert_progress, win_of_day,
-        gratitude_reflection, tomorrow_top3, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        gratitude_reflection, tomorrow_top3, organization_id, user_id, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     args: [
       id,
@@ -1072,6 +1316,8 @@ export async function createDailyLog(data = {}) {
       data['Win of the Day'] || null,
       data['Gratitude / Reflection'] || null,
       data["Tomorrow's Top 3"] || null,
+      owner.organizationId,
+      owner.userId,
       ts,
       ts
     ]
@@ -1080,7 +1326,8 @@ export async function createDailyLog(data = {}) {
   return { id }
 }
 
-export async function updateDailyLog(id, data = {}) {
+export async function updateDailyLog(id, data = {}, scope = {}) {
+  const owner = await scopedOwnerWhere(scope)
   const updates = []
   const args = []
 
@@ -1107,35 +1354,40 @@ export async function updateDailyLog(id, data = {}) {
 
   updates.push('updated_at = ?')
   args.push(now())
-  args.push(String(id))
+  args.push(String(id), ...owner.args)
 
   await db.execute({
-    sql: `UPDATE daily_logs SET ${updates.join(', ')} WHERE id = ?`,
+    sql: `UPDATE daily_logs SET ${updates.join(', ')} WHERE id = ? AND ${owner.clause}`,
     args
   })
 }
 
-export async function getPipeline() {
+export async function getPipeline(scope = {}) {
+  const owner = await scopedOwnerWhere(scope)
   const res = await db.execute({
     sql: `
       SELECT * FROM pipeline_entries
+      WHERE ${owner.clause}
       ORDER BY stage ASC, created_at DESC
-    `
+    `,
+    args: owner.args
   })
   return toPlainRows(res).map(pipelineRowToRecord)
 }
 
-export async function getPipelineEntryById(id) {
+export async function getPipelineEntryById(id, scope = {}) {
+  const owner = await scopedOwnerWhere(scope)
   const res = await db.execute({
-    sql: 'SELECT * FROM pipeline_entries WHERE id = ? LIMIT 1',
-    args: [String(id)]
+    sql: `SELECT * FROM pipeline_entries WHERE id = ? AND ${owner.clause} LIMIT 1`,
+    args: [String(id), ...owner.args]
   })
   return pipelineRowToRecord(firstRow(res))
 }
 
-export async function createPipelineEntry(data = {}) {
+export async function createPipelineEntry(data = {}, scope = {}) {
   const ts = now()
   const id = String(data.id || crypto.randomUUID())
+  const owner = await resolveDataScope(scope)
 
   await db.execute({
     sql: `
@@ -1143,8 +1395,9 @@ export async function createPipelineEntry(data = {}) {
         id, company, role, stage, priority, sector, job_source, job_url, salary_range,
         date_applied, follow_up_date, contact_name, contact_title, outreach_method, resume_version,
         company_address, company_phone, notes, research_notes, filed_for_unemployment, outcome,
-        resume_url, cover_letter, work_location, next_action, next_action_date, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        resume_url, cover_letter, work_location, next_action, next_action_date, organization_id, user_id,
+        created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     args: [
       id,
@@ -1173,6 +1426,8 @@ export async function createPipelineEntry(data = {}) {
       data['Work Location'] || null,
       data['Next Action'] || null,
       data['Next Action Date'] || null,
+      owner.organizationId,
+      owner.userId,
       ts,
       ts
     ]
@@ -1181,7 +1436,8 @@ export async function createPipelineEntry(data = {}) {
   return { id }
 }
 
-export async function updatePipelineEntry(id, data = {}) {
+export async function updatePipelineEntry(id, data = {}, scope = {}) {
+  const owner = await scopedOwnerWhere(scope)
   const updates = []
   const args = []
 
@@ -1220,25 +1476,27 @@ export async function updatePipelineEntry(id, data = {}) {
 
   updates.push('updated_at = ?')
   args.push(now())
-  args.push(String(id))
+  args.push(String(id), ...owner.args)
 
   await db.execute({
-    sql: `UPDATE pipeline_entries SET ${updates.join(', ')} WHERE id = ?`,
+    sql: `UPDATE pipeline_entries SET ${updates.join(', ')} WHERE id = ? AND ${owner.clause}`,
     args
   })
 }
 
-export async function updatePipelineStage(id, stage) {
+export async function updatePipelineStage(id, stage, scope = {}) {
+  const owner = await scopedOwnerWhere(scope)
   await db.execute({
-    sql: 'UPDATE pipeline_entries SET stage = ?, updated_at = ? WHERE id = ?',
-    args: [stage, now(), String(id)]
+    sql: `UPDATE pipeline_entries SET stage = ?, updated_at = ? WHERE id = ? AND ${owner.clause}`,
+    args: [stage, now(), String(id), ...owner.args]
   })
 }
 
 const INTERVIEW_TRIGGER_STAGES = new Set(['📞 Interview Scheduled', '🎯 Interviewing'])
 
-export async function ensureInterviewForPipelineStage(pipelineId, stageOverride = null) {
-  const pipeline = await getPipelineEntryById(pipelineId)
+export async function ensureInterviewForPipelineStage(pipelineId, stageOverride = null, scope = {}) {
+  const owner = await resolveDataScope(scope)
+  const pipeline = await getPipelineEntryById(pipelineId, owner)
   if (!pipeline) return { created: false, reason: 'pipeline_not_found' }
 
   const stage = stageOverride || pipeline.Stage
@@ -1247,8 +1505,8 @@ export async function ensureInterviewForPipelineStage(pipelineId, stageOverride 
   }
 
   const existing = await db.execute({
-    sql: 'SELECT id FROM interviews WHERE pipeline_entry_id = ? LIMIT 1',
-    args: [String(pipeline.id)]
+    sql: 'SELECT id FROM interviews WHERE pipeline_entry_id = ? AND organization_id = ? AND user_id = ? LIMIT 1',
+    args: [String(pipeline.id), owner.organizationId, owner.userId]
   })
   const existingRow = firstRow(existing)
   if (existingRow?.id) {
@@ -1263,8 +1521,9 @@ export async function ensureInterviewForPipelineStage(pipelineId, stageOverride 
     sql: `
       INSERT INTO interviews (
         id, company, job_title, date, round, format, outcome, interviewer,
-        questions_asked, feedback_received, follow_up_sent, notes, pipeline_entry_id, next_action, next_action_date, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        questions_asked, feedback_received, follow_up_sent, notes, pipeline_entry_id, next_action, next_action_date,
+        organization_id, user_id, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     args: [
       id,
@@ -1282,6 +1541,8 @@ export async function ensureInterviewForPipelineStage(pipelineId, stageOverride 
       String(pipeline.id),
       'Prepare interview talking points and STAR stories',
       date || addDaysIso(1),
+      owner.organizationId,
+      owner.userId,
       ts,
       ts
     ]
@@ -1298,8 +1559,8 @@ const STAGE_AUTOMATION = {
   '📋 Offer': { action: 'Review offer details and questions', days: 1 }
 }
 
-export async function applyPipelineStageAutomation(pipelineId, stageOverride = null) {
-  const pipeline = await getPipelineEntryById(pipelineId)
+export async function applyPipelineStageAutomation(pipelineId, stageOverride = null, scope = {}) {
+  const pipeline = await getPipelineEntryById(pipelineId, scope)
   if (!pipeline) return { updated: false, reason: 'pipeline_not_found' }
   const stage = stageOverride || pipeline.Stage
   const suggestion = STAGE_AUTOMATION[stage]
@@ -1314,12 +1575,12 @@ export async function applyPipelineStageAutomation(pipelineId, stageOverride = n
     return { updated: false, reason: 'already_has_next_action' }
   }
 
-  await updatePipelineEntry(pipelineId, updates)
+  await updatePipelineEntry(pipelineId, updates, scope)
   return { updated: true, updates }
 }
 
-export async function backfillInterviewsFromPipeline() {
-  const pipeline = await getPipeline()
+export async function backfillInterviewsFromPipeline(scope = {}) {
+  const pipeline = await getPipeline(scope)
   let created = 0
   let alreadyExists = 0
   let skipped = 0
@@ -1329,7 +1590,7 @@ export async function backfillInterviewsFromPipeline() {
       skipped += 1
       continue
     }
-    const result = await ensureInterviewForPipelineStage(item.id, item.Stage)
+    const result = await ensureInterviewForPipelineStage(item.id, item.Stage, scope)
     if (result?.created) {
       created += 1
       continue
@@ -1349,10 +1610,11 @@ export async function backfillInterviewsFromPipeline() {
   }
 }
 
-export async function updatePipelineFollowUp(id, date) {
+export async function updatePipelineFollowUp(id, date, scope = {}) {
+  const owner = await scopedOwnerWhere(scope)
   await db.execute({
-    sql: 'UPDATE pipeline_entries SET follow_up_date = ?, updated_at = ? WHERE id = ?',
-    args: [date || null, now(), String(id)]
+    sql: `UPDATE pipeline_entries SET follow_up_date = ?, updated_at = ? WHERE id = ? AND ${owner.clause}`,
+    args: [date || null, now(), String(id), ...owner.args]
   })
 }
 
@@ -1361,67 +1623,77 @@ export async function countPipelineEntries() {
   return Number(firstRow(res)?.count || 0)
 }
 
-export async function getContacts() {
+export async function getContacts(scope = {}) {
+  const owner = await scopedOwnerWhere(scope)
   const res = await db.execute({
     sql: `
       SELECT * FROM contacts
+      WHERE ${owner.clause}
       ORDER BY
         CASE WHEN next_follow_up IS NULL OR next_follow_up = '' THEN 1 ELSE 0 END,
         next_follow_up ASC,
         created_at DESC
-    `
+    `,
+    args: owner.args
   })
   return toPlainRows(res).map(contactRowToRecord)
 }
 
-export async function getOverdueFollowUps() {
+export async function getOverdueFollowUps(scope = {}) {
   const today = new Date().toISOString().slice(0, 10)
+  const owner = await scopedOwnerWhere(scope)
   const res = await db.execute({
     sql: `
       SELECT * FROM contacts
       WHERE
+        ${owner.clause}
+        AND
         next_follow_up IS NOT NULL
         AND next_follow_up != ''
         AND next_follow_up <= ?
         AND status IN ('Need to reach out', 'Waiting on response', 'In conversation')
       ORDER BY next_follow_up ASC, updated_at DESC
     `,
-    args: [today]
+    args: [...owner.args, today]
   })
   return toPlainRows(res).map(contactRowToRecord)
 }
 
-export async function markContacted(id, nextFollowUp) {
+export async function markContacted(id, nextFollowUp, scope = {}) {
   const today = new Date().toISOString().slice(0, 10)
+  const owner = await scopedOwnerWhere(scope)
   if (nextFollowUp) {
     await db.execute({
-      sql: 'UPDATE contacts SET last_contact = ?, status = ?, next_follow_up = ?, updated_at = ? WHERE id = ?',
-      args: [today, 'Waiting on response', nextFollowUp, now(), String(id)]
+      sql: `UPDATE contacts SET last_contact = ?, status = ?, next_follow_up = ?, updated_at = ? WHERE id = ? AND ${owner.clause}`,
+      args: [today, 'Waiting on response', nextFollowUp, now(), String(id), ...owner.args]
     })
     return
   }
   await db.execute({
-    sql: 'UPDATE contacts SET last_contact = ?, status = ?, updated_at = ? WHERE id = ?',
-    args: [today, 'Waiting on response', now(), String(id)]
+    sql: `UPDATE contacts SET last_contact = ?, status = ?, updated_at = ? WHERE id = ? AND ${owner.clause}`,
+    args: [today, 'Waiting on response', now(), String(id), ...owner.args]
   })
 }
 
-export async function updateContactStatus(id, status) {
+export async function updateContactStatus(id, status, scope = {}) {
+  const owner = await scopedOwnerWhere(scope)
   await db.execute({
-    sql: 'UPDATE contacts SET status = ?, updated_at = ? WHERE id = ?',
-    args: [status || '', now(), String(id)]
+    sql: `UPDATE contacts SET status = ?, updated_at = ? WHERE id = ? AND ${owner.clause}`,
+    args: [status || '', now(), String(id), ...owner.args]
   })
 }
 
-export async function createContact(data = {}) {
+export async function createContact(data = {}, scope = {}) {
   const ts = now()
   const id = String(data.id || crypto.randomUUID())
+  const owner = await resolveDataScope(scope)
   await db.execute({
     sql: `
       INSERT INTO contacts (
         id, name, title, company, email, phone, warmth, status, how_we_know_each_other,
-        linkedin_url, next_follow_up, last_contact, resume_used, notes, next_action, next_action_date, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        linkedin_url, next_follow_up, last_contact, resume_used, notes, next_action, next_action_date,
+        organization_id, user_id, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     args: [
       id,
@@ -1440,6 +1712,8 @@ export async function createContact(data = {}) {
       data.Notes || null,
       data['Next Action'] || null,
       data['Next Action Date'] || null,
+      owner.organizationId,
+      owner.userId,
       ts,
       ts
     ]
@@ -1447,7 +1721,8 @@ export async function createContact(data = {}) {
   return { id }
 }
 
-export async function updateContact(id, data = {}) {
+export async function updateContact(id, data = {}, scope = {}) {
+  const owner = await scopedOwnerWhere(scope)
   const updates = []
   const args = []
   const setIfPresent = (column, value) => {
@@ -1475,36 +1750,41 @@ export async function updateContact(id, data = {}) {
 
   updates.push('updated_at = ?')
   args.push(now())
-  args.push(String(id))
+  args.push(String(id), ...owner.args)
 
   await db.execute({
-    sql: `UPDATE contacts SET ${updates.join(', ')} WHERE id = ?`,
+    sql: `UPDATE contacts SET ${updates.join(', ')} WHERE id = ? AND ${owner.clause}`,
     args
   })
 }
 
-export async function getInterviews() {
+export async function getInterviews(scope = {}) {
+  const owner = await scopedOwnerWhere(scope)
   const res = await db.execute({
     sql: `
       SELECT * FROM interviews
+      WHERE ${owner.clause}
       ORDER BY
         CASE WHEN date IS NULL OR date = '' THEN 1 ELSE 0 END,
         date DESC,
         created_at DESC
-    `
+    `,
+    args: owner.args
   })
   return toPlainRows(res).map(interviewRowToRecord)
 }
 
-export async function createInterview(data = {}) {
+export async function createInterview(data = {}, scope = {}) {
   const ts = now()
   const id = String(data.id || crypto.randomUUID())
+  const owner = await resolveDataScope(scope)
   await db.execute({
     sql: `
       INSERT INTO interviews (
         id, company, job_title, date, round, format, outcome, interviewer,
-        questions_asked, feedback_received, follow_up_sent, notes, pipeline_entry_id, next_action, next_action_date, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        questions_asked, feedback_received, follow_up_sent, notes, pipeline_entry_id, next_action, next_action_date,
+        organization_id, user_id, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     args: [
       id,
@@ -1522,6 +1802,8 @@ export async function createInterview(data = {}) {
       data['Pipeline Entry ID'] || null,
       data['Next Action'] || null,
       data['Next Action Date'] || null,
+      owner.organizationId,
+      owner.userId,
       ts,
       ts
     ]
@@ -1529,7 +1811,8 @@ export async function createInterview(data = {}) {
   return { id }
 }
 
-export async function updateInterview(id, data = {}) {
+export async function updateInterview(id, data = {}, scope = {}) {
+  const owner = await scopedOwnerWhere(scope)
   const updates = []
   const args = []
   const setIfPresent = (column, value) => {
@@ -1555,35 +1838,39 @@ export async function updateInterview(id, data = {}) {
 
   updates.push('updated_at = ?')
   args.push(now())
-  args.push(String(id))
+  args.push(String(id), ...owner.args)
 
   await db.execute({
-    sql: `UPDATE interviews SET ${updates.join(', ')} WHERE id = ?`,
+    sql: `UPDATE interviews SET ${updates.join(', ')} WHERE id = ? AND ${owner.clause}`,
     args
   })
 }
 
-export async function getEvents() {
+export async function getEvents(scope = {}) {
+  const owner = await scopedOwnerWhere(scope)
   const res = await db.execute({
     sql: `
       SELECT * FROM events
+      WHERE ${owner.clause}
       ORDER BY
         CASE WHEN date IS NULL OR date = '' THEN 1 ELSE 0 END,
         date ASC,
         created_at DESC
-    `
+    `,
+    args: owner.args
   })
   return toPlainRows(res).map(eventRowToRecord)
 }
 
-export async function createEvent(data = {}) {
+export async function createEvent(data = {}, scope = {}) {
   const ts = now()
   const id = String(data.id || crypto.randomUUID())
+  const owner = await resolveDataScope(scope)
   await db.execute({
     sql: `
       INSERT INTO events (
-        id, name, date, price, status, registration_link, notes, source_key, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        id, name, date, price, status, registration_link, notes, source_key, organization_id, user_id, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     args: [
       id,
@@ -1594,6 +1881,8 @@ export async function createEvent(data = {}) {
       data['Registration Link'] || null,
       data.Notes || null,
       data['Source Key'] || null,
+      owner.organizationId,
+      owner.userId,
       ts,
       ts
     ]
@@ -1601,16 +1890,18 @@ export async function createEvent(data = {}) {
   return { id }
 }
 
-export async function getEventBySourceKey(sourceKey) {
+export async function getEventBySourceKey(sourceKey, scope = {}) {
   if (!sourceKey) return null
+  const owner = await scopedOwnerWhere(scope)
   const res = await db.execute({
-    sql: 'SELECT * FROM events WHERE source_key = ? LIMIT 1',
-    args: [String(sourceKey)]
+    sql: `SELECT * FROM events WHERE source_key = ? AND ${owner.clause} LIMIT 1`,
+    args: [String(sourceKey), ...owner.args]
   })
   return eventRowToRecord(firstRow(res))
 }
 
-export async function updateEvent(id, data = {}) {
+export async function updateEvent(id, data = {}, scope = {}) {
+  const owner = await scopedOwnerWhere(scope)
   const updates = []
   const args = []
   const setIfPresent = (column, value) => {
@@ -1629,32 +1920,36 @@ export async function updateEvent(id, data = {}) {
 
   updates.push('updated_at = ?')
   args.push(now())
-  args.push(String(id))
+  args.push(String(id), ...owner.args)
 
   await db.execute({
-    sql: `UPDATE events SET ${updates.join(', ')} WHERE id = ?`,
+    sql: `UPDATE events SET ${updates.join(', ')} WHERE id = ? AND ${owner.clause}`,
     args
   })
 }
 
-export async function getTemplates() {
+export async function getTemplates(scope = {}) {
+  const owner = await scopedOwnerWhere(scope)
   const res = await db.execute({
     sql: `
       SELECT * FROM templates
+      WHERE ${owner.clause}
       ORDER BY updated_at DESC, created_at DESC
-    `
+    `,
+    args: owner.args
   })
   return toPlainRows(res).map(templateRowToRecord)
 }
 
-export async function createTemplate(data = {}) {
+export async function createTemplate(data = {}, scope = {}) {
   const ts = now()
   const id = String(data.id || crypto.randomUUID())
+  const owner = await resolveDataScope(scope)
   await db.execute({
     sql: `
       INSERT INTO templates (
-        id, name, category, body, notes, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        id, name, category, body, notes, organization_id, user_id, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     args: [
       id,
@@ -1662,6 +1957,8 @@ export async function createTemplate(data = {}) {
       data.Category || null,
       data.Body || null,
       data.Notes || null,
+      owner.organizationId,
+      owner.userId,
       ts,
       ts
     ]
@@ -1669,7 +1966,8 @@ export async function createTemplate(data = {}) {
   return { id }
 }
 
-export async function updateTemplate(id, data = {}) {
+export async function updateTemplate(id, data = {}, scope = {}) {
+  const owner = await scopedOwnerWhere(scope)
   const updates = []
   const args = []
   const setIfPresent = (column, value) => {
@@ -1686,36 +1984,40 @@ export async function updateTemplate(id, data = {}) {
 
   updates.push('updated_at = ?')
   args.push(now())
-  args.push(String(id))
+  args.push(String(id), ...owner.args)
 
   await db.execute({
-    sql: `UPDATE templates SET ${updates.join(', ')} WHERE id = ?`,
+    sql: `UPDATE templates SET ${updates.join(', ')} WHERE id = ? AND ${owner.clause}`,
     args
   })
 }
 
-export async function getWatchlist() {
+export async function getWatchlist(scope = {}) {
+  const owner = await scopedOwnerWhere(scope)
   const res = await db.execute({
     sql: `
       SELECT * FROM watchlist
+      WHERE ${owner.clause}
       ORDER BY
         CASE WHEN follow_up IS NULL OR follow_up = '' THEN 1 ELSE 0 END,
         follow_up ASC,
         created_at DESC
-    `
+    `,
+    args: owner.args
   })
   return toPlainRows(res).map(watchlistRowToRecord)
 }
 
-export async function createWatchlistEntry(data = {}) {
+export async function createWatchlistEntry(data = {}, scope = {}) {
   const ts = now()
   const id = String(data.id || crypto.randomUUID())
+  const owner = await resolveDataScope(scope)
   await db.execute({
     sql: `
       INSERT INTO watchlist (
         id, company, industry, website, connections_there, know_the_founder,
-        open_application, follow_up, status, notes, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        open_application, follow_up, status, notes, organization_id, user_id, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     args: [
       id,
@@ -1728,6 +2030,8 @@ export async function createWatchlistEntry(data = {}) {
       data['Follow Up'] || null,
       data.Status || 'Watching',
       data.Notes || null,
+      owner.organizationId,
+      owner.userId,
       ts,
       ts
     ]
@@ -1735,7 +2039,8 @@ export async function createWatchlistEntry(data = {}) {
   return { id }
 }
 
-export async function updateWatchlistEntry(id, data = {}) {
+export async function updateWatchlistEntry(id, data = {}, scope = {}) {
+  const owner = await scopedOwnerWhere(scope)
   const updates = []
   const args = []
   const setIfPresent = (column, value) => {
@@ -1757,22 +2062,22 @@ export async function updateWatchlistEntry(id, data = {}) {
 
   updates.push('updated_at = ?')
   args.push(now())
-  args.push(String(id))
+  args.push(String(id), ...owner.args)
 
   await db.execute({
-    sql: `UPDATE watchlist SET ${updates.join(', ')} WHERE id = ?`,
+    sql: `UPDATE watchlist SET ${updates.join(', ')} WHERE id = ? AND ${owner.clause}`,
     args
   })
 }
 
-export async function getDashboardData() {
+export async function getDashboardData(scope = {}) {
   const [overdueContacts, recentLogs, pipeline, interviews, events, contacts] = await Promise.all([
-    getOverdueFollowUps(),
-    getRecentLogs(8),
-    getPipeline(),
-    getInterviews(),
-    getEvents(),
-    getContacts()
+    getOverdueFollowUps(scope),
+    getRecentLogs(8, scope),
+    getPipeline(scope),
+    getInterviews(scope),
+    getEvents(scope),
+    getContacts(scope)
   ])
   const today = new Date().toISOString().slice(0, 10)
   const weekAhead = addDaysIso(7)

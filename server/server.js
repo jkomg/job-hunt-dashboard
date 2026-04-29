@@ -14,6 +14,7 @@ import { Storage } from '@google-cloud/storage'
 import {
   initDb,
   getUserByUsername, getUserByEmail, getUserById,
+  getPrimaryMembershipForUser, createUserAccount,
   createSession, getSession, deleteSession, updatePassword, updateUsername, getRecentSheetSyncRuns, getLocalDataLastUpdatedAt,
   getAppSetting, getAppSettings, setAppSetting, exportBackupSnapshot, restoreBackupSnapshot, createLocalDatabaseSnapshot,
   getDashboardData,
@@ -301,6 +302,15 @@ function requireAdmin(req, res, next) {
   next()
 }
 
+function dataScope(req) {
+  return {
+    organizationId: req.organizationId,
+    userId: req.userId,
+    role: req.userRole,
+    isAdmin: req.isAdmin
+  }
+}
+
 // ─── Auth middleware ───────────────────────────────────────────────────────────
 
 function extractIapEmail(req) {
@@ -337,8 +347,11 @@ async function requireAuth(req, res, next) {
     if (!session) return res.status(401).json({ error: 'Unauthorized' })
     req.userId = session.user_id
     const user = await getUserById(session.user_id)
+    const membership = await getPrimaryMembershipForUser(session.user_id)
     req.userEmail = user?.email || null
-    req.isAdmin = !!user?.isAdmin
+    req.organizationId = membership?.organizationId || null
+    req.userRole = membership?.role || (user?.isAdmin ? 'admin' : 'job_seeker')
+    req.isAdmin = !!user?.isAdmin || req.userRole === 'admin'
     req.mustChangePassword = !!user?.mustChangePassword
     req.authMode = 'session'
 
@@ -409,6 +422,8 @@ app.get('/api/me', requireAuth, async (req, res) => {
       username: user?.username || null,
       email: req.userEmail || null,
       isAdmin: !!req.isAdmin,
+      organizationId: req.organizationId,
+      role: req.userRole || null,
       mustChangePassword: !!req.mustChangePassword,
       onboardingComplete: onboarding.onboardingComplete,
       displayName: onboarding.displayName
@@ -416,6 +431,38 @@ app.get('/api/me', requireAuth, async (req, res) => {
   } catch (e) {
     console.error('me failed', e)
     res.status(500).json({ error: 'Could not load profile' })
+  }
+})
+
+app.post('/api/admin/users', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const username = String(req.body?.username || '').trim().toLowerCase()
+    const password = String(req.body?.password || '').trim()
+    const email = req.body?.email == null ? null : String(req.body.email).trim().toLowerCase()
+    const role = String(req.body?.role || 'job_seeker').trim()
+
+    if (!/^[a-z0-9._-]{3,32}$/.test(username)) {
+      return res.status(400).json({ error: 'Username must be 3-32 chars: letters, numbers, dot, dash, underscore' })
+    }
+    if (password.length < 10) {
+      return res.status(400).json({ error: 'Temporary password must be at least 10 characters' })
+    }
+
+    const user = await createUserAccount({
+      username,
+      password,
+      email,
+      role,
+      organizationId: req.organizationId,
+      mustChangePassword: true
+    })
+    res.json({ ok: true, id: Number(user.id), username: user.username, role })
+  } catch (e) {
+    console.error('admin.users.create failed', e)
+    if (String(e?.message || '').includes('UNIQUE constraint failed')) {
+      return res.status(409).json({ error: 'That username or email is already taken' })
+    }
+    res.status(500).json({ error: 'Could not create user' })
   }
 })
 
@@ -486,7 +533,7 @@ app.post('/api/change-password', requireAuth, async (req, res) => {
 
 app.get('/api/dashboard', requireAuth, async (req, res) => {
   try {
-    const data = await getDashboardData()
+    const data = await getDashboardData(dataScope(req))
     res.json(data)
   } catch (e) {
     console.error(e)
@@ -498,7 +545,7 @@ app.get('/api/dashboard', requireAuth, async (req, res) => {
 
 app.get('/api/pipeline', requireAuth, async (req, res) => {
   try {
-    res.json(await getPipeline())
+    res.json(await getPipeline(dataScope(req)))
   } catch (e) {
     res.status(500).json({ error: e.message })
   }
@@ -507,14 +554,15 @@ app.get('/api/pipeline', requireAuth, async (req, res) => {
 app.patch('/api/pipeline/:id/stage', requireAuth, async (req, res) => {
   try {
     const nextStage = String(req.body.stage || '')
-    await updatePipelineStage(req.params.id, nextStage)
+    const scope = dataScope(req)
+    await updatePipelineStage(req.params.id, nextStage, scope)
 
     let interviewAutoCreated = false
     let nextActionAutoUpdated = false
     if (nextStage) {
-      const result = await ensureInterviewForPipelineStage(req.params.id, nextStage)
+      const result = await ensureInterviewForPipelineStage(req.params.id, nextStage, scope)
       interviewAutoCreated = !!result?.created
-      const actionResult = await applyPipelineStageAutomation(req.params.id, nextStage)
+      const actionResult = await applyPipelineStageAutomation(req.params.id, nextStage, scope)
       nextActionAutoUpdated = !!actionResult?.updated
     }
 
@@ -526,7 +574,7 @@ app.patch('/api/pipeline/:id/stage', requireAuth, async (req, res) => {
 
 app.patch('/api/pipeline/:id/followup', requireAuth, async (req, res) => {
   try {
-    await updatePipelineFollowUp(req.params.id, req.body.date)
+    await updatePipelineFollowUp(req.params.id, req.body.date, dataScope(req))
     res.json({ ok: true })
   } catch (e) {
     res.status(500).json({ error: e.message })
@@ -535,13 +583,14 @@ app.patch('/api/pipeline/:id/followup', requireAuth, async (req, res) => {
 
 app.patch('/api/pipeline/:id', requireAuth, async (req, res) => {
   try {
-    await updatePipelineEntry(req.params.id, req.body)
+    const scope = dataScope(req)
+    await updatePipelineEntry(req.params.id, req.body, scope)
     let interviewAutoCreated = false
     let nextActionAutoUpdated = false
     if (req.body?.Stage) {
-      const result = await ensureInterviewForPipelineStage(req.params.id, req.body.Stage)
+      const result = await ensureInterviewForPipelineStage(req.params.id, req.body.Stage, scope)
       interviewAutoCreated = !!result?.created
-      const actionResult = await applyPipelineStageAutomation(req.params.id, req.body.Stage)
+      const actionResult = await applyPipelineStageAutomation(req.params.id, req.body.Stage, scope)
       nextActionAutoUpdated = !!actionResult?.updated
     }
     res.json({ ok: true, interviewAutoCreated, nextActionAutoUpdated })
@@ -552,13 +601,14 @@ app.patch('/api/pipeline/:id', requireAuth, async (req, res) => {
 
 app.post('/api/pipeline', requireAuth, async (req, res) => {
   try {
-    const page = await createPipelineEntry(req.body)
+    const scope = dataScope(req)
+    const page = await createPipelineEntry(req.body, scope)
     let interviewAutoCreated = false
     let nextActionAutoUpdated = false
     if (req.body?.Stage) {
-      const result = await ensureInterviewForPipelineStage(page.id, req.body.Stage)
+      const result = await ensureInterviewForPipelineStage(page.id, req.body.Stage, scope)
       interviewAutoCreated = !!result?.created
-      const actionResult = await applyPipelineStageAutomation(page.id, req.body.Stage)
+      const actionResult = await applyPipelineStageAutomation(page.id, req.body.Stage, scope)
       nextActionAutoUpdated = !!actionResult?.updated
     }
     res.json({ ok: true, id: page.id, interviewAutoCreated, nextActionAutoUpdated })
@@ -571,7 +621,7 @@ app.post('/api/pipeline', requireAuth, async (req, res) => {
 
 app.get('/api/contacts', requireAuth, async (req, res) => {
   try {
-    res.json(await getContacts())
+    res.json(await getContacts(dataScope(req)))
   } catch (e) {
     res.status(500).json({ error: e.message })
   }
@@ -579,7 +629,7 @@ app.get('/api/contacts', requireAuth, async (req, res) => {
 
 app.post('/api/contacts/:id/contacted', requireAuth, async (req, res) => {
   try {
-    await markContacted(req.params.id, req.body.nextFollowUp)
+    await markContacted(req.params.id, req.body.nextFollowUp, dataScope(req))
     res.json({ ok: true })
   } catch (e) {
     res.status(500).json({ error: e.message })
@@ -588,7 +638,7 @@ app.post('/api/contacts/:id/contacted', requireAuth, async (req, res) => {
 
 app.patch('/api/contacts/:id/status', requireAuth, async (req, res) => {
   try {
-    await updateContactStatus(req.params.id, req.body.status)
+    await updateContactStatus(req.params.id, req.body.status, dataScope(req))
     res.json({ ok: true })
   } catch (e) {
     res.status(500).json({ error: e.message })
@@ -597,7 +647,7 @@ app.patch('/api/contacts/:id/status', requireAuth, async (req, res) => {
 
 app.patch('/api/contacts/:id', requireAuth, async (req, res) => {
   try {
-    await updateContact(req.params.id, req.body)
+    await updateContact(req.params.id, req.body, dataScope(req))
     res.json({ ok: true })
   } catch (e) {
     res.status(500).json({ error: e.message })
@@ -606,7 +656,7 @@ app.patch('/api/contacts/:id', requireAuth, async (req, res) => {
 
 app.post('/api/contacts', requireAuth, async (req, res) => {
   try {
-    const page = await createContact(req.body)
+    const page = await createContact(req.body, dataScope(req))
     res.json({ ok: true, id: page.id })
   } catch (e) {
     res.status(500).json({ error: e.message })
@@ -617,7 +667,7 @@ app.post('/api/contacts', requireAuth, async (req, res) => {
 
 app.get('/api/interviews', requireAuth, async (req, res) => {
   try {
-    res.json(await getInterviews())
+    res.json(await getInterviews(dataScope(req)))
   } catch (e) {
     res.status(500).json({ error: e.message })
   }
@@ -625,7 +675,7 @@ app.get('/api/interviews', requireAuth, async (req, res) => {
 
 app.post('/api/interviews', requireAuth, async (req, res) => {
   try {
-    const page = await createInterview(req.body)
+    const page = await createInterview(req.body, dataScope(req))
     res.json({ ok: true, id: page.id })
   } catch (e) {
     res.status(500).json({ error: e.message })
@@ -634,16 +684,16 @@ app.post('/api/interviews', requireAuth, async (req, res) => {
 
 app.patch('/api/interviews/:id', requireAuth, async (req, res) => {
   try {
-    await updateInterview(req.params.id, req.body)
+    await updateInterview(req.params.id, req.body, dataScope(req))
     res.json({ ok: true })
   } catch (e) {
     res.status(500).json({ error: e.message })
   }
 })
 
-app.post('/api/interviews/reconcile', requireAuth, async (_req, res) => {
+app.post('/api/interviews/reconcile', requireAuth, async (req, res) => {
   try {
-    const result = await backfillInterviewsFromPipeline()
+    const result = await backfillInterviewsFromPipeline(dataScope(req))
     res.json({ ok: true, ...result })
   } catch (e) {
     console.error('interviews.reconcile failed', e)
@@ -655,7 +705,7 @@ app.post('/api/interviews/reconcile', requireAuth, async (_req, res) => {
 
 app.get('/api/events', requireAuth, async (req, res) => {
   try {
-    res.json(await getEvents())
+    res.json(await getEvents(dataScope(req)))
   } catch (e) {
     res.status(500).json({ error: e.message })
   }
@@ -663,7 +713,7 @@ app.get('/api/events', requireAuth, async (req, res) => {
 
 app.post('/api/events', requireAuth, async (req, res) => {
   try {
-    const page = await createEvent(req.body)
+    const page = await createEvent(req.body, dataScope(req))
     res.json({ ok: true, id: page.id })
   } catch (e) {
     res.status(500).json({ error: e.message })
@@ -672,7 +722,7 @@ app.post('/api/events', requireAuth, async (req, res) => {
 
 app.patch('/api/events/:id', requireAuth, async (req, res) => {
   try {
-    await updateEvent(req.params.id, req.body)
+    await updateEvent(req.params.id, req.body, dataScope(req))
     res.json({ ok: true })
   } catch (e) {
     res.status(500).json({ error: e.message })
@@ -682,36 +732,36 @@ app.patch('/api/events/:id', requireAuth, async (req, res) => {
 // ─── Templates ─────────────────────────────────────────────────────────────────
 
 app.get('/api/templates', requireAuth, async (req, res) => {
-  try { res.json(await getTemplates()) } catch (e) { res.status(500).json({ error: e.message }) }
+  try { res.json(await getTemplates(dataScope(req))) } catch (e) { res.status(500).json({ error: e.message }) }
 })
 
 app.post('/api/templates', requireAuth, async (req, res) => {
   try {
-    const page = await createTemplate(req.body)
+    const page = await createTemplate(req.body, dataScope(req))
     res.json({ ok: true, id: page.id })
   } catch (e) { res.status(500).json({ error: e.message }) }
 })
 
 app.patch('/api/templates/:id', requireAuth, async (req, res) => {
-  try { await updateTemplate(req.params.id, req.body); res.json({ ok: true }) }
+  try { await updateTemplate(req.params.id, req.body, dataScope(req)); res.json({ ok: true }) }
   catch (e) { res.status(500).json({ error: e.message }) }
 })
 
 // ─── Watchlist ─────────────────────────────────────────────────────────────────
 
 app.get('/api/watchlist', requireAuth, async (req, res) => {
-  try { res.json(await getWatchlist()) } catch (e) { res.status(500).json({ error: e.message }) }
+  try { res.json(await getWatchlist(dataScope(req))) } catch (e) { res.status(500).json({ error: e.message }) }
 })
 
 app.post('/api/watchlist', requireAuth, async (req, res) => {
   try {
-    const page = await createWatchlistEntry(req.body)
+    const page = await createWatchlistEntry(req.body, dataScope(req))
     res.json({ ok: true, id: page.id })
   } catch (e) { res.status(500).json({ error: e.message }) }
 })
 
 app.patch('/api/watchlist/:id', requireAuth, async (req, res) => {
-  try { await updateWatchlistEntry(req.params.id, req.body); res.json({ ok: true }) }
+  try { await updateWatchlistEntry(req.params.id, req.body, dataScope(req)); res.json({ ok: true }) }
   catch (e) { res.status(500).json({ error: e.message }) }
 })
 
@@ -719,7 +769,7 @@ app.patch('/api/watchlist/:id', requireAuth, async (req, res) => {
 
 app.get('/api/daily', requireAuth, async (req, res) => {
   try {
-    res.json(await getDailyLogs(30))
+    res.json(await getDailyLogs(30, dataScope(req)))
   } catch (e) {
     res.status(500).json({ error: e.message })
   }
@@ -728,7 +778,7 @@ app.get('/api/daily', requireAuth, async (req, res) => {
 app.get('/api/daily/today', requireAuth, async (req, res) => {
   try {
     const dateLabel = typeof req.query?.date_label === 'string' ? req.query.date_label : undefined
-    res.json(await getTodayLog(dateLabel))
+    res.json(await getTodayLog(dateLabel, dataScope(req)))
   } catch (e) {
     console.error('daily.today failed', e)
     res.status(500).json({ error: e.message })
@@ -737,7 +787,7 @@ app.get('/api/daily/today', requireAuth, async (req, res) => {
 
 app.post('/api/daily', requireAuth, async (req, res) => {
   try {
-    const page = await createDailyLog(req.body)
+    const page = await createDailyLog(req.body, dataScope(req))
     res.json({ ok: true, id: page.id })
   } catch (e) {
     console.error('daily.create failed', e)
@@ -747,7 +797,7 @@ app.post('/api/daily', requireAuth, async (req, res) => {
 
 app.patch('/api/daily/:id', requireAuth, async (req, res) => {
   try {
-    await updateDailyLog(req.params.id, req.body)
+    await updateDailyLog(req.params.id, req.body, dataScope(req))
     res.json({ ok: true })
   } catch (e) {
     console.error('daily.update failed', e)
@@ -1063,8 +1113,9 @@ app.post('/api/gmail/import-events', requireAuth, async (req, res) => {
 
     let created = 0
     let deduped = 0
+    const scope = dataScope(req)
     for (const event of imported.events) {
-      const existing = await getEventBySourceKey(event.sourceKey)
+      const existing = await getEventBySourceKey(event.sourceKey, scope)
       if (existing) {
         deduped += 1
         continue
@@ -1076,7 +1127,7 @@ app.post('/api/gmail/import-events', requireAuth, async (req, res) => {
         'Registration Link': event.registrationLink,
         Notes: event.notes,
         'Source Key': event.sourceKey
-      })
+      }, scope)
       created += 1
     }
 
