@@ -42,7 +42,7 @@ const ADMIN_EMAILS = new Set(
     .map(s => s.trim().toLowerCase())
     .filter(Boolean)
 )
-const PASSWORD_CHANGE_ALLOWED_PATHS = new Set(['/api/me', '/api/change-password', '/api/logout'])
+const PASSWORD_CHANGE_ALLOWED_PATHS = new Set(['/api/me', '/api/change-password', '/api/logout', '/api/csrf'])
 const SHEETS_SYNC_CRON_TOKEN = String(process.env.SHEETS_SYNC_CRON_TOKEN || '').trim()
 const BACKUP_EXPORT_CRON_TOKEN = String(process.env.BACKUP_EXPORT_CRON_TOKEN || '').trim()
 const BACKUP_GCS_BUCKET = String(process.env.BACKUP_GCS_BUCKET || '').trim()
