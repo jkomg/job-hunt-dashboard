@@ -15,6 +15,11 @@ A free, self-hostable job search dashboard designed to be simple enough for non-
 - Next Action + Next Action Date fields across pipeline, contacts, and interviews
 - Optional Google Sheets bi-directional sync for team workflows
 
+## Staff/Admin Docs
+
+- Staff + admin operations: `docs/STAFF_ADMIN_RUNBOOK.md`
+- Staff product scope and phased plan: `docs/STAFF_OPS_MVP_SPEC.md`
+
 ## Command Center Workflow (Recommended)
 
 Use the app as a daily command center, not just a tracker.
