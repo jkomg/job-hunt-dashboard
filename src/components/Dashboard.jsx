@@ -130,6 +130,12 @@ export default function Dashboard({ onNavigate, me }) {
     const postedRecommendations = recommendations.filter(r => r.status === 'posted')
     const todoTasks = tasks.filter(t => t.status === 'todo')
     const inProgressTasks = tasks.filter(t => t.status === 'in_progress')
+    const startToday = new Date()
+    startToday.setHours(0, 0, 0, 0)
+    const endToday = new Date(startToday)
+    endToday.setDate(endToday.getDate() + 1)
+    const overdueTasks = tasks.filter(t => t.status !== 'done' && Number(t.dueAt || 0) > 0 && Number(t.dueAt) < startToday.getTime())
+    const dueTodayTasks = tasks.filter(t => t.status !== 'done' && Number(t.dueAt || 0) >= startToday.getTime() && Number(t.dueAt || 0) < endToday.getTime())
 
     return (
       <div>
@@ -165,7 +171,9 @@ export default function Dashboard({ onNavigate, me }) {
           <div className="contact-row" style={{ padding: '8px 0' }}>
             <div className="contact-info">
               <div className="contact-name">3. Resolve support/admin tasks</div>
-              <div className="contact-meta">{todoTasks.length} todo · {inProgressTasks.length} in progress</div>
+              <div className="contact-meta">
+                {todoTasks.length} todo · {inProgressTasks.length} in progress · {overdueTasks.length} overdue · {dueTodayTasks.length} due today
+              </div>
             </div>
             <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('staff_ops')}>Open Tasks</button>
           </div>

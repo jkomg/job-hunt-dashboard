@@ -39,6 +39,9 @@ export default function StaffOps() {
     dueDate: '',
     notes: ''
   })
+  const [taskStatusFilter, setTaskStatusFilter] = useState('all')
+  const [taskPriorityFilter, setTaskPriorityFilter] = useState('all')
+  const [taskDueFilter, setTaskDueFilter] = useState('all')
 
   async function load() {
     setLoading(true)
@@ -68,6 +71,24 @@ export default function StaffOps() {
     const id = Number(selectedCandidateId)
     return (queue.tasks || []).filter(t => Number(t.relatedUserId) === id)
   }, [queue.tasks, selectedCandidateId])
+  const filteredCandidateTasks = useMemo(() => {
+    const startToday = new Date()
+    startToday.setHours(0, 0, 0, 0)
+    const endToday = new Date(startToday)
+    endToday.setDate(endToday.getDate() + 1)
+    return candidateTasks.filter(task => {
+      if (taskStatusFilter !== 'all' && task.status !== taskStatusFilter) return false
+      if (taskPriorityFilter !== 'all' && task.priority !== taskPriorityFilter) return false
+      if (taskDueFilter === 'all') return true
+      if (!task.dueAt) return taskDueFilter === 'no_due'
+      if (taskDueFilter === 'no_due') return false
+      const due = Number(task.dueAt)
+      if (taskDueFilter === 'overdue') return due < startToday.getTime() && task.status !== 'done'
+      if (taskDueFilter === 'today') return due >= startToday.getTime() && due < endToday.getTime() && task.status !== 'done'
+      if (taskDueFilter === 'upcoming') return due >= endToday.getTime() && task.status !== 'done'
+      return true
+    })
+  }, [candidateTasks, taskStatusFilter, taskPriorityFilter, taskDueFilter])
 
   async function createRecommendation() {
     setSavingRec(true)
@@ -274,6 +295,37 @@ export default function StaffOps() {
         <div className="card-title">Tasks</div>
         <div className="settings-grid">
           <div className="field">
+            <label>Status Filter</label>
+            <select value={taskStatusFilter} onChange={e => setTaskStatusFilter(e.target.value)}>
+              <option value="all">all</option>
+              <option value="todo">todo</option>
+              <option value="in_progress">in_progress</option>
+              <option value="done">done</option>
+            </select>
+          </div>
+          <div className="field">
+            <label>Priority Filter</label>
+            <select value={taskPriorityFilter} onChange={e => setTaskPriorityFilter(e.target.value)}>
+              <option value="all">all</option>
+              <option value="urgent">urgent</option>
+              <option value="high">high</option>
+              <option value="normal">normal</option>
+              <option value="low">low</option>
+            </select>
+          </div>
+          <div className="field">
+            <label>Due Filter</label>
+            <select value={taskDueFilter} onChange={e => setTaskDueFilter(e.target.value)}>
+              <option value="all">all</option>
+              <option value="overdue">overdue</option>
+              <option value="today">due_today</option>
+              <option value="upcoming">upcoming</option>
+              <option value="no_due">no_due_date</option>
+            </select>
+          </div>
+        </div>
+        <div className="settings-grid">
+          <div className="field">
             <label>Type</label>
             <select value={taskForm.type} onChange={e => setTaskForm({ ...taskForm, type: e.target.value })}>
               <option value="research">research</option>
@@ -305,8 +357,8 @@ export default function StaffOps() {
         </button>
 
         <div style={{ marginTop: 14 }}>
-          {!candidateTasks.length && <div style={{ color: 'var(--text-muted)' }}>No tasks yet for this candidate.</div>}
-          {!!candidateTasks.length && (
+          {!filteredCandidateTasks.length && <div style={{ color: 'var(--text-muted)' }}>No tasks match current filters.</div>}
+          {!!filteredCandidateTasks.length && (
             <table className="data-table">
               <thead>
                 <tr>
@@ -319,12 +371,17 @@ export default function StaffOps() {
                 </tr>
               </thead>
               <tbody>
-                {candidateTasks.map(task => (
+                {filteredCandidateTasks.map(task => (
                   <tr key={task.id}>
                     <td>{task.type}</td>
                     <td>{task.priority}</td>
                     <td>{task.status}</td>
-                    <td>{formatDateTime(task.dueAt)}</td>
+                    <td>
+                      {formatDateTime(task.dueAt)}
+                      {task.dueAt && task.status !== 'done' && Number(task.dueAt) < Date.now() && (
+                        <span className="badge badge-red" style={{ marginLeft: 6 }}>Overdue</span>
+                      )}
+                    </td>
                     <td>{task.notes || '—'}</td>
                     <td style={{ textAlign: 'right' }}>
                       {task.status !== 'in_progress' && (
