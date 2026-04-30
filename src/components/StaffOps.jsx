@@ -79,6 +79,10 @@ export default function StaffOps() {
         setThreadMessages([])
         return
       }
+      // Clear previous candidate context immediately to prevent stale sends.
+      setThreads([])
+      setSelectedThreadId('')
+      setThreadMessages([])
       try {
         const d = await api(`/api/staff/candidates/${selectedCandidateId}/threads`)
         const list = d.threads || []
