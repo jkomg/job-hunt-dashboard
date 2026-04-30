@@ -18,7 +18,7 @@ import {
   listStaffAssignments, createStaffAssignment, deleteStaffAssignment, createAuditLog, getAuditLogs,
   hasStaffAssignment, listJobRecommendations, createJobRecommendation, getJobRecommendationById, markRecommendationPosted, listStaffTasks,
   getStaffTaskById, createStaffTask, updateStaffTask,
-  listCandidateThreads, getCandidateThreadById, createCandidateThread, listCandidateMessages, createCandidateMessage,
+  listCandidateThreads, getCandidateThreadById, createCandidateThread, updateCandidateThreadStatus, listCandidateMessages, createCandidateMessage,
   createSession, getSession, deleteSession, updatePassword, updateUsername, getRecentSheetSyncRuns, getLocalDataLastUpdatedAt,
   getAppSetting, getAppSettings, setAppSetting, exportBackupSnapshot, restoreBackupSnapshot, createLocalDatabaseSnapshot,
   getDashboardData,
@@ -917,6 +917,36 @@ app.get('/api/staff/threads/:threadId/messages', requireAuth, requireStaffOrAdmi
   }
 })
 
+app.patch('/api/staff/threads/:threadId', requireAuth, requireStaffOrAdmin, async (req, res) => {
+  try {
+    const thread = await getCandidateThreadById(req.params.threadId)
+    if (!thread || thread.organizationId !== req.organizationId) {
+      return res.status(404).json({ error: 'Thread not found' })
+    }
+    if (!await canAccessCandidate(req, thread.jobSeekerUserId)) {
+      return res.status(403).json({ error: 'Not allowed to update this thread' })
+    }
+    const status = String(req.body?.status || '').trim()
+    if (!['open', 'closed'].includes(status)) {
+      return res.status(400).json({ error: 'status must be open or closed' })
+    }
+    const updated = await updateCandidateThreadStatus(thread.id, status)
+    await createAuditLog({
+      organizationId: req.organizationId,
+      actorUserId: req.userId,
+      targetUserId: thread.jobSeekerUserId,
+      action: 'staff.thread.updated',
+      entityType: 'candidate_thread',
+      entityId: thread.id,
+      metadata: { status: updated.status }
+    })
+    res.json({ ok: true, thread: updated })
+  } catch (e) {
+    console.error('staff.threads.update failed', e)
+    res.status(500).json({ error: 'Could not update thread' })
+  }
+})
+
 app.post('/api/staff/threads/:threadId/messages', requireAuth, requireStaffOrAdmin, async (req, res) => {
   try {
     const thread = await getCandidateThreadById(req.params.threadId)
@@ -925,6 +955,9 @@ app.post('/api/staff/threads/:threadId/messages', requireAuth, requireStaffOrAdm
     }
     if (!await canAccessCandidate(req, thread.jobSeekerUserId)) {
       return res.status(403).json({ error: 'Not allowed to access this thread' })
+    }
+    if (thread.status === 'closed') {
+      return res.status(409).json({ error: 'Thread is closed. Reopen it before sending a new message.' })
     }
     const body = String(req.body?.body || '').trim()
     if (!body) return res.status(400).json({ error: 'message body is required' })

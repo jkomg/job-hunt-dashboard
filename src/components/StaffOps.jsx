@@ -148,6 +148,10 @@ export default function StaffOps({ me }) {
       return true
     })
   }, [candidateTasks, taskStatusFilter, taskPriorityFilter, taskDueFilter, taskAssigneeFilter])
+  const selectedThread = useMemo(
+    () => (threads || []).find(t => t.id === selectedThreadId) || null,
+    [threads, selectedThreadId]
+  )
 
   async function createRecommendation() {
     setSavingRec(true)
@@ -277,6 +281,24 @@ export default function StaffOps({ me }) {
       setError(e.message)
     } finally {
       setSendingMessage(false)
+    }
+  }
+
+  async function updateThreadStatus(status) {
+    if (!selectedThread) return
+    setError('')
+    setSuccess('')
+    try {
+      await api(`/api/staff/threads/${selectedThread.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status })
+      })
+      const d = await api(`/api/staff/candidates/${selectedCandidateId}/threads`)
+      setThreads(d.threads || [])
+      setSuccess(`Thread marked ${status}.`)
+    } catch (e) {
+      setError(e.message)
     }
   }
 
@@ -593,6 +615,18 @@ export default function StaffOps({ me }) {
 
         {!!selectedThreadId && (
           <div style={{ marginTop: 10 }}>
+            <div className="quick-actions" style={{ marginBottom: 10 }}>
+              {selectedThread?.status !== 'closed' && (
+                <button className="btn btn-ghost btn-sm" onClick={() => updateThreadStatus('closed')}>
+                  Close Thread
+                </button>
+              )}
+              {selectedThread?.status === 'closed' && (
+                <button className="btn btn-ghost btn-sm" onClick={() => updateThreadStatus('open')}>
+                  Reopen Thread
+                </button>
+              )}
+            </div>
             <div className="field">
               <label>Message</label>
               <textarea rows={3} value={messageBody} onChange={e => setMessageBody(e.target.value)} />
@@ -607,11 +641,16 @@ export default function StaffOps({ me }) {
               </div>
               <div className="field">
                 <label>&nbsp;</label>
-                <button className="btn btn-primary" onClick={sendMessage} disabled={sendingMessage || !messageBody.trim()}>
+                <button className="btn btn-primary" onClick={sendMessage} disabled={sendingMessage || !messageBody.trim() || selectedThread?.status === 'closed'}>
                   {sendingMessage ? 'Sending…' : 'Send Message'}
                 </button>
               </div>
             </div>
+            {selectedThread?.status === 'closed' && (
+              <div style={{ color: 'var(--text-muted)', fontSize: 12, marginBottom: 8 }}>
+                Thread is closed. Reopen to send a new message.
+              </div>
+            )}
             <table className="data-table" style={{ marginTop: 10 }}>
               <thead>
                 <tr>
