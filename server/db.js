@@ -53,6 +53,8 @@ const BACKUP_TABLES = [
   'staff_assignments',
   'job_recommendations',
   'staff_tasks',
+  'candidate_threads',
+  'candidate_messages',
   'audit_log',
   'app_settings',
   'daily_logs',
@@ -267,12 +269,37 @@ async function ensureStaffOpsSchema() {
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       )
+    `,
+    `
+      CREATE TABLE IF NOT EXISTS candidate_threads (
+        id TEXT PRIMARY KEY,
+        organization_id TEXT NOT NULL,
+        job_seeker_user_id INTEGER NOT NULL,
+        created_by_user_id INTEGER NOT NULL,
+        topic TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'open',
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )
+    `,
+    `
+      CREATE TABLE IF NOT EXISTS candidate_messages (
+        id TEXT PRIMARY KEY,
+        thread_id TEXT NOT NULL,
+        organization_id TEXT NOT NULL,
+        author_user_id INTEGER NOT NULL,
+        visibility TEXT NOT NULL DEFAULT 'shared_with_candidate',
+        body TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      )
     `
   ])
 
   await db.execute('CREATE INDEX IF NOT EXISTS job_recommendations_org_staff_idx ON job_recommendations(organization_id, staff_user_id, updated_at)')
   await db.execute('CREATE INDEX IF NOT EXISTS job_recommendations_org_seeker_idx ON job_recommendations(organization_id, job_seeker_user_id, updated_at)')
   await db.execute('CREATE INDEX IF NOT EXISTS staff_tasks_org_assignee_idx ON staff_tasks(organization_id, assignee_user_id, status, due_at)')
+  await db.execute('CREATE INDEX IF NOT EXISTS candidate_threads_org_user_idx ON candidate_threads(organization_id, job_seeker_user_id, updated_at)')
+  await db.execute('CREATE INDEX IF NOT EXISTS candidate_messages_thread_idx ON candidate_messages(thread_id, created_at)')
 }
 
 async function getDefaultUserId() {
@@ -335,7 +362,8 @@ async function runMigrations() {
     { id: '2026-04-24-003-event-schema', description: 'event source key + index', up: ensureEventSchema },
     { id: '2026-04-24-004-action-schema', description: 'next action fields across entities', up: ensureActionSchema },
     { id: '2026-04-29-001-tenant-schema', description: 'organizations memberships and user-owned record scope', up: ensureTenantSchema },
-    { id: '2026-04-30-001-staff-ops-schema', description: 'staff recommendations and tasks tables', up: ensureStaffOpsSchema }
+    { id: '2026-04-30-001-staff-ops-schema', description: 'staff recommendations and tasks tables', up: ensureStaffOpsSchema },
+    { id: '2026-04-30-002-candidate-messaging-schema', description: 'candidate thread and message tables', up: ensureStaffOpsSchema }
   ]
 
   for (const migration of migrations) {
@@ -448,6 +476,36 @@ function toStaffTask(row) {
     relatedUsername: row.related_username || null,
     createdAt: Number(row.created_at || 0),
     updatedAt: Number(row.updated_at || 0)
+  }
+}
+
+function toCandidateThread(row) {
+  if (!row) return null
+  return {
+    id: row.id,
+    organizationId: row.organization_id,
+    jobSeekerUserId: Number(row.job_seeker_user_id),
+    createdByUserId: Number(row.created_by_user_id),
+    topic: row.topic || '',
+    status: row.status || 'open',
+    createdAt: Number(row.created_at || 0),
+    updatedAt: Number(row.updated_at || 0),
+    createdByUsername: row.created_by_username || null,
+    jobSeekerUsername: row.job_seeker_username || null
+  }
+}
+
+function toCandidateMessage(row) {
+  if (!row) return null
+  return {
+    id: row.id,
+    threadId: row.thread_id,
+    organizationId: row.organization_id,
+    authorUserId: Number(row.author_user_id),
+    visibility: row.visibility || 'shared_with_candidate',
+    body: row.body || '',
+    createdAt: Number(row.created_at || 0),
+    authorUsername: row.author_username || null
   }
 }
 
@@ -795,6 +853,122 @@ export async function listStaffTasks({
     args
   })
   return toPlainRows(res).map(toStaffTask)
+}
+
+export async function listCandidateThreads({
+  organizationId = DEFAULT_ORG_ID,
+  jobSeekerUserId,
+  limit = 100
+} = {}) {
+  const res = await db.execute({
+    sql: `
+      SELECT
+        t.*,
+        c.username AS created_by_username,
+        j.username AS job_seeker_username
+      FROM candidate_threads t
+      JOIN users c ON c.id = t.created_by_user_id
+      JOIN users j ON j.id = t.job_seeker_user_id
+      WHERE t.organization_id = ? AND t.job_seeker_user_id = ?
+      ORDER BY t.updated_at DESC
+      LIMIT ?
+    `,
+    args: [String(organizationId), Number(jobSeekerUserId), Math.max(1, Math.min(500, Number(limit) || 100))]
+  })
+  return toPlainRows(res).map(toCandidateThread)
+}
+
+export async function getCandidateThreadById(id) {
+  const res = await db.execute({
+    sql: `
+      SELECT
+        t.*,
+        c.username AS created_by_username,
+        j.username AS job_seeker_username
+      FROM candidate_threads t
+      JOIN users c ON c.id = t.created_by_user_id
+      JOIN users j ON j.id = t.job_seeker_user_id
+      WHERE t.id = ?
+      LIMIT 1
+    `,
+    args: [String(id)]
+  })
+  return toCandidateThread(firstRow(res))
+}
+
+export async function createCandidateThread({
+  organizationId = DEFAULT_ORG_ID,
+  jobSeekerUserId,
+  createdByUserId,
+  topic
+} = {}) {
+  const ts = now()
+  const id = crypto.randomUUID()
+  await db.execute({
+    sql: `
+      INSERT INTO candidate_threads (
+        id, organization_id, job_seeker_user_id, created_by_user_id, topic, status, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, 'open', ?, ?)
+    `,
+    args: [id, String(organizationId), Number(jobSeekerUserId), Number(createdByUserId), String(topic || '').trim(), ts, ts]
+  })
+  return getCandidateThreadById(id)
+}
+
+export async function listCandidateMessages(threadId, limit = 200) {
+  const res = await db.execute({
+    sql: `
+      SELECT
+        m.*,
+        u.username AS author_username
+      FROM candidate_messages m
+      JOIN users u ON u.id = m.author_user_id
+      WHERE m.thread_id = ?
+      ORDER BY m.created_at ASC
+      LIMIT ?
+    `,
+    args: [String(threadId), Math.max(1, Math.min(1000, Number(limit) || 200))]
+  })
+  return toPlainRows(res).map(toCandidateMessage)
+}
+
+export async function createCandidateMessage({
+  threadId,
+  organizationId = DEFAULT_ORG_ID,
+  authorUserId,
+  visibility = 'shared_with_candidate',
+  body
+} = {}) {
+  const safeVisibility = ['shared_with_candidate', 'internal_staff'].includes(String(visibility))
+    ? String(visibility)
+    : 'shared_with_candidate'
+  const id = crypto.randomUUID()
+  const ts = now()
+  await db.execute({
+    sql: `
+      INSERT INTO candidate_messages (
+        id, thread_id, organization_id, author_user_id, visibility, body, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    `,
+    args: [id, String(threadId), String(organizationId), Number(authorUserId), safeVisibility, String(body || '').trim(), ts]
+  })
+  await db.execute({
+    sql: 'UPDATE candidate_threads SET updated_at = ? WHERE id = ?',
+    args: [ts, String(threadId)]
+  })
+  const created = await db.execute({
+    sql: `
+      SELECT
+        m.*,
+        u.username AS author_username
+      FROM candidate_messages m
+      JOIN users u ON u.id = m.author_user_id
+      WHERE m.id = ?
+      LIMIT 1
+    `,
+    args: [id]
+  })
+  return toCandidateMessage(firstRow(created))
 }
 
 export async function getStaffTaskById(id) {
