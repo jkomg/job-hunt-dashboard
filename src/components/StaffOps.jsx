@@ -16,11 +16,11 @@ function formatDateTime(ts) {
   return d.toLocaleString()
 }
 
-export default function StaffOps() {
+export default function StaffOps({ me }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
-  const [queue, setQueue] = useState({ summary: {}, candidates: [], recommendations: [], tasks: [] })
+  const [queue, setQueue] = useState({ summary: {}, candidates: [], staffUsers: [], recommendations: [], tasks: [] })
   const [selectedCandidateId, setSelectedCandidateId] = useState('')
   const [savingRec, setSavingRec] = useState(false)
   const [savingTask, setSavingTask] = useState(false)
@@ -34,6 +34,7 @@ export default function StaffOps() {
     fitNote: ''
   })
   const [taskForm, setTaskForm] = useState({
+    assigneeUserId: '',
     type: 'research',
     priority: 'normal',
     dueDate: '',
@@ -42,6 +43,7 @@ export default function StaffOps() {
   const [taskStatusFilter, setTaskStatusFilter] = useState('all')
   const [taskPriorityFilter, setTaskPriorityFilter] = useState('all')
   const [taskDueFilter, setTaskDueFilter] = useState('all')
+  const [taskAssigneeFilter, setTaskAssigneeFilter] = useState('all')
   const [threads, setThreads] = useState([])
   const [selectedThreadId, setSelectedThreadId] = useState('')
   const [threadMessages, setThreadMessages] = useState([])
@@ -59,6 +61,12 @@ export default function StaffOps() {
       setQueue(data)
       if (!selectedCandidateId && data.candidates?.length) {
         setSelectedCandidateId(String(data.candidates[0].id))
+      }
+      if (me?.isAdmin && !taskForm.assigneeUserId) {
+        const first = (data.staffUsers || [])[0]
+        if (first?.id) {
+          setTaskForm(prev => ({ ...prev, assigneeUserId: String(first.id) }))
+        }
       }
     } catch (e) {
       setError(e.message)
@@ -129,6 +137,7 @@ export default function StaffOps() {
     return candidateTasks.filter(task => {
       if (taskStatusFilter !== 'all' && task.status !== taskStatusFilter) return false
       if (taskPriorityFilter !== 'all' && task.priority !== taskPriorityFilter) return false
+      if (taskAssigneeFilter !== 'all' && Number(task.assigneeUserId) !== Number(taskAssigneeFilter)) return false
       if (taskDueFilter === 'all') return true
       if (!task.dueAt) return taskDueFilter === 'no_due'
       if (taskDueFilter === 'no_due') return false
@@ -138,7 +147,7 @@ export default function StaffOps() {
       if (taskDueFilter === 'upcoming') return due >= endToday.getTime() && task.status !== 'done'
       return true
     })
-  }, [candidateTasks, taskStatusFilter, taskPriorityFilter, taskDueFilter])
+  }, [candidateTasks, taskStatusFilter, taskPriorityFilter, taskDueFilter, taskAssigneeFilter])
 
   async function createRecommendation() {
     setSavingRec(true)
@@ -192,13 +201,14 @@ export default function StaffOps() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           relatedUserId: selectedCandidateId ? Number(selectedCandidateId) : null,
+          assigneeUserId: me?.isAdmin && taskForm.assigneeUserId ? Number(taskForm.assigneeUserId) : undefined,
           type: taskForm.type,
           priority: taskForm.priority,
           dueAt: taskForm.dueDate ? new Date(`${taskForm.dueDate}T12:00:00`).getTime() : null,
           notes: taskForm.notes
         })
       })
-      setTaskForm({ type: 'research', priority: 'normal', dueDate: '', notes: '' })
+      setTaskForm(prev => ({ ...prev, type: 'research', priority: 'normal', dueDate: '', notes: '' }))
       setSuccess('Task created.')
       await load()
     } catch (e) {
@@ -267,6 +277,25 @@ export default function StaffOps() {
       setError(e.message)
     } finally {
       setSendingMessage(false)
+    }
+  }
+
+  async function reassignTask(task, assigneeUserId) {
+    setUpdatingTaskId(task.id)
+    setError('')
+    setSuccess('')
+    try {
+      await api(`/api/staff/tasks/${task.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assigneeUserId: Number(assigneeUserId) })
+      })
+      setSuccess('Task reassigned.')
+      await load()
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setUpdatingTaskId('')
     }
   }
 
@@ -416,8 +445,30 @@ export default function StaffOps() {
               <option value="no_due">no_due_date</option>
             </select>
           </div>
+          {me?.isAdmin && (
+            <div className="field">
+              <label>Assignee Filter</label>
+              <select value={taskAssigneeFilter} onChange={e => setTaskAssigneeFilter(e.target.value)}>
+                <option value="all">all</option>
+                {(queue.staffUsers || []).map(u => (
+                  <option key={`assignee-filter-${u.id}`} value={u.id}>{u.username}</option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
         <div className="settings-grid">
+          {me?.isAdmin && (
+            <div className="field">
+              <label>Assign To</label>
+              <select value={taskForm.assigneeUserId} onChange={e => setTaskForm({ ...taskForm, assigneeUserId: e.target.value })}>
+                <option value="">Select staff</option>
+                {(queue.staffUsers || []).map(u => (
+                  <option key={`assign-to-${u.id}`} value={u.id}>{u.username}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="field">
             <label>Type</label>
             <select value={taskForm.type} onChange={e => setTaskForm({ ...taskForm, type: e.target.value })}>
@@ -445,7 +496,11 @@ export default function StaffOps() {
           <label>Notes</label>
           <textarea rows={2} value={taskForm.notes} onChange={e => setTaskForm({ ...taskForm, notes: e.target.value })} />
         </div>
-        <button className="btn btn-primary" onClick={createTask} disabled={savingTask || !taskForm.notes.trim() || !selectedCandidateId}>
+        <button
+          className="btn btn-primary"
+          onClick={createTask}
+          disabled={savingTask || !taskForm.notes.trim() || !selectedCandidateId || (me?.isAdmin && !taskForm.assigneeUserId)}
+        >
           {savingTask ? 'Creating…' : 'Create Task'}
         </button>
 
@@ -455,6 +510,7 @@ export default function StaffOps() {
             <table className="data-table">
               <thead>
                 <tr>
+                  <th>Assignee</th>
                   <th>Type</th>
                   <th>Priority</th>
                   <th>Status</th>
@@ -466,6 +522,19 @@ export default function StaffOps() {
               <tbody>
                 {filteredCandidateTasks.map(task => (
                   <tr key={task.id}>
+                    <td>
+                      {me?.isAdmin ? (
+                        <select
+                          value={String(task.assigneeUserId || '')}
+                          disabled={updatingTaskId === task.id}
+                          onChange={e => reassignTask(task, e.target.value)}
+                        >
+                          {(queue.staffUsers || []).map(u => (
+                            <option key={`reassign-${task.id}-${u.id}`} value={u.id}>{u.username}</option>
+                          ))}
+                        </select>
+                      ) : (task.assigneeUsername || task.assigneeUserId)}
+                    </td>
                     <td>{task.type}</td>
                     <td>{task.priority}</td>
                     <td>{task.status}</td>

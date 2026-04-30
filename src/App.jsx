@@ -152,7 +152,7 @@ export default function App() {
         </div>
 
         {view === 'dashboard'  && <Dashboard onNavigate={navigate} me={me} />}
-        {isStaffLike && view === 'staff_ops' && <StaffOps />}
+        {isStaffLike && view === 'staff_ops' && <StaffOps me={me} />}
         {!isStaffLike && view === 'checkin'    && <DailyCheckin />}
         {!isStaffLike && view === 'pipeline'   && <Pipeline navIntent={navIntent} />}
         {!isStaffLike && view === 'contacts'   && <Contacts />}
