@@ -61,21 +61,31 @@ function StatCard({ label, value, target, color }) {
 
 export default function Dashboard({ onNavigate, me }) {
   const [data, setData] = useState(null)
+  const [staffQueue, setStaffQueue] = useState(null)
   const [syncStatus, setSyncStatus] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const isStaffLike = me?.role === 'staff' || me?.isAdmin
 
   useEffect(() => {
-    fetch('/api/dashboard', { credentials: 'include' })
-      .then(r => r.json())
-      .then(d => { setData(d); setLoading(false) })
+    const dashboardFetch = fetch('/api/dashboard', { credentials: 'include' }).then(r => r.json())
+    const staffQueueFetch = isStaffLike
+      ? fetch('/api/staff/queue', { credentials: 'include' }).then(r => r.ok ? r.json() : null)
+      : Promise.resolve(null)
+
+    Promise.all([dashboardFetch, staffQueueFetch])
+      .then(([d, sq]) => {
+        setData(d)
+        setStaffQueue(sq)
+        setLoading(false)
+      })
       .catch(() => { setError('Failed to load dashboard'); setLoading(false) })
 
     fetch('/api/sheets/status', { credentials: 'include' })
       .then(r => r.ok ? r.json() : null)
       .then(d => setSyncStatus(d))
       .catch(() => setSyncStatus(null))
-  }, [])
+  }, [isStaffLike])
 
   if (loading) return <div className="loading"><div className="spin" />Loading your briefing…</div>
   if (error) return <div className="error-msg">{error}</div>
@@ -110,6 +120,85 @@ export default function Dashboard({ onNavigate, me }) {
   const todayTop3Lines = todayTop3 ? todayTop3.split('\n').map(s => s.trim()).filter(Boolean) : []
 
   const topQueue = todayQueue.slice(0, 3)
+
+  if (isStaffLike) {
+    const summary = staffQueue?.summary || {}
+    const candidates = staffQueue?.candidates || []
+    const recommendations = staffQueue?.recommendations || []
+    const tasks = staffQueue?.tasks || []
+    const draftRecommendations = recommendations.filter(r => r.status === 'draft')
+    const postedRecommendations = recommendations.filter(r => r.status === 'posted')
+    const todoTasks = tasks.filter(t => t.status === 'todo')
+    const inProgressTasks = tasks.filter(t => t.status === 'in_progress')
+    const startToday = new Date()
+    startToday.setHours(0, 0, 0, 0)
+    const endToday = new Date(startToday)
+    endToday.setDate(endToday.getDate() + 1)
+    const overdueTasks = tasks.filter(t => t.status !== 'done' && Number(t.dueAt || 0) > 0 && Number(t.dueAt) < startToday.getTime())
+    const dueTodayTasks = tasks.filter(t => t.status !== 'done' && Number(t.dueAt || 0) >= startToday.getTime() && Number(t.dueAt || 0) < endToday.getTime())
+
+    return (
+      <div>
+        <div className="morning-greeting">Good morning, {me?.displayName || 'there'}.</div>
+        <div className="today-date">{todayDate}</div>
+
+        <div className="card mb-16">
+          <div className="card-title">Staff Briefing</div>
+          <div className="stats-grid">
+            <div className="stat-card"><div className="stat-value">{summary.candidates || candidates.length}</div><div className="stat-label">Assigned Candidates</div></div>
+            <div className="stat-card"><div className="stat-value">{summary.recommendationsDraft || draftRecommendations.length}</div><div className="stat-label">Draft Jobs</div></div>
+            <div className="stat-card"><div className="stat-value">{summary.recommendationsPosted || postedRecommendations.length}</div><div className="stat-label">Posted Jobs</div></div>
+            <div className="stat-card"><div className="stat-value">{(summary.tasksTodo || todoTasks.length) + (summary.tasksInProgress || inProgressTasks.length)}</div><div className="stat-label">Open Tasks</div></div>
+          </div>
+        </div>
+
+        <div className="card mb-16" style={{ borderColor: 'var(--accent)' }}>
+          <div className="card-title" style={{ color: 'var(--accent)' }}>Daily Ops Checklist</div>
+          <div className="contact-row" style={{ padding: '8px 0' }}>
+            <div className="contact-info">
+              <div className="contact-name">1. Review assigned candidates</div>
+              <div className="contact-meta">{candidates.length} candidate{candidates.length === 1 ? '' : 's'} in your queue</div>
+            </div>
+            <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('staff_ops')}>Open Staff Ops</button>
+          </div>
+          <div className="contact-row" style={{ padding: '8px 0' }}>
+            <div className="contact-info">
+              <div className="contact-name">2. Post researched jobs</div>
+              <div className="contact-meta">{draftRecommendations.length} draft recommendation{draftRecommendations.length === 1 ? '' : 's'} pending</div>
+            </div>
+            <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('staff_ops')}>Post Jobs</button>
+          </div>
+          <div className="contact-row" style={{ padding: '8px 0' }}>
+            <div className="contact-info">
+              <div className="contact-name">3. Resolve support/admin tasks</div>
+              <div className="contact-meta">
+                {todoTasks.length} todo · {inProgressTasks.length} in progress · {overdueTasks.length} overdue · {dueTodayTasks.length} due today
+              </div>
+            </div>
+            <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('staff_ops')}>Open Tasks</button>
+          </div>
+          <div className="contact-row" style={{ padding: '8px 0' }}>
+            <div className="contact-info">
+              <div className="contact-name">4. Review audit + sync health</div>
+              <div className="contact-meta">Keep org actions and integrations healthy</div>
+            </div>
+            <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('settings')}>Open Settings</button>
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="card-title">Weekly Staff Rhythm</div>
+          <div style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 10 }}>
+            Monday: rebalance assignments · Midweek: pipeline quality checks · Friday: outcomes review.
+          </div>
+          <div className="quick-actions">
+            <button className="btn btn-primary" onClick={() => onNavigate('staff_ops')}>🧭 Staff Ops</button>
+            <button className="btn btn-ghost" onClick={() => onNavigate('settings')}>⚙️ Admin Settings</button>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   function openItem(item) {
     const intent = {}

@@ -53,6 +53,26 @@ function describeRun(run) {
   return parts.length ? parts.join(' • ') : 'No summary details.'
 }
 
+function describeAuditAction(log) {
+  const md = log?.metadata || {}
+  if (log?.action === 'admin.user.created') {
+    const username = md.username || log.targetUsername || log.targetUserId || 'unknown'
+    const role = md.role || 'job_seeker'
+    return `Created user ${username} (${role})`
+  }
+  if (log?.action === 'admin.staff_assignment.created') {
+    const staff = md.staffUsername || md.staffUserId || 'unknown'
+    const seeker = md.jobSeekerUsername || md.jobSeekerUserId || 'unknown'
+    return `Assigned ${seeker} to ${staff}`
+  }
+  if (log?.action === 'admin.staff_assignment.deleted') {
+    const staff = md.staffUsername || md.staffUserId || 'unknown'
+    const seeker = md.jobSeekerUsername || md.jobSeekerUserId || 'unknown'
+    return `Removed assignment ${seeker} from ${staff}`
+  }
+  return log?.action || 'unknown'
+}
+
 async function api(path, options = {}) {
   const res = await fetch(path, { credentials: 'include', ...options })
   let data = null
@@ -136,6 +156,11 @@ export default function Settings({ me, onProfileUpdated }) {
     if (healthState === 'needs_attention') return 'var(--yellow)'
     return 'var(--text-muted)'
   }, [healthState])
+  const usersById = useMemo(() => {
+    const map = new Map()
+    for (const user of adminUsers) map.set(Number(user.id), user)
+    return map
+  }, [adminUsers])
 
   async function load() {
     setLoading(true)
@@ -738,14 +763,18 @@ export default function Settings({ me, onProfileUpdated }) {
                 </tr>
               </thead>
               <tbody>
-                {auditLogs.map(log => (
-                  <tr key={log.id}>
-                    <td>{formatDateTime(new Date(log.createdAt).toISOString())}</td>
-                    <td>{log.action}</td>
-                    <td>{log.actorUserId || 'system'}</td>
-                    <td>{log.targetUserId || '—'}</td>
-                  </tr>
-                ))}
+                {auditLogs.map(log => {
+                  const actor = log.actorUserId ? usersById.get(Number(log.actorUserId)) : null
+                  const target = log.targetUserId ? usersById.get(Number(log.targetUserId)) : null
+                  return (
+                    <tr key={log.id}>
+                      <td>{formatDateTime(new Date(log.createdAt).toISOString())}</td>
+                      <td title={log.action}>{describeAuditAction(log)}</td>
+                      <td>{actor?.username || log.actorUserId || 'system'}</td>
+                      <td>{target?.username || log.targetUserId || log.metadata?.username || '—'}</td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           )}

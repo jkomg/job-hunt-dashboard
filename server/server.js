@@ -16,6 +16,8 @@ import {
   getUserByUsername, getUserByEmail, getUserById,
   getPrimaryMembershipForUser, createUserAccount, listOrganizationUsers, listAssignedUsersForStaff,
   listStaffAssignments, createStaffAssignment, deleteStaffAssignment, createAuditLog, getAuditLogs,
+  hasStaffAssignment, listJobRecommendations, createJobRecommendation, getJobRecommendationById, markRecommendationPosted, listStaffTasks,
+  getStaffTaskById, createStaffTask, updateStaffTask,
   createSession, getSession, deleteSession, updatePassword, updateUsername, getRecentSheetSyncRuns, getLocalDataLastUpdatedAt,
   getAppSetting, getAppSettings, setAppSetting, exportBackupSnapshot, restoreBackupSnapshot, createLocalDatabaseSnapshot,
   getDashboardData,
@@ -42,7 +44,7 @@ const ADMIN_EMAILS = new Set(
     .map(s => s.trim().toLowerCase())
     .filter(Boolean)
 )
-const PASSWORD_CHANGE_ALLOWED_PATHS = new Set(['/api/me', '/api/change-password', '/api/logout'])
+const PASSWORD_CHANGE_ALLOWED_PATHS = new Set(['/api/me', '/api/change-password', '/api/logout', '/api/csrf'])
 const SHEETS_SYNC_CRON_TOKEN = String(process.env.SHEETS_SYNC_CRON_TOKEN || '').trim()
 const BACKUP_EXPORT_CRON_TOKEN = String(process.env.BACKUP_EXPORT_CRON_TOKEN || '').trim()
 const BACKUP_GCS_BUCKET = String(process.env.BACKUP_GCS_BUCKET || '').trim()
@@ -317,6 +319,28 @@ function dataScope(req) {
   }
 }
 
+async function canAccessCandidate(req, candidateUserId) {
+  const targetId = Number(candidateUserId)
+  if (!targetId || !req.organizationId) return false
+  const orgUsers = await listOrganizationUsers(req.organizationId)
+  const candidate = orgUsers.find(u => Number(u.id) === targetId)
+  if (!candidate || candidate.role !== 'job_seeker') return false
+  if (req.isAdmin) return true
+  if (req.userRole !== 'staff') return false
+  return hasStaffAssignment({
+    organizationId: req.organizationId,
+    staffUserId: req.userId,
+    jobSeekerUserId: targetId
+  })
+}
+
+async function canAccessStaffTask(req, task) {
+  if (!task || task.organizationId !== req.organizationId) return false
+  if (req.isAdmin) return true
+  if (req.userRole !== 'staff') return false
+  return Number(task.assigneeUserId) === Number(req.userId)
+}
+
 // ─── Auth middleware ───────────────────────────────────────────────────────────
 
 function extractIapEmail(req) {
@@ -517,7 +541,12 @@ app.post('/api/admin/staff-assignments', requireAuth, requireAdmin, async (req, 
       action: 'admin.staff_assignment.created',
       entityType: 'staff_assignment',
       entityId: assignment.id,
-      metadata: { staffUserId, jobSeekerUserId }
+      metadata: {
+        staffUserId,
+        jobSeekerUserId,
+        staffUsername: assignment?.staffUsername || null,
+        jobSeekerUsername: assignment?.jobSeekerUsername || null
+      }
     })
     res.json({ ok: true, assignment })
   } catch (e) {
@@ -542,6 +571,10 @@ app.delete('/api/admin/staff-assignments', requireAuth, requireAdmin, async (req
     if (!removed) {
       return res.status(404).json({ error: 'Staff assignment not found' })
     }
+    const [staffUser, jobSeekerUser] = await Promise.all([
+      getUserById(staffUserId),
+      getUserById(jobSeekerUserId)
+    ])
     await createAuditLog({
       organizationId: req.organizationId,
       actorUserId: req.userId,
@@ -549,7 +582,12 @@ app.delete('/api/admin/staff-assignments', requireAuth, requireAdmin, async (req
       action: 'admin.staff_assignment.deleted',
       entityType: 'staff_assignment',
       entityId: `${req.organizationId}:${staffUserId}:${jobSeekerUserId}`,
-      metadata: { staffUserId, jobSeekerUserId }
+      metadata: {
+        staffUserId,
+        jobSeekerUserId,
+        staffUsername: staffUser?.username || null,
+        jobSeekerUsername: jobSeekerUser?.username || null
+      }
     })
     res.json({ ok: true })
   } catch (e) {
@@ -577,6 +615,232 @@ app.get('/api/staff/assigned-users', requireAuth, requireStaffOrAdmin, async (re
   } catch (e) {
     console.error('staff.assignedUsers failed', e)
     res.status(500).json({ error: 'Could not list assigned users' })
+  }
+})
+
+app.get('/api/staff/queue', requireAuth, requireStaffOrAdmin, async (req, res) => {
+  try {
+    const [orgUsers, recommendations, tasks] = await Promise.all([
+      req.isAdmin
+        ? listOrganizationUsers(req.organizationId)
+        : listAssignedUsersForStaff(req.userId, req.organizationId),
+      req.isAdmin
+        ? listJobRecommendations({ organizationId: req.organizationId, limit: 300 })
+        : listJobRecommendations({ organizationId: req.organizationId, staffUserId: req.userId, limit: 300 }),
+      req.isAdmin
+        ? listStaffTasks({ organizationId: req.organizationId, limit: 300 })
+        : listStaffTasks({ organizationId: req.organizationId, assigneeUserId: req.userId, limit: 300 })
+    ])
+    const candidates = (orgUsers || []).filter(u => u.role === 'job_seeker')
+
+    const summary = {
+      candidates: candidates.length,
+      recommendationsDraft: recommendations.filter(r => r.status === 'draft').length,
+      recommendationsPosted: recommendations.filter(r => r.status === 'posted').length,
+      tasksTodo: tasks.filter(t => t.status === 'todo').length,
+      tasksInProgress: tasks.filter(t => t.status === 'in_progress').length
+    }
+    res.json({ ok: true, summary, candidates, recommendations, tasks })
+  } catch (e) {
+    console.error('staff.queue failed', e)
+    res.status(500).json({ error: 'Could not load staff queue' })
+  }
+})
+
+app.post('/api/staff/recommendations', requireAuth, requireStaffOrAdmin, async (req, res) => {
+  try {
+    const jobSeekerUserId = Number(req.body?.jobSeekerUserId)
+    if (!jobSeekerUserId) return res.status(400).json({ error: 'jobSeekerUserId is required' })
+    if (!await canAccessCandidate(req, jobSeekerUserId)) {
+      return res.status(403).json({ error: 'Not allowed to post for this candidate' })
+    }
+
+    const company = String(req.body?.company || '').trim()
+    if (!company) return res.status(400).json({ error: 'company is required' })
+
+    const recommendation = await createJobRecommendation({
+      organizationId: req.organizationId,
+      staffUserId: req.userId,
+      jobSeekerUserId,
+      company,
+      role: req.body?.role || null,
+      jobUrl: req.body?.jobUrl || null,
+      source: req.body?.source || null,
+      fitNote: req.body?.fitNote || null,
+      status: 'draft'
+    })
+
+    await createAuditLog({
+      organizationId: req.organizationId,
+      actorUserId: req.userId,
+      targetUserId: jobSeekerUserId,
+      action: 'staff.recommendation.created',
+      entityType: 'job_recommendation',
+      entityId: recommendation.id,
+      metadata: {
+        company: recommendation.company,
+        role: recommendation.role,
+        jobUrl: recommendation.jobUrl
+      }
+    })
+
+    res.json({ ok: true, recommendation })
+  } catch (e) {
+    console.error('staff.recommendations.create failed', e)
+    res.status(500).json({ error: 'Could not create recommendation' })
+  }
+})
+
+app.post('/api/staff/recommendations/:id/post-to-pipeline', requireAuth, requireStaffOrAdmin, async (req, res) => {
+  try {
+    const recommendation = await getJobRecommendationById(req.params.id)
+    if (!recommendation || recommendation.organizationId !== req.organizationId) {
+      return res.status(404).json({ error: 'Recommendation not found' })
+    }
+    if (!await canAccessCandidate(req, recommendation.jobSeekerUserId)) {
+      return res.status(403).json({ error: 'Not allowed to post for this candidate' })
+    }
+    if (recommendation.status === 'posted' || recommendation.postedPipelineEntryId) {
+      return res.status(409).json({
+        error: 'Recommendation already posted',
+        recommendation,
+        pipelineEntryId: recommendation.postedPipelineEntryId || null
+      })
+    }
+
+    const pipelineEntry = await createPipelineEntry({
+      Company: recommendation.company,
+      Role: recommendation.role || '',
+      Stage: 'Wishlist',
+      'Job URL': recommendation.jobUrl || '',
+      'Job Source': recommendation.source || '',
+      Notes: recommendation.fitNote || '',
+      Priority: 'Medium'
+    }, {
+      organizationId: req.organizationId,
+      userId: recommendation.jobSeekerUserId
+    })
+
+    const updated = await markRecommendationPosted(recommendation.id, pipelineEntry.id)
+    await createAuditLog({
+      organizationId: req.organizationId,
+      actorUserId: req.userId,
+      targetUserId: recommendation.jobSeekerUserId,
+      action: 'staff.recommendation.posted',
+      entityType: 'job_recommendation',
+      entityId: recommendation.id,
+      metadata: {
+        recommendationId: recommendation.id,
+        pipelineEntryId: pipelineEntry.id,
+        company: recommendation.company,
+        role: recommendation.role
+      }
+    })
+
+    res.json({ ok: true, recommendation: updated, pipelineEntryId: pipelineEntry.id })
+  } catch (e) {
+    console.error('staff.recommendations.post failed', e)
+    res.status(500).json({ error: 'Could not post recommendation to pipeline' })
+  }
+})
+
+app.post('/api/staff/tasks', requireAuth, requireStaffOrAdmin, async (req, res) => {
+  try {
+    const assigneeUserId = Number(req.body?.assigneeUserId || req.userId)
+    const relatedUserId = req.body?.relatedUserId == null ? null : Number(req.body.relatedUserId)
+    if (!assigneeUserId) return res.status(400).json({ error: 'assigneeUserId is required' })
+    if (!req.isAdmin && assigneeUserId !== Number(req.userId)) {
+      return res.status(403).json({ error: 'Staff can only create tasks assigned to themselves' })
+    }
+    if (relatedUserId != null && !await canAccessCandidate(req, relatedUserId)) {
+      return res.status(403).json({ error: 'Not allowed to create a task for this candidate' })
+    }
+
+    const task = await createStaffTask({
+      organizationId: req.organizationId,
+      assigneeUserId,
+      relatedUserId,
+      type: req.body?.type,
+      priority: req.body?.priority,
+      status: req.body?.status || 'todo',
+      dueAt: req.body?.dueAt || null,
+      notes: req.body?.notes || '',
+      createdByUserId: req.userId
+    })
+
+    await createAuditLog({
+      organizationId: req.organizationId,
+      actorUserId: req.userId,
+      targetUserId: relatedUserId,
+      action: 'staff.task.created',
+      entityType: 'staff_task',
+      entityId: task.id,
+      metadata: {
+        assigneeUserId,
+        relatedUserId,
+        type: task.type,
+        priority: task.priority,
+        status: task.status
+      }
+    })
+    res.json({ ok: true, task })
+  } catch (e) {
+    console.error('staff.tasks.create failed', e)
+    res.status(500).json({ error: 'Could not create staff task' })
+  }
+})
+
+app.patch('/api/staff/tasks/:id', requireAuth, requireStaffOrAdmin, async (req, res) => {
+  try {
+    const existing = await getStaffTaskById(req.params.id)
+    if (!existing || existing.organizationId !== req.organizationId) {
+      return res.status(404).json({ error: 'Task not found' })
+    }
+    if (!await canAccessStaffTask(req, existing)) {
+      return res.status(403).json({ error: 'Not allowed to update this task' })
+    }
+
+    const patch = {}
+    if (req.body?.status != null) patch.status = req.body.status
+    if (req.body?.priority != null) patch.priority = req.body.priority
+    if (req.body?.type != null) patch.type = req.body.type
+    if (req.body?.notes != null) patch.notes = req.body.notes
+    if (req.body?.dueAt !== undefined) patch.dueAt = req.body.dueAt
+
+    if (req.isAdmin && req.body?.assigneeUserId != null) {
+      patch.assigneeUserId = Number(req.body.assigneeUserId)
+    }
+    if (req.body?.relatedUserId !== undefined) {
+      if (req.body.relatedUserId == null) {
+        patch.relatedUserId = null
+      } else {
+        const relatedUserId = Number(req.body.relatedUserId)
+        if (!await canAccessCandidate(req, relatedUserId)) {
+          return res.status(403).json({ error: 'Not allowed to link this candidate' })
+        }
+        patch.relatedUserId = relatedUserId
+      }
+    }
+
+    const task = await updateStaffTask(req.params.id, patch)
+    await createAuditLog({
+      organizationId: req.organizationId,
+      actorUserId: req.userId,
+      targetUserId: task.relatedUserId,
+      action: 'staff.task.updated',
+      entityType: 'staff_task',
+      entityId: task.id,
+      metadata: {
+        status: task.status,
+        priority: task.priority,
+        type: task.type,
+        assigneeUserId: task.assigneeUserId
+      }
+    })
+    res.json({ ok: true, task })
+  } catch (e) {
+    console.error('staff.tasks.update failed', e)
+    res.status(500).json({ error: 'Could not update staff task' })
   }
 })
 

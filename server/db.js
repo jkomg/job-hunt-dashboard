@@ -51,6 +51,8 @@ const BACKUP_TABLES = [
   'organizations',
   'memberships',
   'staff_assignments',
+  'job_recommendations',
+  'staff_tasks',
   'audit_log',
   'app_settings',
   'daily_logs',
@@ -231,6 +233,48 @@ async function ensureTenantSchema() {
   await backfillTenantOwnership()
 }
 
+async function ensureStaffOpsSchema() {
+  await db.batch([
+    `
+      CREATE TABLE IF NOT EXISTS job_recommendations (
+        id TEXT PRIMARY KEY,
+        organization_id TEXT NOT NULL,
+        staff_user_id INTEGER NOT NULL,
+        job_seeker_user_id INTEGER NOT NULL,
+        company TEXT NOT NULL,
+        role TEXT,
+        job_url TEXT,
+        source TEXT,
+        fit_note TEXT,
+        status TEXT NOT NULL DEFAULT 'draft',
+        posted_pipeline_entry_id TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )
+    `,
+    `
+      CREATE TABLE IF NOT EXISTS staff_tasks (
+        id TEXT PRIMARY KEY,
+        organization_id TEXT NOT NULL,
+        assignee_user_id INTEGER NOT NULL,
+        related_user_id INTEGER,
+        type TEXT NOT NULL,
+        priority TEXT NOT NULL DEFAULT 'normal',
+        status TEXT NOT NULL DEFAULT 'todo',
+        due_at INTEGER,
+        notes TEXT,
+        created_by_user_id INTEGER,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )
+    `
+  ])
+
+  await db.execute('CREATE INDEX IF NOT EXISTS job_recommendations_org_staff_idx ON job_recommendations(organization_id, staff_user_id, updated_at)')
+  await db.execute('CREATE INDEX IF NOT EXISTS job_recommendations_org_seeker_idx ON job_recommendations(organization_id, job_seeker_user_id, updated_at)')
+  await db.execute('CREATE INDEX IF NOT EXISTS staff_tasks_org_assignee_idx ON staff_tasks(organization_id, assignee_user_id, status, due_at)')
+}
+
 async function getDefaultUserId() {
   const res = await db.execute('SELECT id FROM users ORDER BY is_admin DESC, id ASC LIMIT 1')
   const row = firstRow(res)
@@ -290,7 +334,8 @@ async function runMigrations() {
     { id: '2026-04-24-002-interview-schema', description: 'interview pipeline link + index', up: ensureInterviewSchema },
     { id: '2026-04-24-003-event-schema', description: 'event source key + index', up: ensureEventSchema },
     { id: '2026-04-24-004-action-schema', description: 'next action fields across entities', up: ensureActionSchema },
-    { id: '2026-04-29-001-tenant-schema', description: 'organizations memberships and user-owned record scope', up: ensureTenantSchema }
+    { id: '2026-04-29-001-tenant-schema', description: 'organizations memberships and user-owned record scope', up: ensureTenantSchema },
+    { id: '2026-04-30-001-staff-ops-schema', description: 'staff recommendations and tasks tables', up: ensureStaffOpsSchema }
   ]
 
   for (const migration of migrations) {
@@ -362,6 +407,47 @@ function toAuditLog(row) {
     entityId: row.entity_id || null,
     metadata: parseJsonSafe(row.metadata_json, {}),
     createdAt: Number(row.created_at || 0)
+  }
+}
+
+function toJobRecommendation(row) {
+  if (!row) return null
+  return {
+    id: row.id,
+    organizationId: row.organization_id,
+    staffUserId: Number(row.staff_user_id),
+    jobSeekerUserId: Number(row.job_seeker_user_id),
+    company: row.company || '',
+    role: row.role || '',
+    jobUrl: row.job_url || '',
+    source: row.source || '',
+    fitNote: row.fit_note || '',
+    status: row.status || 'draft',
+    postedPipelineEntryId: row.posted_pipeline_entry_id || null,
+    staffUsername: row.staff_username || null,
+    jobSeekerUsername: row.job_seeker_username || null,
+    createdAt: Number(row.created_at || 0),
+    updatedAt: Number(row.updated_at || 0)
+  }
+}
+
+function toStaffTask(row) {
+  if (!row) return null
+  return {
+    id: row.id,
+    organizationId: row.organization_id,
+    assigneeUserId: Number(row.assignee_user_id),
+    relatedUserId: row.related_user_id == null ? null : Number(row.related_user_id),
+    type: row.type,
+    priority: row.priority || 'normal',
+    status: row.status || 'todo',
+    dueAt: row.due_at == null ? null : Number(row.due_at),
+    notes: row.notes || '',
+    createdByUserId: row.created_by_user_id == null ? null : Number(row.created_by_user_id),
+    assigneeUsername: row.assignee_username || null,
+    relatedUsername: row.related_username || null,
+    createdAt: Number(row.created_at || 0),
+    updatedAt: Number(row.updated_at || 0)
   }
 }
 
@@ -559,6 +645,258 @@ export async function getAuditLogs({ organizationId = DEFAULT_ORG_ID, limit = 10
     args: [String(organizationId), safeLimit]
   })
   return toPlainRows(res).map(toAuditLog)
+}
+
+export async function hasStaffAssignment({ organizationId = DEFAULT_ORG_ID, staffUserId, jobSeekerUserId }) {
+  const res = await db.execute({
+    sql: `
+      SELECT id FROM staff_assignments
+      WHERE organization_id = ? AND staff_user_id = ? AND job_seeker_user_id = ?
+      LIMIT 1
+    `,
+    args: [String(organizationId), Number(staffUserId), Number(jobSeekerUserId)]
+  })
+  return !!firstRow(res)
+}
+
+export async function listJobRecommendations({
+  organizationId = DEFAULT_ORG_ID,
+  staffUserId = null,
+  jobSeekerUserId = null,
+  limit = 200
+} = {}) {
+  const clauses = ['jr.organization_id = ?']
+  const args = [String(organizationId)]
+  if (staffUserId != null) {
+    clauses.push('jr.staff_user_id = ?')
+    args.push(Number(staffUserId))
+  }
+  if (jobSeekerUserId != null) {
+    clauses.push('jr.job_seeker_user_id = ?')
+    args.push(Number(jobSeekerUserId))
+  }
+  args.push(Math.max(1, Math.min(500, Number(limit) || 200)))
+
+  const res = await db.execute({
+    sql: `
+      SELECT
+        jr.*,
+        staff.username AS staff_username,
+        seeker.username AS job_seeker_username
+      FROM job_recommendations jr
+      JOIN users staff ON staff.id = jr.staff_user_id
+      JOIN users seeker ON seeker.id = jr.job_seeker_user_id
+      WHERE ${clauses.join(' AND ')}
+      ORDER BY jr.updated_at DESC
+      LIMIT ?
+    `,
+    args
+  })
+  return toPlainRows(res).map(toJobRecommendation)
+}
+
+export async function getJobRecommendationById(id) {
+  const res = await db.execute({
+    sql: `
+      SELECT
+        jr.*,
+        staff.username AS staff_username,
+        seeker.username AS job_seeker_username
+      FROM job_recommendations jr
+      JOIN users staff ON staff.id = jr.staff_user_id
+      JOIN users seeker ON seeker.id = jr.job_seeker_user_id
+      WHERE jr.id = ?
+      LIMIT 1
+    `,
+    args: [String(id)]
+  })
+  return toJobRecommendation(firstRow(res))
+}
+
+export async function createJobRecommendation({
+  organizationId = DEFAULT_ORG_ID,
+  staffUserId,
+  jobSeekerUserId,
+  company,
+  role = null,
+  jobUrl = null,
+  source = null,
+  fitNote = null,
+  status = 'draft'
+} = {}) {
+  const ts = now()
+  const id = crypto.randomUUID()
+  await db.execute({
+    sql: `
+      INSERT INTO job_recommendations (
+        id, organization_id, staff_user_id, job_seeker_user_id, company, role, job_url, source, fit_note, status, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `,
+    args: [
+      id,
+      String(organizationId),
+      Number(staffUserId),
+      Number(jobSeekerUserId),
+      String(company || '').trim(),
+      role == null ? null : String(role).trim(),
+      jobUrl == null ? null : String(jobUrl).trim(),
+      source == null ? null : String(source).trim(),
+      fitNote == null ? null : String(fitNote).trim(),
+      String(status || 'draft'),
+      ts,
+      ts
+    ]
+  })
+  return getJobRecommendationById(id)
+}
+
+export async function markRecommendationPosted(id, pipelineEntryId) {
+  await db.execute({
+    sql: `
+      UPDATE job_recommendations
+      SET status = 'posted',
+          posted_pipeline_entry_id = ?,
+          updated_at = ?
+      WHERE id = ?
+    `,
+    args: [String(pipelineEntryId), now(), String(id)]
+  })
+  return getJobRecommendationById(id)
+}
+
+export async function listStaffTasks({
+  organizationId = DEFAULT_ORG_ID,
+  assigneeUserId = null,
+  limit = 200
+} = {}) {
+  const clauses = ['t.organization_id = ?']
+  const args = [String(organizationId)]
+  if (assigneeUserId != null) {
+    clauses.push('t.assignee_user_id = ?')
+    args.push(Number(assigneeUserId))
+  }
+  args.push(Math.max(1, Math.min(500, Number(limit) || 200)))
+
+  const res = await db.execute({
+    sql: `
+      SELECT
+        t.*,
+        a.username AS assignee_username,
+        r.username AS related_username
+      FROM staff_tasks t
+      JOIN users a ON a.id = t.assignee_user_id
+      LEFT JOIN users r ON r.id = t.related_user_id
+      WHERE ${clauses.join(' AND ')}
+      ORDER BY
+        CASE t.status WHEN 'todo' THEN 0 WHEN 'in_progress' THEN 1 ELSE 2 END,
+        COALESCE(t.due_at, t.updated_at) ASC
+      LIMIT ?
+    `,
+    args
+  })
+  return toPlainRows(res).map(toStaffTask)
+}
+
+export async function getStaffTaskById(id) {
+  const res = await db.execute({
+    sql: `
+      SELECT
+        t.*,
+        a.username AS assignee_username,
+        r.username AS related_username
+      FROM staff_tasks t
+      JOIN users a ON a.id = t.assignee_user_id
+      LEFT JOIN users r ON r.id = t.related_user_id
+      WHERE t.id = ?
+      LIMIT 1
+    `,
+    args: [String(id)]
+  })
+  return toStaffTask(firstRow(res))
+}
+
+export async function createStaffTask({
+  organizationId = DEFAULT_ORG_ID,
+  assigneeUserId,
+  relatedUserId = null,
+  type = 'admin',
+  priority = 'normal',
+  status = 'todo',
+  dueAt = null,
+  notes = '',
+  createdByUserId = null
+} = {}) {
+  const safeType = ['research', 'follow_up', 'interview_prep', 'admin'].includes(String(type)) ? String(type) : 'admin'
+  const safePriority = ['low', 'normal', 'high', 'urgent'].includes(String(priority)) ? String(priority) : 'normal'
+  const safeStatus = ['todo', 'in_progress', 'done'].includes(String(status)) ? String(status) : 'todo'
+  const id = crypto.randomUUID()
+  const ts = now()
+  await db.execute({
+    sql: `
+      INSERT INTO staff_tasks (
+        id, organization_id, assignee_user_id, related_user_id, type, priority, status, due_at, notes, created_by_user_id, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `,
+    args: [
+      id,
+      String(organizationId),
+      Number(assigneeUserId),
+      relatedUserId == null ? null : Number(relatedUserId),
+      safeType,
+      safePriority,
+      safeStatus,
+      dueAt == null ? null : Number(dueAt),
+      String(notes || ''),
+      createdByUserId == null ? null : Number(createdByUserId),
+      ts,
+      ts
+    ]
+  })
+  return getStaffTaskById(id)
+}
+
+export async function updateStaffTask(id, data = {}) {
+  const set = []
+  const args = []
+  function put(column, value) {
+    set.push(`${column} = ?`)
+    args.push(value)
+  }
+
+  if (Object.prototype.hasOwnProperty.call(data, 'assigneeUserId')) {
+    put('assignee_user_id', Number(data.assigneeUserId))
+  }
+  if (Object.prototype.hasOwnProperty.call(data, 'relatedUserId')) {
+    put('related_user_id', data.relatedUserId == null ? null : Number(data.relatedUserId))
+  }
+  if (Object.prototype.hasOwnProperty.call(data, 'type')) {
+    const safeType = ['research', 'follow_up', 'interview_prep', 'admin'].includes(String(data.type)) ? String(data.type) : 'admin'
+    put('type', safeType)
+  }
+  if (Object.prototype.hasOwnProperty.call(data, 'priority')) {
+    const safePriority = ['low', 'normal', 'high', 'urgent'].includes(String(data.priority)) ? String(data.priority) : 'normal'
+    put('priority', safePriority)
+  }
+  if (Object.prototype.hasOwnProperty.call(data, 'status')) {
+    const safeStatus = ['todo', 'in_progress', 'done'].includes(String(data.status)) ? String(data.status) : 'todo'
+    put('status', safeStatus)
+  }
+  if (Object.prototype.hasOwnProperty.call(data, 'dueAt')) {
+    put('due_at', data.dueAt == null ? null : Number(data.dueAt))
+  }
+  if (Object.prototype.hasOwnProperty.call(data, 'notes')) {
+    put('notes', String(data.notes || ''))
+  }
+  if (!set.length) return getStaffTaskById(id)
+
+  set.push('updated_at = ?')
+  args.push(now())
+  args.push(String(id))
+  await db.execute({
+    sql: `UPDATE staff_tasks SET ${set.join(', ')} WHERE id = ?`,
+    args
+  })
+  return getStaffTaskById(id)
 }
 
 async function getMembership(organizationId, userId) {

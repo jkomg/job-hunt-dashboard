@@ -1,6 +1,7 @@
 # Command Center Roadmap
 
 This roadmap tracks the platform-level priorities separately from daily queue priorities.
+For staff/admin product separation and implementation details, see `docs/STAFF_OPS_MVP_SPEC.md`.
 
 ## Scope and sequencing
 
