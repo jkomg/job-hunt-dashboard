@@ -633,6 +633,9 @@ app.get('/api/staff/queue', requireAuth, requireStaffOrAdmin, async (req, res) =
         : listStaffTasks({ organizationId: req.organizationId, assigneeUserId: req.userId, limit: 300 })
     ])
     const candidates = (orgUsers || []).filter(u => u.role === 'job_seeker')
+    const staffUsers = req.isAdmin
+      ? (orgUsers || []).filter(u => u.role === 'staff' || u.role === 'admin')
+      : []
 
     const summary = {
       candidates: candidates.length,
@@ -641,7 +644,7 @@ app.get('/api/staff/queue', requireAuth, requireStaffOrAdmin, async (req, res) =
       tasksTodo: tasks.filter(t => t.status === 'todo').length,
       tasksInProgress: tasks.filter(t => t.status === 'in_progress').length
     }
-    res.json({ ok: true, summary, candidates, recommendations, tasks })
+    res.json({ ok: true, summary, candidates, staffUsers, recommendations, tasks })
   } catch (e) {
     console.error('staff.queue failed', e)
     res.status(500).json({ error: 'Could not load staff queue' })
