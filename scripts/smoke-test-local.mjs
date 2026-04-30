@@ -266,6 +266,56 @@ async function run() {
     throw new Error(`Staff assignment failed: ${JSON.stringify(assignment.body)}`)
   }
 
+  const threadCreate = await api(`/api/staff/candidates/${createThirdUser.body.id}/threads`, {
+    method: 'POST',
+    body: { topic: 'Initial outreach plan' },
+    allowStatuses: [200]
+  })
+  const threadId = threadCreate.body?.thread?.id
+  if (!threadCreate.body?.ok || !threadId) {
+    throw new Error(`Thread create failed: ${JSON.stringify(threadCreate.body)}`)
+  }
+  const messageCreate = await api(`/api/staff/threads/${threadId}/messages`, {
+    method: 'POST',
+    body: { visibility: 'shared_with_candidate', body: 'Please review these three leads first.' },
+    allowStatuses: [200]
+  })
+  if (!messageCreate.body?.ok || !messageCreate.body?.message?.id) {
+    throw new Error(`Thread message create failed: ${JSON.stringify(messageCreate.body)}`)
+  }
+  const closeThread = await api(`/api/staff/threads/${threadId}`, {
+    method: 'PATCH',
+    body: { status: 'closed' },
+    allowStatuses: [200]
+  })
+  if (!closeThread.body?.ok || closeThread.body?.thread?.status !== 'closed') {
+    throw new Error(`Thread close failed: ${JSON.stringify(closeThread.body)}`)
+  }
+
+  const taskCreate = await api('/api/staff/tasks', {
+    method: 'POST',
+    body: {
+      assigneeUserId: createUser.body.id,
+      relatedUserId: createThirdUser.body.id,
+      type: 'follow_up',
+      priority: 'high',
+      notes: 'Call candidate about recruiter email'
+    },
+    allowStatuses: [200]
+  })
+  const taskId = taskCreate.body?.task?.id
+  if (!taskCreate.body?.ok || !taskId) {
+    throw new Error(`Task create failed: ${JSON.stringify(taskCreate.body)}`)
+  }
+  const taskReassign = await api(`/api/staff/tasks/${taskId}`, {
+    method: 'PATCH',
+    body: { assigneeUserId: createFourthUser.body.id },
+    allowStatuses: [200]
+  })
+  if (!taskReassign.body?.ok || Number(taskReassign.body?.task?.assigneeUserId) !== createFourthUser.body.id) {
+    throw new Error(`Task reassignment failed: ${JSON.stringify(taskReassign.body)}`)
+  }
+
   const badAssignment = await api('/api/admin/staff-assignments', {
     method: 'POST',
     body: {
@@ -337,6 +387,10 @@ async function run() {
   const assignedUsernames = (assignedUsers.body?.users || []).map(user => user.username)
   if (assignedUsernames.length !== 0) {
     throw new Error(`Expected staff to see no assigned users after delete, got ${JSON.stringify(assignedUsers.body)}`)
+  }
+  const blockedThreadRead = await api(`/api/staff/candidates/${createThirdUser.body.id}/threads`, { allowStatuses: [403] })
+  if (!String(blockedThreadRead.body?.error || '').toLowerCase().includes('not allowed')) {
+    throw new Error(`Expected thread access to be blocked after assignment removal, got ${JSON.stringify(blockedThreadRead.body)}`)
   }
 
   const secondDaily = await api('/api/daily', { allowStatuses: [200] })
