@@ -915,6 +915,15 @@ export async function createCandidateThread({
   return getCandidateThreadById(id)
 }
 
+export async function updateCandidateThreadStatus(id, status = 'open') {
+  const safeStatus = ['open', 'closed'].includes(String(status)) ? String(status) : 'open'
+  await db.execute({
+    sql: 'UPDATE candidate_threads SET status = ?, updated_at = ? WHERE id = ?',
+    args: [safeStatus, now(), String(id)]
+  })
+  return getCandidateThreadById(id)
+}
+
 export async function listCandidateMessages(threadId, limit = 200) {
   const res = await db.execute({
     sql: `
