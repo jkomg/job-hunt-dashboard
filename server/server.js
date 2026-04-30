@@ -322,6 +322,9 @@ function dataScope(req) {
 async function canAccessCandidate(req, candidateUserId) {
   const targetId = Number(candidateUserId)
   if (!targetId || !req.organizationId) return false
+  const orgUsers = await listOrganizationUsers(req.organizationId)
+  const candidate = orgUsers.find(u => Number(u.id) === targetId)
+  if (!candidate || candidate.role !== 'job_seeker') return false
   if (req.isAdmin) return true
   if (req.userRole !== 'staff') return false
   return hasStaffAssignment({
@@ -617,7 +620,7 @@ app.get('/api/staff/assigned-users', requireAuth, requireStaffOrAdmin, async (re
 
 app.get('/api/staff/queue', requireAuth, requireStaffOrAdmin, async (req, res) => {
   try {
-    const [candidates, recommendations, tasks] = await Promise.all([
+    const [orgUsers, recommendations, tasks] = await Promise.all([
       req.isAdmin
         ? listOrganizationUsers(req.organizationId)
         : listAssignedUsersForStaff(req.userId, req.organizationId),
@@ -628,6 +631,7 @@ app.get('/api/staff/queue', requireAuth, requireStaffOrAdmin, async (req, res) =
         ? listStaffTasks({ organizationId: req.organizationId, limit: 300 })
         : listStaffTasks({ organizationId: req.organizationId, assigneeUserId: req.userId, limit: 300 })
     ])
+    const candidates = (orgUsers || []).filter(u => u.role === 'job_seeker')
 
     const summary = {
       candidates: candidates.length,
@@ -695,6 +699,13 @@ app.post('/api/staff/recommendations/:id/post-to-pipeline', requireAuth, require
     }
     if (!await canAccessCandidate(req, recommendation.jobSeekerUserId)) {
       return res.status(403).json({ error: 'Not allowed to post for this candidate' })
+    }
+    if (recommendation.status === 'posted' || recommendation.postedPipelineEntryId) {
+      return res.status(409).json({
+        error: 'Recommendation already posted',
+        recommendation,
+        pipelineEntryId: recommendation.postedPipelineEntryId || null
+      })
     }
 
     const pipelineEntry = await createPipelineEntry({
