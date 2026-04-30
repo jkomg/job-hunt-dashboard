@@ -517,7 +517,12 @@ app.post('/api/admin/staff-assignments', requireAuth, requireAdmin, async (req, 
       action: 'admin.staff_assignment.created',
       entityType: 'staff_assignment',
       entityId: assignment.id,
-      metadata: { staffUserId, jobSeekerUserId }
+      metadata: {
+        staffUserId,
+        jobSeekerUserId,
+        staffUsername: assignment?.staffUsername || null,
+        jobSeekerUsername: assignment?.jobSeekerUsername || null
+      }
     })
     res.json({ ok: true, assignment })
   } catch (e) {
@@ -542,6 +547,10 @@ app.delete('/api/admin/staff-assignments', requireAuth, requireAdmin, async (req
     if (!removed) {
       return res.status(404).json({ error: 'Staff assignment not found' })
     }
+    const [staffUser, jobSeekerUser] = await Promise.all([
+      getUserById(staffUserId),
+      getUserById(jobSeekerUserId)
+    ])
     await createAuditLog({
       organizationId: req.organizationId,
       actorUserId: req.userId,
@@ -549,7 +558,12 @@ app.delete('/api/admin/staff-assignments', requireAuth, requireAdmin, async (req
       action: 'admin.staff_assignment.deleted',
       entityType: 'staff_assignment',
       entityId: `${req.organizationId}:${staffUserId}:${jobSeekerUserId}`,
-      metadata: { staffUserId, jobSeekerUserId }
+      metadata: {
+        staffUserId,
+        jobSeekerUserId,
+        staffUsername: staffUser?.username || null,
+        jobSeekerUsername: jobSeekerUser?.username || null
+      }
     })
     res.json({ ok: true })
   } catch (e) {

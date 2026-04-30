@@ -13,7 +13,7 @@ import Watchlist from './components/Watchlist.jsx'
 import Settings from './components/Settings.jsx'
 import { useTheme, THEMES } from './useTheme.js'
 
-const NAV = [
+const JOB_SEEKER_NAV = [
   { id: 'dashboard',   label: 'Briefing',   icon: '☀️' },
   { id: 'checkin',     label: 'Check-in',   icon: '✅' },
   { id: 'pipeline',    label: 'Pipeline',   icon: '🎯' },
@@ -23,6 +23,11 @@ const NAV = [
   { id: 'templates',   label: 'Templates',  icon: '✉️' },
   { id: 'watchlist',   label: 'Watchlist',  icon: '🔭' },
   { id: 'settings',    label: 'Settings',   icon: '⚙️' },
+]
+
+const STAFF_NAV = [
+  { id: 'dashboard', label: 'Briefing', icon: '☀️' },
+  { id: 'settings',  label: 'Settings', icon: '⚙️' }
 ]
 
 export default function App() {
@@ -80,13 +85,22 @@ export default function App() {
     return <SetupWizard me={me} onComplete={refreshMe} onLogout={logout} />
   }
 
+  const isStaffLike = me?.role === 'staff' || me?.isAdmin
+  const navItems = isStaffLike ? STAFF_NAV : JOB_SEEKER_NAV
+  useEffect(() => {
+    const navIds = new Set(navItems.map(n => n.id))
+    if (!navIds.has(view)) {
+      setView(isStaffLike ? 'settings' : 'dashboard')
+    }
+  }, [isStaffLike, navItems, view])
+
   return (
     <div className="app">
       {/* Desktop sidebar */}
       <aside className="sidebar">
         <div className="sidebar-logo">Job Hunt<span>.</span></div>
         <nav>
-          {NAV.map(n => (
+          {navItems.map(n => (
             <button
               key={n.id}
               className={`nav-item${view === n.id ? ' active' : ''}`}
@@ -134,19 +148,19 @@ export default function App() {
         </div>
 
         {view === 'dashboard'  && <Dashboard onNavigate={navigate} me={me} />}
-        {view === 'checkin'    && <DailyCheckin />}
-        {view === 'pipeline'   && <Pipeline navIntent={navIntent} />}
-        {view === 'contacts'   && <Contacts />}
-        {view === 'interviews' && <Interviews />}
-        {view === 'events'     && <Events />}
-        {view === 'templates'  && <Templates />}
-        {view === 'watchlist'  && <Watchlist />}
+        {!isStaffLike && view === 'checkin'    && <DailyCheckin />}
+        {!isStaffLike && view === 'pipeline'   && <Pipeline navIntent={navIntent} />}
+        {!isStaffLike && view === 'contacts'   && <Contacts />}
+        {!isStaffLike && view === 'interviews' && <Interviews />}
+        {!isStaffLike && view === 'events'     && <Events />}
+        {!isStaffLike && view === 'templates'  && <Templates />}
+        {!isStaffLike && view === 'watchlist'  && <Watchlist />}
         {view === 'settings'   && <Settings me={me} onProfileUpdated={refreshMe} />}
       </main>
 
       {/* Mobile bottom nav */}
       <nav className="bottom-nav">
-        {NAV.map(n => (
+        {navItems.map(n => (
           <button
             key={n.id}
             className={`bottom-nav-item${view === n.id ? ' active' : ''}`}
