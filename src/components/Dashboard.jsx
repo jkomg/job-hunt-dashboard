@@ -130,6 +130,8 @@ export default function Dashboard({ onNavigate, me }) {
     const postedRecommendations = recommendations.filter(r => r.status === 'posted')
     const todoTasks = tasks.filter(t => t.status === 'todo')
     const inProgressTasks = tasks.filter(t => t.status === 'in_progress')
+    const openThreads = Number(summary.threadsOpen || 0)
+    const staleThreads = Number(summary.threadsStale48h || 0)
     const startToday = new Date()
     startToday.setHours(0, 0, 0, 0)
     const endToday = new Date(startToday)
@@ -183,6 +185,13 @@ export default function Dashboard({ onNavigate, me }) {
               <div className="contact-meta">Keep org actions and integrations healthy</div>
             </div>
             <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('settings')}>Open Settings</button>
+          </div>
+          <div className="contact-row" style={{ padding: '8px 0' }}>
+            <div className="contact-info">
+              <div className="contact-name">5. Clear thread inbox</div>
+              <div className="contact-meta">{openThreads} open · {staleThreads} stale 48h+</div>
+            </div>
+            <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('staff_ops')}>Open Threads</button>
           </div>
         </div>
 

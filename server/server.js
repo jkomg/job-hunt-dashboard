@@ -19,6 +19,7 @@ import {
   hasStaffAssignment, listJobRecommendations, createJobRecommendation, getJobRecommendationById, markRecommendationPosted, listStaffTasks,
   getStaffTaskById, createStaffTask, updateStaffTask,
   listCandidateThreads, getCandidateThreadById, createCandidateThread, listCandidateMessages, createCandidateMessage,
+  listCandidateThreadsByScope, updateCandidateThreadStatus,
   createSession, getSession, deleteSession, updatePassword, updateUsername, getRecentSheetSyncRuns, getLocalDataLastUpdatedAt,
   getAppSetting, getAppSettings, setAppSetting, exportBackupSnapshot, restoreBackupSnapshot, createLocalDatabaseSnapshot,
   getDashboardData,
@@ -621,7 +622,7 @@ app.get('/api/staff/assigned-users', requireAuth, requireStaffOrAdmin, async (re
 
 app.get('/api/staff/queue', requireAuth, requireStaffOrAdmin, async (req, res) => {
   try {
-    const [orgUsers, recommendations, tasks] = await Promise.all([
+    const [orgUsers, recommendations, tasks, threads] = await Promise.all([
       req.isAdmin
         ? listOrganizationUsers(req.organizationId)
         : listAssignedUsersForStaff(req.userId, req.organizationId),
@@ -630,7 +631,10 @@ app.get('/api/staff/queue', requireAuth, requireStaffOrAdmin, async (req, res) =
         : listJobRecommendations({ organizationId: req.organizationId, staffUserId: req.userId, limit: 300 }),
       req.isAdmin
         ? listStaffTasks({ organizationId: req.organizationId, limit: 300 })
-        : listStaffTasks({ organizationId: req.organizationId, assigneeUserId: req.userId, limit: 300 })
+        : listStaffTasks({ organizationId: req.organizationId, assigneeUserId: req.userId, limit: 300 }),
+      req.isAdmin
+        ? listCandidateThreadsByScope({ organizationId: req.organizationId, limit: 500 })
+        : listCandidateThreadsByScope({ organizationId: req.organizationId, staffUserId: req.userId, limit: 500 })
     ])
     const candidates = (orgUsers || []).filter(u => u.role === 'job_seeker')
     const staffUsers = req.isAdmin
@@ -642,12 +646,44 @@ app.get('/api/staff/queue', requireAuth, requireStaffOrAdmin, async (req, res) =
       recommendationsDraft: recommendations.filter(r => r.status === 'draft').length,
       recommendationsPosted: recommendations.filter(r => r.status === 'posted').length,
       tasksTodo: tasks.filter(t => t.status === 'todo').length,
-      tasksInProgress: tasks.filter(t => t.status === 'in_progress').length
+      tasksInProgress: tasks.filter(t => t.status === 'in_progress').length,
+      threadsOpen: threads.filter(t => t.status === 'open').length,
+      threadsStale48h: threads.filter(t => t.status === 'open' && (Date.now() - Number(t.updatedAt || 0)) > 48 * 60 * 60 * 1000).length
     }
-    res.json({ ok: true, summary, candidates, staffUsers, recommendations, tasks })
+    res.json({ ok: true, summary, candidates, staffUsers, recommendations, tasks, threads })
   } catch (e) {
     console.error('staff.queue failed', e)
     res.status(500).json({ error: 'Could not load staff queue' })
+  }
+})
+
+app.patch('/api/staff/threads/:threadId', requireAuth, requireStaffOrAdmin, async (req, res) => {
+  try {
+    const thread = await getCandidateThreadById(req.params.threadId)
+    if (!thread || thread.organizationId !== req.organizationId) {
+      return res.status(404).json({ error: 'Thread not found' })
+    }
+    if (!await canAccessCandidate(req, thread.jobSeekerUserId)) {
+      return res.status(403).json({ error: 'Not allowed to update this thread' })
+    }
+    const status = String(req.body?.status || '').trim()
+    if (!['open', 'closed'].includes(status)) {
+      return res.status(400).json({ error: 'status must be open or closed' })
+    }
+    const updated = await updateCandidateThreadStatus(thread.id, status)
+    await createAuditLog({
+      organizationId: req.organizationId,
+      actorUserId: req.userId,
+      targetUserId: thread.jobSeekerUserId,
+      action: 'staff.thread.updated',
+      entityType: 'candidate_thread',
+      entityId: thread.id,
+      metadata: { status: updated.status }
+    })
+    res.json({ ok: true, thread: updated })
+  } catch (e) {
+    console.error('staff.threads.update failed', e)
+    res.status(500).json({ error: 'Could not update thread' })
   }
 })
 
