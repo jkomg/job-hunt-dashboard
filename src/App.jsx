@@ -11,6 +11,7 @@ import Events from './components/Events.jsx'
 import Templates from './components/Templates.jsx'
 import Watchlist from './components/Watchlist.jsx'
 import Settings from './components/Settings.jsx'
+import StaffOps from './components/StaffOps.jsx'
 import { useTheme, THEMES } from './useTheme.js'
 
 const JOB_SEEKER_NAV = [
@@ -27,6 +28,7 @@ const JOB_SEEKER_NAV = [
 
 const STAFF_NAV = [
   { id: 'dashboard', label: 'Briefing', icon: '☀️' },
+  { id: 'staff_ops', label: 'Staff Ops', icon: '🧭' },
   { id: 'settings',  label: 'Settings', icon: '⚙️' }
 ]
 
@@ -150,6 +152,7 @@ export default function App() {
         </div>
 
         {view === 'dashboard'  && <Dashboard onNavigate={navigate} me={me} />}
+        {isStaffLike && view === 'staff_ops' && <StaffOps />}
         {!isStaffLike && view === 'checkin'    && <DailyCheckin />}
         {!isStaffLike && view === 'pipeline'   && <Pipeline navIntent={navIntent} />}
         {!isStaffLike && view === 'contacts'   && <Contacts />}

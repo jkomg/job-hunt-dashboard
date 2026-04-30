@@ -16,6 +16,7 @@ import {
   getUserByUsername, getUserByEmail, getUserById,
   getPrimaryMembershipForUser, createUserAccount, listOrganizationUsers, listAssignedUsersForStaff,
   listStaffAssignments, createStaffAssignment, deleteStaffAssignment, createAuditLog, getAuditLogs,
+  hasStaffAssignment, listJobRecommendations, createJobRecommendation, getJobRecommendationById, markRecommendationPosted, listStaffTasks,
   createSession, getSession, deleteSession, updatePassword, updateUsername, getRecentSheetSyncRuns, getLocalDataLastUpdatedAt,
   getAppSetting, getAppSettings, setAppSetting, exportBackupSnapshot, restoreBackupSnapshot, createLocalDatabaseSnapshot,
   getDashboardData,
@@ -317,6 +318,18 @@ function dataScope(req) {
   }
 }
 
+async function canAccessCandidate(req, candidateUserId) {
+  const targetId = Number(candidateUserId)
+  if (!targetId || !req.organizationId) return false
+  if (req.isAdmin) return true
+  if (req.userRole !== 'staff') return false
+  return hasStaffAssignment({
+    organizationId: req.organizationId,
+    staffUserId: req.userId,
+    jobSeekerUserId: targetId
+  })
+}
+
 // ─── Auth middleware ───────────────────────────────────────────────────────────
 
 function extractIapEmail(req) {
@@ -591,6 +604,124 @@ app.get('/api/staff/assigned-users', requireAuth, requireStaffOrAdmin, async (re
   } catch (e) {
     console.error('staff.assignedUsers failed', e)
     res.status(500).json({ error: 'Could not list assigned users' })
+  }
+})
+
+app.get('/api/staff/queue', requireAuth, requireStaffOrAdmin, async (req, res) => {
+  try {
+    const [candidates, recommendations, tasks] = await Promise.all([
+      req.isAdmin
+        ? listOrganizationUsers(req.organizationId)
+        : listAssignedUsersForStaff(req.userId, req.organizationId),
+      req.isAdmin
+        ? listJobRecommendations({ organizationId: req.organizationId, limit: 300 })
+        : listJobRecommendations({ organizationId: req.organizationId, staffUserId: req.userId, limit: 300 }),
+      req.isAdmin
+        ? listStaffTasks({ organizationId: req.organizationId, limit: 300 })
+        : listStaffTasks({ organizationId: req.organizationId, assigneeUserId: req.userId, limit: 300 })
+    ])
+
+    const summary = {
+      candidates: candidates.length,
+      recommendationsDraft: recommendations.filter(r => r.status === 'draft').length,
+      recommendationsPosted: recommendations.filter(r => r.status === 'posted').length,
+      tasksTodo: tasks.filter(t => t.status === 'todo').length,
+      tasksInProgress: tasks.filter(t => t.status === 'in_progress').length
+    }
+    res.json({ ok: true, summary, candidates, recommendations, tasks })
+  } catch (e) {
+    console.error('staff.queue failed', e)
+    res.status(500).json({ error: 'Could not load staff queue' })
+  }
+})
+
+app.post('/api/staff/recommendations', requireAuth, requireStaffOrAdmin, async (req, res) => {
+  try {
+    const jobSeekerUserId = Number(req.body?.jobSeekerUserId)
+    if (!jobSeekerUserId) return res.status(400).json({ error: 'jobSeekerUserId is required' })
+    if (!await canAccessCandidate(req, jobSeekerUserId)) {
+      return res.status(403).json({ error: 'Not allowed to post for this candidate' })
+    }
+
+    const company = String(req.body?.company || '').trim()
+    if (!company) return res.status(400).json({ error: 'company is required' })
+
+    const recommendation = await createJobRecommendation({
+      organizationId: req.organizationId,
+      staffUserId: req.userId,
+      jobSeekerUserId,
+      company,
+      role: req.body?.role || null,
+      jobUrl: req.body?.jobUrl || null,
+      source: req.body?.source || null,
+      fitNote: req.body?.fitNote || null,
+      status: 'draft'
+    })
+
+    await createAuditLog({
+      organizationId: req.organizationId,
+      actorUserId: req.userId,
+      targetUserId: jobSeekerUserId,
+      action: 'staff.recommendation.created',
+      entityType: 'job_recommendation',
+      entityId: recommendation.id,
+      metadata: {
+        company: recommendation.company,
+        role: recommendation.role,
+        jobUrl: recommendation.jobUrl
+      }
+    })
+
+    res.json({ ok: true, recommendation })
+  } catch (e) {
+    console.error('staff.recommendations.create failed', e)
+    res.status(500).json({ error: 'Could not create recommendation' })
+  }
+})
+
+app.post('/api/staff/recommendations/:id/post-to-pipeline', requireAuth, requireStaffOrAdmin, async (req, res) => {
+  try {
+    const recommendation = await getJobRecommendationById(req.params.id)
+    if (!recommendation || recommendation.organizationId !== req.organizationId) {
+      return res.status(404).json({ error: 'Recommendation not found' })
+    }
+    if (!await canAccessCandidate(req, recommendation.jobSeekerUserId)) {
+      return res.status(403).json({ error: 'Not allowed to post for this candidate' })
+    }
+
+    const pipelineEntry = await createPipelineEntry({
+      Company: recommendation.company,
+      Role: recommendation.role || '',
+      Stage: 'Wishlist',
+      'Job URL': recommendation.jobUrl || '',
+      'Job Source': recommendation.source || '',
+      Notes: recommendation.fitNote || '',
+      Priority: 'Medium'
+    }, {
+      organizationId: req.organizationId,
+      userId: recommendation.jobSeekerUserId
+    })
+
+    const updated = await markRecommendationPosted(recommendation.id, pipelineEntry.id)
+    await createAuditLog({
+      organizationId: req.organizationId,
+      actorUserId: req.userId,
+      targetUserId: recommendation.jobSeekerUserId,
+      action: 'staff.recommendation.posted',
+      entityType: 'job_recommendation',
+      entityId: recommendation.id,
+      metadata: {
+        recommendationId: recommendation.id,
+        pipelineEntryId: pipelineEntry.id,
+        company: recommendation.company,
+        role: recommendation.role
+      }
+    })
+
+    res.json({ ok: true, recommendation: updated, pipelineEntryId: pipelineEntry.id })
+  } catch (e) {
+    console.error('staff.recommendations.post failed', e)
+    res.status(500).json({ error: 'Could not post recommendation to pipeline' })
   }
 })
 
