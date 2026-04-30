@@ -52,6 +52,8 @@ export default function StaffOps({ me }) {
   const [threadTopic, setThreadTopic] = useState('')
   const [messageBody, setMessageBody] = useState('')
   const [messageVisibility, setMessageVisibility] = useState('shared_with_candidate')
+  const [threadStatusFilter, setThreadStatusFilter] = useState('all')
+  const [threadStaleFilter, setThreadStaleFilter] = useState('all')
 
   async function load() {
     setLoading(true)
@@ -152,6 +154,16 @@ export default function StaffOps({ me }) {
     () => (threads || []).find(t => t.id === selectedThreadId) || null,
     [threads, selectedThreadId]
   )
+  const filteredThreads = useMemo(() => {
+    const staleMs = 48 * 60 * 60 * 1000
+    return (threads || []).filter(t => {
+      const isStale = (Date.now() - Number(t.updatedAt || 0)) > staleMs
+      if (threadStatusFilter !== 'all' && t.status !== threadStatusFilter) return false
+      if (threadStaleFilter === 'stale' && !isStale) return false
+      if (threadStaleFilter === 'fresh' && isStale) return false
+      return true
+    })
+  }, [threads, threadStatusFilter, threadStaleFilter])
 
   async function createRecommendation() {
     setSavingRec(true)
@@ -344,6 +356,8 @@ export default function StaffOps({ me }) {
           <div className="stat-card"><div className="stat-label">Draft Recs</div><div className="stat-value">{queue.summary?.recommendationsDraft || 0}</div></div>
           <div className="stat-card"><div className="stat-label">Posted Recs</div><div className="stat-value">{queue.summary?.recommendationsPosted || 0}</div></div>
           <div className="stat-card"><div className="stat-label">Tasks Todo</div><div className="stat-value">{queue.summary?.tasksTodo || 0}</div></div>
+          <div className="stat-card"><div className="stat-label">Open Threads</div><div className="stat-value">{queue.summary?.threadsOpen || 0}</div></div>
+          <div className="stat-card"><div className="stat-label">Stale Threads (48h+)</div><div className="stat-value">{queue.summary?.threadsStale48h || 0}</div></div>
         </div>
       </div>
 
@@ -591,6 +605,24 @@ export default function StaffOps({ me }) {
         <div className="card-title">Candidate Threads</div>
         <div className="settings-grid">
           <div className="field">
+            <label>Status Filter</label>
+            <select value={threadStatusFilter} onChange={e => setThreadStatusFilter(e.target.value)}>
+              <option value="all">all</option>
+              <option value="open">open</option>
+              <option value="closed">closed</option>
+            </select>
+          </div>
+          <div className="field">
+            <label>Freshness Filter</label>
+            <select value={threadStaleFilter} onChange={e => setThreadStaleFilter(e.target.value)}>
+              <option value="all">all</option>
+              <option value="stale">stale_48h_plus</option>
+              <option value="fresh">fresh_under_48h</option>
+            </select>
+          </div>
+        </div>
+        <div className="settings-grid">
+          <div className="field">
             <label>New Thread Topic</label>
             <input value={threadTopic} onChange={e => setThreadTopic(e.target.value)} placeholder="Follow-up strategy, interview prep, etc." />
           </div>
@@ -602,12 +634,12 @@ export default function StaffOps({ me }) {
           </div>
         </div>
 
-        {!threads.length && <div style={{ color: 'var(--text-muted)' }}>No threads yet for this candidate.</div>}
-        {!!threads.length && (
+        {!filteredThreads.length && <div style={{ color: 'var(--text-muted)' }}>No threads match current filters.</div>}
+        {!!filteredThreads.length && (
           <div className="tabs">
-            {threads.map(t => (
+            {filteredThreads.map(t => (
               <button key={t.id} className={`tab ${selectedThreadId === t.id ? 'active' : ''}`} onClick={() => setSelectedThreadId(t.id)}>
-                {t.topic}
+                {t.topic} {t.status === 'closed' ? '• closed' : ''}
               </button>
             ))}
           </div>

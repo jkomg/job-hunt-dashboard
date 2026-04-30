@@ -878,6 +878,36 @@ export async function listCandidateThreads({
   return toPlainRows(res).map(toCandidateThread)
 }
 
+export async function listCandidateThreadsByScope({
+  organizationId = DEFAULT_ORG_ID,
+  staffUserId = null,
+  limit = 500
+} = {}) {
+  const args = [String(organizationId)]
+  let where = 't.organization_id = ?'
+  if (staffUserId != null) {
+    where += ' AND EXISTS (SELECT 1 FROM staff_assignments sa WHERE sa.organization_id = t.organization_id AND sa.staff_user_id = ? AND sa.job_seeker_user_id = t.job_seeker_user_id)'
+    args.push(Number(staffUserId))
+  }
+  args.push(Math.max(1, Math.min(2000, Number(limit) || 500)))
+  const res = await db.execute({
+    sql: `
+      SELECT
+        t.*,
+        c.username AS created_by_username,
+        j.username AS job_seeker_username
+      FROM candidate_threads t
+      JOIN users c ON c.id = t.created_by_user_id
+      JOIN users j ON j.id = t.job_seeker_user_id
+      WHERE ${where}
+      ORDER BY t.updated_at DESC
+      LIMIT ?
+    `,
+    args
+  })
+  return toPlainRows(res).map(toCandidateThread)
+}
+
 export async function getCandidateThreadById(id) {
   const res = await db.execute({
     sql: `
