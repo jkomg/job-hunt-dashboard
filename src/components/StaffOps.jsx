@@ -23,13 +23,21 @@ export default function StaffOps() {
   const [queue, setQueue] = useState({ summary: {}, candidates: [], recommendations: [], tasks: [] })
   const [selectedCandidateId, setSelectedCandidateId] = useState('')
   const [savingRec, setSavingRec] = useState(false)
+  const [savingTask, setSavingTask] = useState(false)
   const [postingRecId, setPostingRecId] = useState('')
+  const [updatingTaskId, setUpdatingTaskId] = useState('')
   const [form, setForm] = useState({
     company: '',
     role: '',
     jobUrl: '',
     source: '',
     fitNote: ''
+  })
+  const [taskForm, setTaskForm] = useState({
+    type: 'research',
+    priority: 'normal',
+    dueDate: '',
+    notes: ''
   })
 
   async function load() {
@@ -56,6 +64,10 @@ export default function StaffOps() {
     const id = Number(selectedCandidateId)
     return (queue.recommendations || []).filter(r => Number(r.jobSeekerUserId) === id)
   }, [queue.recommendations, selectedCandidateId])
+  const candidateTasks = useMemo(() => {
+    const id = Number(selectedCandidateId)
+    return (queue.tasks || []).filter(t => Number(t.relatedUserId) === id)
+  }, [queue.tasks, selectedCandidateId])
 
   async function createRecommendation() {
     setSavingRec(true)
@@ -96,6 +108,51 @@ export default function StaffOps() {
       setError(e.message)
     } finally {
       setPostingRecId('')
+    }
+  }
+
+  async function createTask() {
+    setSavingTask(true)
+    setError('')
+    setSuccess('')
+    try {
+      await api('/api/staff/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          relatedUserId: selectedCandidateId ? Number(selectedCandidateId) : null,
+          type: taskForm.type,
+          priority: taskForm.priority,
+          dueAt: taskForm.dueDate ? new Date(`${taskForm.dueDate}T12:00:00`).getTime() : null,
+          notes: taskForm.notes
+        })
+      })
+      setTaskForm({ type: 'research', priority: 'normal', dueDate: '', notes: '' })
+      setSuccess('Task created.')
+      await load()
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setSavingTask(false)
+    }
+  }
+
+  async function updateTaskStatus(task, status) {
+    setUpdatingTaskId(task.id)
+    setError('')
+    setSuccess('')
+    try {
+      await api(`/api/staff/tasks/${task.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status })
+      })
+      setSuccess('Task updated.')
+      await load()
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setUpdatingTaskId('')
     }
   }
 
@@ -211,6 +268,82 @@ export default function StaffOps() {
             </tbody>
           </table>
         )}
+      </div>
+
+      <div className="card mb-16">
+        <div className="card-title">Tasks</div>
+        <div className="settings-grid">
+          <div className="field">
+            <label>Type</label>
+            <select value={taskForm.type} onChange={e => setTaskForm({ ...taskForm, type: e.target.value })}>
+              <option value="research">research</option>
+              <option value="follow_up">follow_up</option>
+              <option value="interview_prep">interview_prep</option>
+              <option value="admin">admin</option>
+            </select>
+          </div>
+          <div className="field">
+            <label>Priority</label>
+            <select value={taskForm.priority} onChange={e => setTaskForm({ ...taskForm, priority: e.target.value })}>
+              <option value="low">low</option>
+              <option value="normal">normal</option>
+              <option value="high">high</option>
+              <option value="urgent">urgent</option>
+            </select>
+          </div>
+          <div className="field">
+            <label>Due Date</label>
+            <input type="date" value={taskForm.dueDate} onChange={e => setTaskForm({ ...taskForm, dueDate: e.target.value })} />
+          </div>
+        </div>
+        <div className="field">
+          <label>Notes</label>
+          <textarea rows={2} value={taskForm.notes} onChange={e => setTaskForm({ ...taskForm, notes: e.target.value })} />
+        </div>
+        <button className="btn btn-primary" onClick={createTask} disabled={savingTask || !taskForm.notes.trim() || !selectedCandidateId}>
+          {savingTask ? 'Creating…' : 'Create Task'}
+        </button>
+
+        <div style={{ marginTop: 14 }}>
+          {!candidateTasks.length && <div style={{ color: 'var(--text-muted)' }}>No tasks yet for this candidate.</div>}
+          {!!candidateTasks.length && (
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Type</th>
+                  <th>Priority</th>
+                  <th>Status</th>
+                  <th>Due</th>
+                  <th>Notes</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {candidateTasks.map(task => (
+                  <tr key={task.id}>
+                    <td>{task.type}</td>
+                    <td>{task.priority}</td>
+                    <td>{task.status}</td>
+                    <td>{formatDateTime(task.dueAt)}</td>
+                    <td>{task.notes || '—'}</td>
+                    <td style={{ textAlign: 'right' }}>
+                      {task.status !== 'in_progress' && (
+                        <button className="btn btn-ghost btn-sm" disabled={updatingTaskId === task.id} onClick={() => updateTaskStatus(task, 'in_progress')}>
+                          Start
+                        </button>
+                      )}
+                      {task.status !== 'done' && (
+                        <button className="btn btn-ghost btn-sm" disabled={updatingTaskId === task.id} onClick={() => updateTaskStatus(task, 'done')}>
+                          Done
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
       </div>
     </div>
   )

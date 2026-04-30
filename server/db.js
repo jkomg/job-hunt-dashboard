@@ -797,6 +797,108 @@ export async function listStaffTasks({
   return toPlainRows(res).map(toStaffTask)
 }
 
+export async function getStaffTaskById(id) {
+  const res = await db.execute({
+    sql: `
+      SELECT
+        t.*,
+        a.username AS assignee_username,
+        r.username AS related_username
+      FROM staff_tasks t
+      JOIN users a ON a.id = t.assignee_user_id
+      LEFT JOIN users r ON r.id = t.related_user_id
+      WHERE t.id = ?
+      LIMIT 1
+    `,
+    args: [String(id)]
+  })
+  return toStaffTask(firstRow(res))
+}
+
+export async function createStaffTask({
+  organizationId = DEFAULT_ORG_ID,
+  assigneeUserId,
+  relatedUserId = null,
+  type = 'admin',
+  priority = 'normal',
+  status = 'todo',
+  dueAt = null,
+  notes = '',
+  createdByUserId = null
+} = {}) {
+  const safeType = ['research', 'follow_up', 'interview_prep', 'admin'].includes(String(type)) ? String(type) : 'admin'
+  const safePriority = ['low', 'normal', 'high', 'urgent'].includes(String(priority)) ? String(priority) : 'normal'
+  const safeStatus = ['todo', 'in_progress', 'done'].includes(String(status)) ? String(status) : 'todo'
+  const id = crypto.randomUUID()
+  const ts = now()
+  await db.execute({
+    sql: `
+      INSERT INTO staff_tasks (
+        id, organization_id, assignee_user_id, related_user_id, type, priority, status, due_at, notes, created_by_user_id, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `,
+    args: [
+      id,
+      String(organizationId),
+      Number(assigneeUserId),
+      relatedUserId == null ? null : Number(relatedUserId),
+      safeType,
+      safePriority,
+      safeStatus,
+      dueAt == null ? null : Number(dueAt),
+      String(notes || ''),
+      createdByUserId == null ? null : Number(createdByUserId),
+      ts,
+      ts
+    ]
+  })
+  return getStaffTaskById(id)
+}
+
+export async function updateStaffTask(id, data = {}) {
+  const set = []
+  const args = []
+  function put(column, value) {
+    set.push(`${column} = ?`)
+    args.push(value)
+  }
+
+  if (Object.prototype.hasOwnProperty.call(data, 'assigneeUserId')) {
+    put('assignee_user_id', Number(data.assigneeUserId))
+  }
+  if (Object.prototype.hasOwnProperty.call(data, 'relatedUserId')) {
+    put('related_user_id', data.relatedUserId == null ? null : Number(data.relatedUserId))
+  }
+  if (Object.prototype.hasOwnProperty.call(data, 'type')) {
+    const safeType = ['research', 'follow_up', 'interview_prep', 'admin'].includes(String(data.type)) ? String(data.type) : 'admin'
+    put('type', safeType)
+  }
+  if (Object.prototype.hasOwnProperty.call(data, 'priority')) {
+    const safePriority = ['low', 'normal', 'high', 'urgent'].includes(String(data.priority)) ? String(data.priority) : 'normal'
+    put('priority', safePriority)
+  }
+  if (Object.prototype.hasOwnProperty.call(data, 'status')) {
+    const safeStatus = ['todo', 'in_progress', 'done'].includes(String(data.status)) ? String(data.status) : 'todo'
+    put('status', safeStatus)
+  }
+  if (Object.prototype.hasOwnProperty.call(data, 'dueAt')) {
+    put('due_at', data.dueAt == null ? null : Number(data.dueAt))
+  }
+  if (Object.prototype.hasOwnProperty.call(data, 'notes')) {
+    put('notes', String(data.notes || ''))
+  }
+  if (!set.length) return getStaffTaskById(id)
+
+  set.push('updated_at = ?')
+  args.push(now())
+  args.push(String(id))
+  await db.execute({
+    sql: `UPDATE staff_tasks SET ${set.join(', ')} WHERE id = ?`,
+    args
+  })
+  return getStaffTaskById(id)
+}
+
 async function getMembership(organizationId, userId) {
   const res = await db.execute({
     sql: 'SELECT * FROM memberships WHERE organization_id = ? AND user_id = ? LIMIT 1',

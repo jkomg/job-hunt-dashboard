@@ -17,6 +17,7 @@ import {
   getPrimaryMembershipForUser, createUserAccount, listOrganizationUsers, listAssignedUsersForStaff,
   listStaffAssignments, createStaffAssignment, deleteStaffAssignment, createAuditLog, getAuditLogs,
   hasStaffAssignment, listJobRecommendations, createJobRecommendation, getJobRecommendationById, markRecommendationPosted, listStaffTasks,
+  getStaffTaskById, createStaffTask, updateStaffTask,
   createSession, getSession, deleteSession, updatePassword, updateUsername, getRecentSheetSyncRuns, getLocalDataLastUpdatedAt,
   getAppSetting, getAppSettings, setAppSetting, exportBackupSnapshot, restoreBackupSnapshot, createLocalDatabaseSnapshot,
   getDashboardData,
@@ -328,6 +329,13 @@ async function canAccessCandidate(req, candidateUserId) {
     staffUserId: req.userId,
     jobSeekerUserId: targetId
   })
+}
+
+async function canAccessStaffTask(req, task) {
+  if (!task || task.organizationId !== req.organizationId) return false
+  if (req.isAdmin) return true
+  if (req.userRole !== 'staff') return false
+  return Number(task.assigneeUserId) === Number(req.userId)
 }
 
 // ─── Auth middleware ───────────────────────────────────────────────────────────
@@ -722,6 +730,106 @@ app.post('/api/staff/recommendations/:id/post-to-pipeline', requireAuth, require
   } catch (e) {
     console.error('staff.recommendations.post failed', e)
     res.status(500).json({ error: 'Could not post recommendation to pipeline' })
+  }
+})
+
+app.post('/api/staff/tasks', requireAuth, requireStaffOrAdmin, async (req, res) => {
+  try {
+    const assigneeUserId = Number(req.body?.assigneeUserId || req.userId)
+    const relatedUserId = req.body?.relatedUserId == null ? null : Number(req.body.relatedUserId)
+    if (!assigneeUserId) return res.status(400).json({ error: 'assigneeUserId is required' })
+    if (!req.isAdmin && assigneeUserId !== Number(req.userId)) {
+      return res.status(403).json({ error: 'Staff can only create tasks assigned to themselves' })
+    }
+    if (relatedUserId != null && !await canAccessCandidate(req, relatedUserId)) {
+      return res.status(403).json({ error: 'Not allowed to create a task for this candidate' })
+    }
+
+    const task = await createStaffTask({
+      organizationId: req.organizationId,
+      assigneeUserId,
+      relatedUserId,
+      type: req.body?.type,
+      priority: req.body?.priority,
+      status: req.body?.status || 'todo',
+      dueAt: req.body?.dueAt || null,
+      notes: req.body?.notes || '',
+      createdByUserId: req.userId
+    })
+
+    await createAuditLog({
+      organizationId: req.organizationId,
+      actorUserId: req.userId,
+      targetUserId: relatedUserId,
+      action: 'staff.task.created',
+      entityType: 'staff_task',
+      entityId: task.id,
+      metadata: {
+        assigneeUserId,
+        relatedUserId,
+        type: task.type,
+        priority: task.priority,
+        status: task.status
+      }
+    })
+    res.json({ ok: true, task })
+  } catch (e) {
+    console.error('staff.tasks.create failed', e)
+    res.status(500).json({ error: 'Could not create staff task' })
+  }
+})
+
+app.patch('/api/staff/tasks/:id', requireAuth, requireStaffOrAdmin, async (req, res) => {
+  try {
+    const existing = await getStaffTaskById(req.params.id)
+    if (!existing || existing.organizationId !== req.organizationId) {
+      return res.status(404).json({ error: 'Task not found' })
+    }
+    if (!await canAccessStaffTask(req, existing)) {
+      return res.status(403).json({ error: 'Not allowed to update this task' })
+    }
+
+    const patch = {}
+    if (req.body?.status != null) patch.status = req.body.status
+    if (req.body?.priority != null) patch.priority = req.body.priority
+    if (req.body?.type != null) patch.type = req.body.type
+    if (req.body?.notes != null) patch.notes = req.body.notes
+    if (req.body?.dueAt !== undefined) patch.dueAt = req.body.dueAt
+
+    if (req.isAdmin && req.body?.assigneeUserId != null) {
+      patch.assigneeUserId = Number(req.body.assigneeUserId)
+    }
+    if (req.body?.relatedUserId !== undefined) {
+      if (req.body.relatedUserId == null) {
+        patch.relatedUserId = null
+      } else {
+        const relatedUserId = Number(req.body.relatedUserId)
+        if (!await canAccessCandidate(req, relatedUserId)) {
+          return res.status(403).json({ error: 'Not allowed to link this candidate' })
+        }
+        patch.relatedUserId = relatedUserId
+      }
+    }
+
+    const task = await updateStaffTask(req.params.id, patch)
+    await createAuditLog({
+      organizationId: req.organizationId,
+      actorUserId: req.userId,
+      targetUserId: task.relatedUserId,
+      action: 'staff.task.updated',
+      entityType: 'staff_task',
+      entityId: task.id,
+      metadata: {
+        status: task.status,
+        priority: task.priority,
+        type: task.type,
+        assigneeUserId: task.assigneeUserId
+      }
+    })
+    res.json({ ok: true, task })
+  } catch (e) {
+    console.error('staff.tasks.update failed', e)
+    res.status(500).json({ error: 'Could not update staff task' })
   }
 })
 
