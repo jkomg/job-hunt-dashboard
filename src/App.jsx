@@ -63,6 +63,17 @@ export default function App() {
     refreshMe()
   }, [])
 
+  const isStaffLike = me?.role === 'staff' || me?.isAdmin
+  const navItems = isStaffLike ? STAFF_NAV : JOB_SEEKER_NAV
+
+  useEffect(() => {
+    if (authed !== true || !me?.onboardingComplete || me?.mustChangePassword) return
+    const navIds = new Set(navItems.map(n => n.id))
+    if (!navIds.has(view)) {
+      setView(isStaffLike ? 'settings' : 'dashboard')
+    }
+  }, [authed, me, isStaffLike, navItems, view])
+
   async function logout() {
     await fetch('/api/logout', { method: 'POST', credentials: 'include' })
     setAuthed(false)
@@ -84,15 +95,6 @@ export default function App() {
   if (!me?.onboardingComplete) {
     return <SetupWizard me={me} onComplete={refreshMe} onLogout={logout} />
   }
-
-  const isStaffLike = me?.role === 'staff' || me?.isAdmin
-  const navItems = isStaffLike ? STAFF_NAV : JOB_SEEKER_NAV
-  useEffect(() => {
-    const navIds = new Set(navItems.map(n => n.id))
-    if (!navIds.has(view)) {
-      setView(isStaffLike ? 'settings' : 'dashboard')
-    }
-  }, [isStaffLike, navItems, view])
 
   return (
     <div className="app">
