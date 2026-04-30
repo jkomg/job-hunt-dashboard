@@ -18,6 +18,7 @@ import {
   listStaffAssignments, createStaffAssignment, deleteStaffAssignment, createAuditLog, getAuditLogs,
   hasStaffAssignment, listJobRecommendations, createJobRecommendation, getJobRecommendationById, markRecommendationPosted, listStaffTasks,
   getStaffTaskById, createStaffTask, updateStaffTask,
+  listCandidateThreads, getCandidateThreadById, createCandidateThread, listCandidateMessages, createCandidateMessage,
   createSession, getSession, deleteSession, updatePassword, updateUsername, getRecentSheetSyncRuns, getLocalDataLastUpdatedAt,
   getAppSetting, getAppSettings, setAppSetting, exportBackupSnapshot, restoreBackupSnapshot, createLocalDatabaseSnapshot,
   getDashboardData,
@@ -841,6 +842,112 @@ app.patch('/api/staff/tasks/:id', requireAuth, requireStaffOrAdmin, async (req, 
   } catch (e) {
     console.error('staff.tasks.update failed', e)
     res.status(500).json({ error: 'Could not update staff task' })
+  }
+})
+
+app.get('/api/staff/candidates/:candidateUserId/threads', requireAuth, requireStaffOrAdmin, async (req, res) => {
+  try {
+    const candidateUserId = Number(req.params.candidateUserId)
+    if (!candidateUserId) return res.status(400).json({ error: 'candidateUserId is required' })
+    if (!await canAccessCandidate(req, candidateUserId)) {
+      return res.status(403).json({ error: 'Not allowed to access this candidate' })
+    }
+    const threads = await listCandidateThreads({
+      organizationId: req.organizationId,
+      jobSeekerUserId: candidateUserId
+    })
+    res.json({ ok: true, threads })
+  } catch (e) {
+    console.error('staff.threads.list failed', e)
+    res.status(500).json({ error: 'Could not list candidate threads' })
+  }
+})
+
+app.post('/api/staff/candidates/:candidateUserId/threads', requireAuth, requireStaffOrAdmin, async (req, res) => {
+  try {
+    const candidateUserId = Number(req.params.candidateUserId)
+    const topic = String(req.body?.topic || '').trim()
+    if (!candidateUserId) return res.status(400).json({ error: 'candidateUserId is required' })
+    if (!topic) return res.status(400).json({ error: 'topic is required' })
+    if (!await canAccessCandidate(req, candidateUserId)) {
+      return res.status(403).json({ error: 'Not allowed to access this candidate' })
+    }
+
+    const thread = await createCandidateThread({
+      organizationId: req.organizationId,
+      jobSeekerUserId: candidateUserId,
+      createdByUserId: req.userId,
+      topic
+    })
+
+    await createAuditLog({
+      organizationId: req.organizationId,
+      actorUserId: req.userId,
+      targetUserId: candidateUserId,
+      action: 'staff.thread.created',
+      entityType: 'candidate_thread',
+      entityId: thread.id,
+      metadata: { topic: thread.topic }
+    })
+
+    res.json({ ok: true, thread })
+  } catch (e) {
+    console.error('staff.threads.create failed', e)
+    res.status(500).json({ error: 'Could not create candidate thread' })
+  }
+})
+
+app.get('/api/staff/threads/:threadId/messages', requireAuth, requireStaffOrAdmin, async (req, res) => {
+  try {
+    const thread = await getCandidateThreadById(req.params.threadId)
+    if (!thread || thread.organizationId !== req.organizationId) {
+      return res.status(404).json({ error: 'Thread not found' })
+    }
+    if (!await canAccessCandidate(req, thread.jobSeekerUserId)) {
+      return res.status(403).json({ error: 'Not allowed to access this thread' })
+    }
+    const messages = await listCandidateMessages(thread.id)
+    res.json({ ok: true, thread, messages })
+  } catch (e) {
+    console.error('staff.messages.list failed', e)
+    res.status(500).json({ error: 'Could not list thread messages' })
+  }
+})
+
+app.post('/api/staff/threads/:threadId/messages', requireAuth, requireStaffOrAdmin, async (req, res) => {
+  try {
+    const thread = await getCandidateThreadById(req.params.threadId)
+    if (!thread || thread.organizationId !== req.organizationId) {
+      return res.status(404).json({ error: 'Thread not found' })
+    }
+    if (!await canAccessCandidate(req, thread.jobSeekerUserId)) {
+      return res.status(403).json({ error: 'Not allowed to access this thread' })
+    }
+    const body = String(req.body?.body || '').trim()
+    if (!body) return res.status(400).json({ error: 'message body is required' })
+
+    const message = await createCandidateMessage({
+      threadId: thread.id,
+      organizationId: req.organizationId,
+      authorUserId: req.userId,
+      visibility: req.body?.visibility || 'shared_with_candidate',
+      body
+    })
+
+    await createAuditLog({
+      organizationId: req.organizationId,
+      actorUserId: req.userId,
+      targetUserId: thread.jobSeekerUserId,
+      action: 'staff.message.created',
+      entityType: 'candidate_message',
+      entityId: message.id,
+      metadata: { threadId: thread.id, visibility: message.visibility }
+    })
+
+    res.json({ ok: true, message })
+  } catch (e) {
+    console.error('staff.messages.create failed', e)
+    res.status(500).json({ error: 'Could not create message' })
   }
 })
 

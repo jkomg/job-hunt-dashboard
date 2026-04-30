@@ -42,6 +42,14 @@ export default function StaffOps() {
   const [taskStatusFilter, setTaskStatusFilter] = useState('all')
   const [taskPriorityFilter, setTaskPriorityFilter] = useState('all')
   const [taskDueFilter, setTaskDueFilter] = useState('all')
+  const [threads, setThreads] = useState([])
+  const [selectedThreadId, setSelectedThreadId] = useState('')
+  const [threadMessages, setThreadMessages] = useState([])
+  const [creatingThread, setCreatingThread] = useState(false)
+  const [sendingMessage, setSendingMessage] = useState(false)
+  const [threadTopic, setThreadTopic] = useState('')
+  const [messageBody, setMessageBody] = useState('')
+  const [messageVisibility, setMessageVisibility] = useState('shared_with_candidate')
 
   async function load() {
     setLoading(true)
@@ -62,6 +70,44 @@ export default function StaffOps() {
   useEffect(() => {
     load()
   }, [])
+
+  useEffect(() => {
+    async function loadThreads() {
+      if (!selectedCandidateId) {
+        setThreads([])
+        setSelectedThreadId('')
+        setThreadMessages([])
+        return
+      }
+      try {
+        const d = await api(`/api/staff/candidates/${selectedCandidateId}/threads`)
+        const list = d.threads || []
+        setThreads(list)
+        if (!list.find(t => t.id === selectedThreadId)) {
+          setSelectedThreadId(list[0]?.id || '')
+        }
+      } catch (e) {
+        setError(e.message)
+      }
+    }
+    loadThreads()
+  }, [selectedCandidateId])
+
+  useEffect(() => {
+    async function loadMessages() {
+      if (!selectedThreadId) {
+        setThreadMessages([])
+        return
+      }
+      try {
+        const d = await api(`/api/staff/threads/${selectedThreadId}/messages`)
+        setThreadMessages(d.messages || [])
+      } catch (e) {
+        setError(e.message)
+      }
+    }
+    loadMessages()
+  }, [selectedThreadId])
 
   const candidateRecommendations = useMemo(() => {
     const id = Number(selectedCandidateId)
@@ -174,6 +220,49 @@ export default function StaffOps() {
       setError(e.message)
     } finally {
       setUpdatingTaskId('')
+    }
+  }
+
+  async function createThread() {
+    setCreatingThread(true)
+    setError('')
+    setSuccess('')
+    try {
+      await api(`/api/staff/candidates/${selectedCandidateId}/threads`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic: threadTopic })
+      })
+      setThreadTopic('')
+      const d = await api(`/api/staff/candidates/${selectedCandidateId}/threads`)
+      setThreads(d.threads || [])
+      setSelectedThreadId((d.threads || [])[0]?.id || '')
+      setSuccess('Thread created.')
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setCreatingThread(false)
+    }
+  }
+
+  async function sendMessage() {
+    setSendingMessage(true)
+    setError('')
+    setSuccess('')
+    try {
+      await api(`/api/staff/threads/${selectedThreadId}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body: messageBody, visibility: messageVisibility })
+      })
+      setMessageBody('')
+      const d = await api(`/api/staff/threads/${selectedThreadId}/messages`)
+      setThreadMessages(d.messages || [])
+      setSuccess('Message sent.')
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setSendingMessage(false)
     }
   }
 
@@ -401,6 +490,77 @@ export default function StaffOps() {
             </table>
           )}
         </div>
+      </div>
+
+      <div className="card mb-16">
+        <div className="card-title">Candidate Threads</div>
+        <div className="settings-grid">
+          <div className="field">
+            <label>New Thread Topic</label>
+            <input value={threadTopic} onChange={e => setThreadTopic(e.target.value)} placeholder="Follow-up strategy, interview prep, etc." />
+          </div>
+          <div className="field">
+            <label>&nbsp;</label>
+            <button className="btn btn-primary" onClick={createThread} disabled={creatingThread || !selectedCandidateId || !threadTopic.trim()}>
+              {creatingThread ? 'Creating…' : 'Create Thread'}
+            </button>
+          </div>
+        </div>
+
+        {!threads.length && <div style={{ color: 'var(--text-muted)' }}>No threads yet for this candidate.</div>}
+        {!!threads.length && (
+          <div className="tabs">
+            {threads.map(t => (
+              <button key={t.id} className={`tab ${selectedThreadId === t.id ? 'active' : ''}`} onClick={() => setSelectedThreadId(t.id)}>
+                {t.topic}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {!!selectedThreadId && (
+          <div style={{ marginTop: 10 }}>
+            <div className="field">
+              <label>Message</label>
+              <textarea rows={3} value={messageBody} onChange={e => setMessageBody(e.target.value)} />
+            </div>
+            <div className="settings-grid">
+              <div className="field">
+                <label>Visibility</label>
+                <select value={messageVisibility} onChange={e => setMessageVisibility(e.target.value)}>
+                  <option value="shared_with_candidate">shared_with_candidate</option>
+                  <option value="internal_staff">internal_staff</option>
+                </select>
+              </div>
+              <div className="field">
+                <label>&nbsp;</label>
+                <button className="btn btn-primary" onClick={sendMessage} disabled={sendingMessage || !messageBody.trim()}>
+                  {sendingMessage ? 'Sending…' : 'Send Message'}
+                </button>
+              </div>
+            </div>
+            <table className="data-table" style={{ marginTop: 10 }}>
+              <thead>
+                <tr>
+                  <th>When</th>
+                  <th>Author</th>
+                  <th>Visibility</th>
+                  <th>Message</th>
+                </tr>
+              </thead>
+              <tbody>
+                {threadMessages.map(m => (
+                  <tr key={m.id}>
+                    <td>{formatDateTime(m.createdAt)}</td>
+                    <td>{m.authorUsername || m.authorUserId}</td>
+                    <td>{m.visibility}</td>
+                    <td>{m.body}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   )
