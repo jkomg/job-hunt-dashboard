@@ -116,6 +116,19 @@ export default function Settings({ me, onProfileUpdated }) {
   const [interviewsTabsText, setInterviewsTabsText] = useState('Interview Tracker')
   const [eventsTabsText, setEventsTabsText] = useState('Events')
   const [downloadingLogs, setDownloadingLogs] = useState(false)
+  const [adminUsers, setAdminUsers] = useState([])
+  const [assignedUsers, setAssignedUsers] = useState([])
+  const [staffAssignments, setStaffAssignments] = useState([])
+  const [auditLogs, setAuditLogs] = useState([])
+  const [newUsername, setNewUsername] = useState('')
+  const [newUserEmail, setNewUserEmail] = useState('')
+  const [newUserRole, setNewUserRole] = useState('job_seeker')
+  const [newUserPassword, setNewUserPassword] = useState('')
+  const [creatingUser, setCreatingUser] = useState(false)
+  const [assignStaffUserId, setAssignStaffUserId] = useState('')
+  const [assignJobSeekerUserId, setAssignJobSeekerUserId] = useState('')
+  const [savingAssignment, setSavingAssignment] = useState(false)
+  const [removingAssignmentId, setRemovingAssignmentId] = useState('')
 
   const healthState = status?.health?.status || 'unknown'
   const healthColor = useMemo(() => {
@@ -144,6 +157,28 @@ export default function Settings({ me, onProfileUpdated }) {
       setContactsTabsText(tabsToText(cfg.contactsTabs || ['Networking Tracker']))
       setInterviewsTabsText(tabsToText(cfg.interviewsTabs || ['Interview Tracker']))
       setEventsTabsText(tabsToText(cfg.eventsTabs || ['Events']))
+
+      if (me?.isAdmin) {
+        const [usersRes, assignmentsRes, auditRes] = await Promise.all([
+          api('/api/admin/users'),
+          api('/api/admin/staff-assignments'),
+          api('/api/admin/audit-log?limit=60')
+        ])
+        setAdminUsers(usersRes?.users || [])
+        setStaffAssignments(assignmentsRes?.assignments || [])
+        setAuditLogs(auditRes?.logs || [])
+      } else {
+        setAdminUsers([])
+        setStaffAssignments([])
+        setAuditLogs([])
+      }
+
+      if (me?.isAdmin || me?.role === 'staff') {
+        const assignedRes = await api('/api/staff/assigned-users')
+        setAssignedUsers(assignedRes?.users || [])
+      } else {
+        setAssignedUsers([])
+      }
     } catch (e) {
       setError(e.payload || { error: e.message })
     } finally {
@@ -204,6 +239,85 @@ export default function Settings({ me, onProfileUpdated }) {
       setError(e.payload || { error: e.message })
     } finally {
       setSavingProfile(false)
+    }
+  }
+
+  async function createUser() {
+    setCreatingUser(true)
+    setError(null)
+    setSuccess('')
+    try {
+      const username = newUsername.trim().toLowerCase()
+      const password = newUserPassword.trim()
+      const email = newUserEmail.trim().toLowerCase()
+      if (!username) throw new Error('Username is required')
+      if (!password || password.length < 10) throw new Error('Temporary password must be at least 10 characters')
+      await api('/api/admin/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username,
+          password,
+          email: email || null,
+          role: newUserRole
+        })
+      })
+      setSuccess('User created.')
+      setNewUsername('')
+      setNewUserEmail('')
+      setNewUserPassword('')
+      setNewUserRole('job_seeker')
+      await load()
+    } catch (e) {
+      setError(e.payload || { error: e.message })
+    } finally {
+      setCreatingUser(false)
+    }
+  }
+
+  async function createAssignment() {
+    setSavingAssignment(true)
+    setError(null)
+    setSuccess('')
+    try {
+      const staffUserId = Number(assignStaffUserId)
+      const jobSeekerUserId = Number(assignJobSeekerUserId)
+      if (!staffUserId || !jobSeekerUserId) throw new Error('Select both staff and job seeker users')
+      await api('/api/admin/staff-assignments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ staffUserId, jobSeekerUserId })
+      })
+      setSuccess('Staff assignment saved.')
+      setAssignStaffUserId('')
+      setAssignJobSeekerUserId('')
+      await load()
+    } catch (e) {
+      setError(e.payload || { error: e.message })
+    } finally {
+      setSavingAssignment(false)
+    }
+  }
+
+  async function removeAssignment(assignment) {
+    setRemovingAssignmentId(assignment.id)
+    setError(null)
+    setSuccess('')
+    try {
+      await api('/api/admin/staff-assignments', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          staffUserId: assignment.staffUserId,
+          jobSeekerUserId: assignment.jobSeekerUserId
+        })
+      })
+      setSuccess('Staff assignment removed.')
+      await load()
+    } catch (e) {
+      setError(e.payload || { error: e.message })
+    } finally {
+      setRemovingAssignmentId('')
     }
   }
 
@@ -429,6 +543,9 @@ export default function Settings({ me, onProfileUpdated }) {
     return <div className="loading"><div className="spin" />Loading settings…</div>
   }
 
+  const staffCandidates = adminUsers.filter(user => user.role === 'staff' || user.role === 'admin')
+  const jobSeekerCandidates = adminUsers.filter(user => user.role === 'job_seeker')
+
   return (
     <div>
       <div className="page-header">
@@ -455,10 +572,185 @@ export default function Settings({ me, onProfileUpdated }) {
             {savingProfile ? 'Saving…' : 'Save Profile'}
           </button>
           <div style={{ fontSize: 12, color: 'var(--text-muted)', alignSelf: 'center' }}>
-            Admin: {me?.isAdmin ? 'Yes' : 'No'}
+            Role: {me?.role || 'job_seeker'} {me?.isAdmin ? '• Admin' : ''}
           </div>
         </div>
       </div>
+
+      {(me?.isAdmin || me?.role === 'staff') && (
+        <div className="card mb-16">
+          <div className="card-title">Assigned Users</div>
+          {!assignedUsers.length && (
+            <div style={{ color: 'var(--text-muted)' }}>
+              {me?.isAdmin ? 'No users in this organization yet.' : 'No users assigned to you yet.'}
+            </div>
+          )}
+          {!!assignedUsers.length && (
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Username</th>
+                  <th>Email</th>
+                  <th>Role</th>
+                  <th>Password Reset</th>
+                </tr>
+              </thead>
+              <tbody>
+                {assignedUsers.map(user => (
+                  <tr key={`assigned-${user.id}`}>
+                    <td>{user.username}</td>
+                    <td>{user.email || '—'}</td>
+                    <td>{user.role}</td>
+                    <td>{user.mustChangePassword ? 'Required' : 'No'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+      {me?.isAdmin && (
+        <div className="card mb-16">
+          <div className="card-title">Team Access</div>
+          <div className="field">
+            <label>Username</label>
+            <input value={newUsername} onChange={e => setNewUsername(e.target.value)} placeholder="new user username" />
+          </div>
+          <div className="field">
+            <label>Email (optional)</label>
+            <input value={newUserEmail} onChange={e => setNewUserEmail(e.target.value)} placeholder="name@example.com" />
+          </div>
+          <div className="field">
+            <label>Role</label>
+            <select value={newUserRole} onChange={e => setNewUserRole(e.target.value)}>
+              <option value="job_seeker">job_seeker</option>
+              <option value="staff">staff</option>
+              <option value="admin">admin</option>
+            </select>
+          </div>
+          <div className="field">
+            <label>Temporary Password</label>
+            <input type="password" value={newUserPassword} onChange={e => setNewUserPassword(e.target.value)} placeholder="at least 10 characters" />
+          </div>
+          <div className="quick-actions" style={{ marginBottom: 14 }}>
+            <button className="btn btn-primary" onClick={createUser} disabled={creatingUser}>
+              {creatingUser ? 'Creating…' : 'Create User'}
+            </button>
+          </div>
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Username</th>
+                <th>Email</th>
+                <th>Role</th>
+                <th>Password Reset</th>
+              </tr>
+            </thead>
+            <tbody>
+              {adminUsers.map(user => (
+                <tr key={`org-user-${user.id}`}>
+                  <td>{user.username}</td>
+                  <td>{user.email || '—'}</td>
+                  <td>{user.role}</td>
+                  <td>{user.mustChangePassword ? 'Required' : 'No'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {me?.isAdmin && (
+        <div className="card mb-16">
+          <div className="card-title">Staff Assignments</div>
+          <div className="settings-grid">
+            <div className="field">
+              <label>Staff User</label>
+              <select value={assignStaffUserId} onChange={e => setAssignStaffUserId(e.target.value)}>
+                <option value="">Select staff user</option>
+                {staffCandidates.map(user => (
+                  <option key={`staff-${user.id}`} value={user.id}>{user.username} ({user.role})</option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label>Job Seeker</label>
+              <select value={assignJobSeekerUserId} onChange={e => setAssignJobSeekerUserId(e.target.value)}>
+                <option value="">Select job seeker</option>
+                {jobSeekerCandidates.map(user => (
+                  <option key={`seeker-${user.id}`} value={user.id}>{user.username}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="quick-actions" style={{ marginBottom: 14 }}>
+            <button className="btn btn-primary" onClick={createAssignment} disabled={savingAssignment}>
+              {savingAssignment ? 'Saving…' : 'Assign User'}
+            </button>
+          </div>
+          {!staffAssignments.length && <div style={{ color: 'var(--text-muted)' }}>No assignments yet.</div>}
+          {!!staffAssignments.length && (
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Staff</th>
+                  <th>Job Seeker</th>
+                  <th>Updated</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {staffAssignments.map(assignment => (
+                  <tr key={assignment.id}>
+                    <td>{assignment.staffUsername || assignment.staffUserId}</td>
+                    <td>{assignment.jobSeekerUsername || assignment.jobSeekerUserId}</td>
+                    <td>{formatDateTime(new Date(assignment.updatedAt).toISOString())}</td>
+                    <td style={{ textAlign: 'right' }}>
+                      <button
+                        className="btn btn-danger btn-sm"
+                        onClick={() => removeAssignment(assignment)}
+                        disabled={removingAssignmentId === assignment.id}
+                      >
+                        {removingAssignmentId === assignment.id ? 'Removing…' : 'Remove'}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+      {me?.isAdmin && (
+        <div className="card mb-16">
+          <div className="card-title">Audit Log</div>
+          {!auditLogs.length && <div style={{ color: 'var(--text-muted)' }}>No audit activity yet.</div>}
+          {!!auditLogs.length && (
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>When</th>
+                  <th>Action</th>
+                  <th>Actor</th>
+                  <th>Target</th>
+                </tr>
+              </thead>
+              <tbody>
+                {auditLogs.map(log => (
+                  <tr key={log.id}>
+                    <td>{formatDateTime(new Date(log.createdAt).toISOString())}</td>
+                    <td>{log.action}</td>
+                    <td>{log.actorUserId || 'system'}</td>
+                    <td>{log.targetUserId || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
 
       <div className="card mb-16">
         <div className="card-title">Sync Health</div>
