@@ -577,8 +577,24 @@ function patchOutboundValues(headers, rowValues, pipelineItem) {
   patch(['outcome'], pipelineItem.Outcome || '')
   patch(['resume url', 'resume', 'resume link'], pipelineItem['Resume URL'] || '')
   patch(['cover letter', 'cover letter url', 'cover letter link'], pipelineItem['Cover Letter'] || '')
+  patch(['contact name', 'contact'], pipelineItem['Contact Name'] || '')
+  patch(['contact title', 'title'], pipelineItem['Contact Title'] || '')
+  patch(['next action'], pipelineItem['Next Action'] || '')
+  patch(['next action date'], pipelineItem['Next Action Date'] || '')
+
+  const contacts = Array.isArray(pipelineItem['Application Contacts']) ? pipelineItem['Application Contacts'] : []
+  const first = contacts[0] || null
+  if (first) {
+    patch(['linkedin', 'linkedin url', 'linked in'], first.linkedinUrl || '')
+    patch(['email', 'contact email'], first.email || '')
+  }
 
   return out
+}
+
+function parseRowNumberFromRange(range) {
+  const m = String(range || '').match(/![A-Z]+(\d+)(?::[A-Z]+\d+)?$/i)
+  return m ? Number(m[1]) : null
 }
 
 async function readTabRows(sheets, spreadsheetId, tabName) {
@@ -676,9 +692,11 @@ async function runOutboundSync({ sheets, spreadsheetId, tabs, scope }) {
   const links = await getSheetSyncLinks(spreadsheetId)
   const pipeline = await getPipeline(scope)
   const byId = new Map(pipeline.map(item => [item.id, item]))
+  const linkedIds = new Set(links.map(l => String(l.pipeline_page_id)))
 
   const summary = {
     updatedRows: 0,
+    appendedRows: 0,
     skippedUnchanged: 0,
     conflicts: 0,
     missingLinkedRecords: 0,
@@ -687,8 +705,7 @@ async function runOutboundSync({ sheets, spreadsheetId, tabs, scope }) {
 
   for (const tab of tabs) {
     const tabLinks = links.filter(link => link.tab_name === tab)
-    if (!summary.tabs[tab]) summary.tabs[tab] = { updated: 0, skipped: 0, conflicts: 0, missing: 0 }
-    if (!tabLinks.length) continue
+    if (!summary.tabs[tab]) summary.tabs[tab] = { updated: 0, appended: 0, skipped: 0, conflicts: 0, missing: 0 }
 
     const { headers, rows } = await readTabRows(sheets, spreadsheetId, tab)
 
@@ -753,6 +770,51 @@ async function runOutboundSync({ sheets, spreadsheetId, tabs, scope }) {
       await updateSheetSyncOutboundHash(link.id, outboundHash)
       summary.updatedRows++
       summary.tabs[tab].updated++
+    }
+
+    // Append local pipeline entries that do not yet have a sheet link.
+    if (tab === tabs[0]) {
+      const unlinked = pipeline.filter(item => !linkedIds.has(String(item.id)))
+      for (const item of unlinked) {
+        const base = new Array(Math.max(headers.length, 15)).fill('')
+        const patched = patchOutboundValues(headers, base, item)
+        if (patched.length < 15) patched.length = 15
+        const appendRes = await sheets.spreadsheets.values.append({
+          spreadsheetId,
+          range: `${tab}!A:ZZ`,
+          valueInputOption: 'USER_ENTERED',
+          insertDataOption: 'INSERT_ROWS',
+          requestBody: { values: [patched] }
+        })
+        const updatedRange = appendRes?.data?.updates?.updatedRange || ''
+        const rowNumber = parseRowNumberFromRange(updatedRange)
+        if (rowNumber) {
+          const rowObj = toRowObject(headers, patched)
+          const inboundPayload = pickInboundFields(tab, rowObj)
+          const inboundHash = inboundPayload ? hashObject({ payload: inboundPayload, tab, rowNumber }) : null
+          const outboundHash = hashObject({
+            stage: item.Stage || null,
+            followUp: item['Follow-Up Date'] || null,
+            notes: item.Notes || null,
+            researchNotes: item['Research Notes'] || null,
+            dateApplied: item['Date Applied'] || null,
+            outcome: item.Outcome || null,
+            resumeUrl: item['Resume URL'] || null,
+            coverLetter: item['Cover Letter'] || null
+          })
+          await upsertSheetSyncLink({
+            sheetId: spreadsheetId,
+            tabName: tab,
+            rowNumber,
+            pipelinePageId: item.id,
+            lastInboundHash: inboundHash,
+            lastOutboundHash: outboundHash
+          })
+          linkedIds.add(String(item.id))
+          summary.appendedRows++
+          summary.tabs[tab].appended++
+        }
+      }
     }
   }
 
