@@ -159,6 +159,8 @@ export default function Settings({ me, onProfileUpdated }) {
     if (healthState === 'needs_attention') return 'var(--yellow)'
     return 'var(--text-muted)'
   }, [healthState])
+  const serverDeployVersion = String(healthMeta?.deployVersion || '')
+  const hasVersionMismatch = !!serverDeployVersion && serverDeployVersion !== BUNDLE_VERSION
   const usersById = useMemo(() => {
     const map = new Map()
     for (const user of adminUsers) map.set(Number(user.id), user)
@@ -589,8 +591,19 @@ export default function Settings({ me, onProfileUpdated }) {
       <div className="card mb-16">
         <div className="card-title">Build Info</div>
         <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Frontend bundle: <code>{BUNDLE_VERSION}</code></div>
-        <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Server deploy: <code>{healthMeta?.deployVersion || 'unknown'}</code></div>
+        <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Server deploy: <code>{serverDeployVersion || 'unknown'}</code></div>
         <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Auth mode: <code>{healthMeta?.authMode || 'unknown'}</code></div>
+        {hasVersionMismatch && (
+          <div className="error-msg" style={{ marginTop: 10 }}>
+            <div style={{ fontWeight: 700 }}>Version mismatch detected</div>
+            <div style={{ fontSize: 12, opacity: 0.9, marginTop: 4 }}>
+              Your browser is running an older frontend bundle than the server deploy. Reload now to avoid stale-session issues.
+            </div>
+            <button className="btn btn-primary btn-sm" style={{ marginTop: 8 }} onClick={() => window.location.reload()}>
+              Reload now
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="card mb-16">
