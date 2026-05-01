@@ -473,11 +473,22 @@ async function run() {
   }
   note('Member inbox closed-thread guard passed')
 
+  await api('/api/logout', { method: 'POST', allowStatuses: [200] })
+  cookieJar.clear()
+  await api('/api/login', {
+    method: 'POST',
+    body: { username: TEST_USERNAME, password: NEXT_PASSWORD },
+    allowStatuses: [200]
+  })
+
   const sync = await api('/api/sheets/sync', {
     method: 'POST',
     body: {},
     allowStatuses: [200, 400, 401, 403, 500]
   })
+  if (sync.status === 403) {
+    throw new Error(`Sync should be exercised under admin session, got 403: ${JSON.stringify(sync.body)}`)
+  }
   if (sync.status !== 200) {
     if (!sync.body?.error || !sync.body?.code) {
       throw new Error(`Sync error response missing details: ${JSON.stringify(sync.body)}`)
