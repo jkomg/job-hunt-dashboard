@@ -292,8 +292,13 @@ export default function Pipeline({ navIntent }) {
   // ─── Render ──────────────────────────────────────────
 
   const today = new Date().toISOString().slice(0, 10)
+  const getDueDate = (i) => {
+    const nextActionDate = String(i['Next Action Date'] || '').trim()
+    if (nextActionDate) return nextActionDate
+    return String(i['Follow-Up Date'] || '').trim()
+  }
   const isDueFollowup = (i) => {
-    const due = String(i['Follow-Up Date'] || '').trim()
+    const due = getDueDate(i)
     if (!due) return false
     if (i.Stage?.includes('Closed')) return false
     return due <= today
