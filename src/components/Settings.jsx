@@ -116,6 +116,7 @@ export default function Settings({ me, onProfileUpdated }) {
   const [saving, setSaving] = useState(false)
   const [savingProfile, setSavingProfile] = useState(false)
   const [testing, setTesting] = useState(false)
+  const [checkingSchema, setCheckingSchema] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [reconcilingInterviews, setReconcilingInterviews] = useState(false)
   const [exportingBackup, setExportingBackup] = useState(false)
@@ -125,6 +126,7 @@ export default function Settings({ me, onProfileUpdated }) {
   const [gmailConnecting, setGmailConnecting] = useState(false)
   const [gmailImporting, setGmailImporting] = useState(false)
   const [status, setStatus] = useState(null)
+  const [schemaReport, setSchemaReport] = useState(null)
   const [runs, setRuns] = useState([])
   const [healthMeta, setHealthMeta] = useState(null)
   const [error, setError] = useState(null)
@@ -422,6 +424,21 @@ export default function Settings({ me, onProfileUpdated }) {
       await load()
     } finally {
       setSyncing(false)
+    }
+  }
+
+  async function checkSchema() {
+    setCheckingSchema(true)
+    setError(null)
+    setSuccess('')
+    try {
+      const result = await api('/api/sheets/schema-check')
+      setSchemaReport(result)
+      setSuccess('Schema check complete.')
+    } catch (e) {
+      setError(e.payload || { error: e.message })
+    } finally {
+      setCheckingSchema(false)
     }
   }
 
@@ -958,10 +975,37 @@ export default function Settings({ me, onProfileUpdated }) {
           <button className="btn btn-ghost" onClick={syncNow} disabled={syncing}>
             {syncing ? 'Syncing…' : 'Run Sync Now'}
           </button>
+          <button className="btn btn-ghost" onClick={checkSchema} disabled={checkingSchema}>
+            {checkingSchema ? 'Checking…' : 'Check Sheet Mapping'}
+          </button>
           <button className="btn btn-ghost" onClick={reconcileInterviews} disabled={reconcilingInterviews}>
             {reconcilingInterviews ? 'Repairing…' : 'Repair Interviews from Pipeline'}
           </button>
         </div>
+
+        {!!schemaReport && (
+          <div style={{ marginTop: 14, borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+            <div style={{ fontWeight: 700, marginBottom: 8 }}>Schema Check</div>
+            {[
+              ['Pipeline', schemaReport?.entities?.pipeline?.tabs || []],
+              ['Networking', schemaReport?.entities?.contacts?.tabs || []],
+              ['Interviews', schemaReport?.entities?.interviews?.tabs || []],
+              ['Events', schemaReport?.entities?.events?.tabs || []]
+            ].map(([sectionLabel, tabs]) => (
+              <div key={`schema-${sectionLabel}`} style={{ marginBottom: 10 }}>
+                <div style={{ fontWeight: 600, fontSize: 13 }}>{sectionLabel}</div>
+                {!tabs.length && <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>No tabs configured.</div>}
+                {tabs.map(tab => (
+                  <div key={`schema-${sectionLabel}-${tab.tabName}`} style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
+                    <span style={{ color: 'var(--text)' }}>{tab.tabName}</span>
+                    {`: ${tab.mappedCount}/${tab.totalFields} mapped`}
+                    {tab.requiredMissing?.length > 0 ? ` • Missing required: ${tab.requiredMissing.join(', ')}` : ''}
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="card mb-16">

@@ -1272,6 +1272,120 @@ export async function testSheetsConnection(configOverrides = {}) {
   }
 }
 
+function mappingResultForHeaders(headers, fields) {
+  const index = buildHeaderIndex(headers)
+  return fields.map(field => {
+    const matched = []
+    for (const candidate of field.candidates) {
+      if (findHeaderIndex(index, [candidate]) >= 0) matched.push(candidate)
+    }
+    return {
+      key: field.key,
+      label: field.label,
+      required: !!field.required,
+      matched,
+      matchedAny: matched.length > 0
+    }
+  })
+}
+
+async function inspectTabMappings(sheets, spreadsheetId, tabName, fields) {
+  const { headers } = await readTabRows(sheets, spreadsheetId, tabName)
+  const mappedFields = mappingResultForHeaders(headers, fields)
+  const mappedCount = mappedFields.filter(f => f.matchedAny).length
+  const requiredMissing = mappedFields.filter(f => f.required && !f.matchedAny).map(f => f.label)
+  return {
+    tabName,
+    headerCount: headers.length,
+    headers,
+    mappedCount,
+    totalFields: mappedFields.length,
+    requiredMissing,
+    fields: mappedFields
+  }
+}
+
+export async function getSheetsSchemaReport(configOverrides = {}) {
+  const { config, credentials, spreadsheetId } = buildSyncContext(configOverrides)
+  const sheets = await getSheetsClient(credentials)
+
+  const pipelineFields = [
+    { key: 'status', label: 'Status / Stage', required: true, candidates: ['app status', 'status', 'stage'] },
+    { key: 'followUpDate', label: 'Follow-Up Date', required: false, candidates: ['follow up date', 'follow-up date', 'follow up', 'next follow-up'] },
+    { key: 'notes', label: 'Notes', required: false, candidates: ['notes'] },
+    { key: 'researchNotes', label: 'Research Notes', required: false, candidates: ['research notes'] },
+    { key: 'dateApplied', label: 'Date Applied', required: false, candidates: ['app date', 'date applied', 'applied date'] },
+    { key: 'outcome', label: 'Outcome', required: false, candidates: ['outcome'] },
+    { key: 'resumeUrl', label: 'Resume URL', required: false, candidates: ['resume url', 'resume', 'resume link'] },
+    { key: 'coverLetter', label: 'Cover Letter', required: false, candidates: ['cover letter', 'cover letter url', 'cover letter link'] },
+    { key: 'contactName', label: 'Contact Name', required: false, candidates: ['contact name', 'contact'] },
+    { key: 'contactTitle', label: 'Contact Title', required: false, candidates: ['contact title', 'title'] },
+    { key: 'nextAction', label: 'Next Action', required: false, candidates: ['next action'] },
+    { key: 'nextActionDate', label: 'Next Action Date', required: false, candidates: ['next action date'] },
+    { key: 'contact1Name', label: 'Contact 1 Name', required: false, candidates: ['contact 1 name', 'contact1 name'] },
+    { key: 'contact1Title', label: 'Contact 1 Title', required: false, candidates: ['contact 1 title', 'contact1 title', 'contact 1 role', 'contact1 role'] },
+    { key: 'contact1Linkedin', label: 'Contact 1 LinkedIn', required: false, candidates: ['linkedin', 'linkedin url', 'linked in', 'contact linkedin'] },
+    { key: 'contact1Email', label: 'Contact 1 Email', required: false, candidates: ['email', 'contact email'] },
+    { key: 'contact2Name', label: 'Contact 2 Name', required: false, candidates: ['contact 2 name', 'contact2 name'] },
+    { key: 'contact2Title', label: 'Contact 2 Title', required: false, candidates: ['contact 2 title', 'contact2 title', 'contact 2 role', 'contact2 role'] },
+    { key: 'contact2Linkedin', label: 'Contact 2 LinkedIn', required: false, candidates: ['contact 2 linkedin', 'contact2 linkedin', 'contact 2 linkedin url', 'contact2 linkedin url'] },
+    { key: 'contact2Email', label: 'Contact 2 Email', required: false, candidates: ['contact 2 email', 'contact2 email'] }
+  ]
+
+  const contactsFields = [
+    { key: 'name', label: 'Name', required: true, candidates: ['name', 'contact', 'contact name'] },
+    { key: 'company', label: 'Company', required: false, candidates: ['company'] },
+    { key: 'status', label: 'Status', required: false, candidates: ['status'] },
+    { key: 'warmth', label: 'Warmth', required: false, candidates: ['warmth'] },
+    { key: 'linkedin', label: 'LinkedIn URL', required: false, candidates: ['linkedin url', 'linkedin'] },
+    { key: 'nextFollowUp', label: 'Next Follow-Up', required: false, candidates: ['next follow up', 'next follow-up', 'follow up date', 'follow-up date'] },
+    { key: 'email', label: 'Email', required: false, candidates: ['email'] }
+  ]
+
+  const interviewsFields = [
+    { key: 'company', label: 'Company', required: true, candidates: ['company', 'employer'] },
+    { key: 'jobTitle', label: 'Job Title', required: false, candidates: ['job title', 'role', 'title'] },
+    { key: 'date', label: 'Date', required: false, candidates: ['date', 'interview date'] },
+    { key: 'round', label: 'Round', required: false, candidates: ['round'] },
+    { key: 'outcome', label: 'Outcome', required: false, candidates: ['outcome'] }
+  ]
+
+  const eventsFields = [
+    { key: 'name', label: 'Name', required: true, candidates: ['name', 'event'] },
+    { key: 'date', label: 'Date', required: false, candidates: ['date', 'event date'] },
+    { key: 'status', label: 'Status', required: false, candidates: ['status'] },
+    { key: 'registrationLink', label: 'Registration Link', required: false, candidates: ['registration link', 'link', 'url'] }
+  ]
+
+  const report = {
+    ok: true,
+    enabled: config.enabled,
+    sheetId: spreadsheetId,
+    serviceAccountEmail: credentialsServiceAccountEmail(credentials),
+    entities: {
+      pipeline: { tabs: [] },
+      contacts: { tabs: [] },
+      interviews: { tabs: [] },
+      events: { tabs: [] }
+    }
+  }
+
+  for (const tab of config.pipelineTabs) {
+    report.entities.pipeline.tabs.push(await inspectTabMappings(sheets, spreadsheetId, tab, pipelineFields))
+  }
+  for (const tab of config.contactsTabs) {
+    report.entities.contacts.tabs.push(await inspectTabMappings(sheets, spreadsheetId, tab, contactsFields))
+  }
+  for (const tab of config.interviewsTabs) {
+    report.entities.interviews.tabs.push(await inspectTabMappings(sheets, spreadsheetId, tab, interviewsFields))
+  }
+  for (const tab of config.eventsTabs) {
+    report.entities.events.tabs.push(await inspectTabMappings(sheets, spreadsheetId, tab, eventsFields))
+  }
+
+  return report
+}
+
 export async function runSheetsSync(configOverrides = {}, scope = null) {
   if (!scope?.organizationId || !scope?.userId) {
     throw new Error('Tenant data scope is required for Sheets sync')
