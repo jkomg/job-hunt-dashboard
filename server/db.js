@@ -141,6 +141,9 @@ async function ensureActionSchema() {
   if (!pipelineCols.has('cover_letter')) {
     await db.execute('ALTER TABLE pipeline_entries ADD COLUMN cover_letter TEXT')
   }
+  if (!pipelineCols.has('application_contacts_json')) {
+    await db.execute('ALTER TABLE pipeline_entries ADD COLUMN application_contacts_json TEXT')
+  }
 
   const contactCols = await getTableColumnSet('contacts')
   if (!contactCols.has('next_action')) {
@@ -363,7 +366,8 @@ async function runMigrations() {
     { id: '2026-04-24-004-action-schema', description: 'next action fields across entities', up: ensureActionSchema },
     { id: '2026-04-29-001-tenant-schema', description: 'organizations memberships and user-owned record scope', up: ensureTenantSchema },
     { id: '2026-04-30-001-staff-ops-schema', description: 'staff recommendations and tasks tables', up: ensureStaffOpsSchema },
-    { id: '2026-04-30-002-candidate-messaging-schema', description: 'candidate thread and message tables', up: ensureStaffOpsSchema }
+    { id: '2026-04-30-002-candidate-messaging-schema', description: 'candidate thread and message tables', up: ensureStaffOpsSchema },
+    { id: '2026-05-01-001-pipeline-contacts-schema', description: 'pipeline multi-contact JSON field', up: ensureActionSchema }
   ]
 
   for (const migration of migrations) {
@@ -1307,6 +1311,7 @@ export async function initDb() {
         outcome TEXT,
         resume_url TEXT,
         cover_letter TEXT,
+        application_contacts_json TEXT,
         work_location TEXT,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
@@ -1452,6 +1457,7 @@ function dailyRowToRecord(row) {
 
 function pipelineRowToRecord(row) {
   if (!row) return null
+  const contacts = parseJsonSafe(row.application_contacts_json, [])
   return {
     id: row.id,
     Company: row.company || '',
@@ -1476,6 +1482,7 @@ function pipelineRowToRecord(row) {
     Outcome: row.outcome || '',
     'Resume URL': row.resume_url || '',
     'Cover Letter': row.cover_letter || '',
+    'Application Contacts': Array.isArray(contacts) ? contacts : [],
     'Work Location': row.work_location || '',
     'Next Action': row.next_action || '',
     'Next Action Date': row.next_action_date || ''
@@ -2188,15 +2195,27 @@ export async function createPipelineEntry(data = {}, scope = {}) {
   const id = String(data.id || crypto.randomUUID())
   const owner = await resolveDataScope(scope)
 
+  const contactsRaw = Array.isArray(data['Application Contacts']) ? data['Application Contacts'] : []
+  const contacts = contactsRaw
+    .slice(0, 3)
+    .map((c) => ({
+      name: String(c?.name || '').trim(),
+      title: String(c?.title || '').trim(),
+      email: String(c?.email || '').trim(),
+      linkedinUrl: String(c?.linkedinUrl || '').trim(),
+      note: String(c?.note || '').trim()
+    }))
+    .filter((c) => c.name || c.title || c.email || c.linkedinUrl || c.note)
+
   await db.execute({
     sql: `
       INSERT INTO pipeline_entries (
         id, company, role, stage, priority, sector, job_source, job_url, salary_range,
         date_applied, follow_up_date, contact_name, contact_title, outreach_method, resume_version,
         company_address, company_phone, notes, research_notes, filed_for_unemployment, outcome,
-        resume_url, cover_letter, work_location, next_action, next_action_date, organization_id, user_id,
+        resume_url, cover_letter, application_contacts_json, work_location, next_action, next_action_date, organization_id, user_id,
         created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     args: [
       id,
@@ -2222,6 +2241,7 @@ export async function createPipelineEntry(data = {}, scope = {}) {
       data.Outcome || null,
       data['Resume URL'] || null,
       data['Cover Letter'] || null,
+      contacts.length ? JSON.stringify(contacts) : null,
       data['Work Location'] || null,
       data['Next Action'] || null,
       data['Next Action Date'] || null,
@@ -2269,6 +2289,20 @@ export async function updatePipelineEntry(id, data = {}, scope = {}) {
   setIfPresent('outcome', data.Outcome === undefined ? undefined : (data.Outcome || null))
   setIfPresent('resume_url', data['Resume URL'] === undefined ? undefined : (data['Resume URL'] || null))
   setIfPresent('cover_letter', data['Cover Letter'] === undefined ? undefined : (data['Cover Letter'] || null))
+  if (data['Application Contacts'] !== undefined) {
+    const contactsRaw = Array.isArray(data['Application Contacts']) ? data['Application Contacts'] : []
+    const contacts = contactsRaw
+      .slice(0, 3)
+      .map((c) => ({
+        name: String(c?.name || '').trim(),
+        title: String(c?.title || '').trim(),
+        email: String(c?.email || '').trim(),
+        linkedinUrl: String(c?.linkedinUrl || '').trim(),
+        note: String(c?.note || '').trim()
+      }))
+      .filter((c) => c.name || c.title || c.email || c.linkedinUrl || c.note)
+    setIfPresent('application_contacts_json', contacts.length ? JSON.stringify(contacts) : null)
+  }
   setIfPresent('work_location', data['Work Location'] === undefined ? undefined : (data['Work Location'] || null))
   setIfPresent('next_action', data['Next Action'] === undefined ? undefined : (data['Next Action'] || null))
   setIfPresent('next_action_date', data['Next Action Date'] === undefined ? undefined : (data['Next Action Date'] || null))
