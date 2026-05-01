@@ -62,6 +62,7 @@ function StatCard({ label, value, target, color }) {
 export default function Dashboard({ onNavigate, me }) {
   const [data, setData] = useState(null)
   const [staffQueue, setStaffQueue] = useState(null)
+  const [memberThreads, setMemberThreads] = useState([])
   const [syncStatus, setSyncStatus] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -85,6 +86,15 @@ export default function Dashboard({ onNavigate, me }) {
       .then(r => r.ok ? r.json() : null)
       .then(d => setSyncStatus(d))
       .catch(() => setSyncStatus(null))
+
+    if (!isStaffLike) {
+      fetch('/api/member/threads', { credentials: 'include' })
+        .then(r => r.ok ? r.json() : null)
+        .then(d => setMemberThreads(d?.threads || []))
+        .catch(() => setMemberThreads([]))
+    } else {
+      setMemberThreads([])
+    }
   }, [isStaffLike])
 
   if (loading) return <div className="loading"><div className="spin" />Loading your briefing…</div>
@@ -120,6 +130,8 @@ export default function Dashboard({ onNavigate, me }) {
   const todayTop3Lines = todayTop3 ? todayTop3.split('\n').map(s => s.trim()).filter(Boolean) : []
 
   const topQueue = todayQueue.slice(0, 3)
+  const openMemberThreads = memberThreads.filter(t => t.status === 'open')
+  const latestMemberThreadUpdateAt = memberThreads.reduce((max, t) => Math.max(max, Number(t.updatedAt || 0)), 0)
 
   if (isStaffLike) {
     const summary = staffQueue?.summary || {}
@@ -263,6 +275,21 @@ export default function Dashboard({ onNavigate, me }) {
           </div>
         </div>
       )}
+
+      <div className="card mb-16">
+        <div className="card-title">Support Inbox</div>
+        <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>
+          {openMemberThreads.length} open thread{openMemberThreads.length === 1 ? '' : 's'} · {memberThreads.length} total
+        </div>
+        <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>
+          Last message update: {latestMemberThreadUpdateAt ? timeAgo(new Date(latestMemberThreadUpdateAt).toISOString()) : 'never'}
+        </div>
+        <div style={{ marginTop: 10 }}>
+          <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('inbox')}>
+            Open Inbox
+          </button>
+        </div>
+      </div>
 
       <div className="card mb-16">
         <div className="card-title">Yesterday's Top 3 — Today's Agenda</div>
