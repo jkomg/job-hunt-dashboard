@@ -428,18 +428,18 @@ function asBool(value) {
 }
 
 function pickInboundContactFields(rowObj) {
-  const name = rowObj.name || rowObj.contact || rowObj['contact name'] || rowObj['name of contact']
+  const name = rowObj.name || rowObj.contact || rowObj['contact name'] || rowObj['name of contact'] || rowObj['name link']
   if (!name) return null
 
   return {
     Name: name,
-    Title: rowObj.title || '',
+    Title: rowObj.title || rowObj.stakeholder || '',
     Company: rowObj.company || rowObj['company name'] || '',
     Warmth: rowObj.warmth || '❄️ Cold — no contact yet',
     Status: rowObj.status || 'Need to reach out',
     'How We Know Each Other': rowObj['how we know each other'] || '',
-    'LinkedIn URL': rowObj['linkedin url'] || rowObj.linkedin || rowObj['linkedin profile'] || '',
-    'Next Follow-Up': toIsoDate(rowObj['next follow up'] || rowObj['next follow-up'] || rowObj['follow up date'] || rowObj['follow-up date']) || null,
+    'LinkedIn URL': rowObj['linkedin url'] || rowObj.linkedin || rowObj['linkedin profile'] || rowObj['name link'] || '',
+    'Next Follow-Up': toIsoDate(rowObj['next follow up'] || rowObj['next follow-up'] || rowObj['follow up date'] || rowObj['follow-up date'] || rowObj['outreach date']) || null,
     Email: rowObj.email || '',
     Phone: rowObj.phone || '',
     'Resume Used': rowObj['resume used'] || rowObj.resume || '',
@@ -454,11 +454,11 @@ function pickInboundInterviewFields(rowObj) {
   return {
     Company: company,
     'Job Title': rowObj['job title'] || rowObj.role || rowObj.title || rowObj.position || '',
-    Date: toIsoDate(rowObj.date || rowObj['interview date']) || null,
-    Round: rowObj.round || '',
+    Date: toIsoDate(rowObj.date || rowObj['interview date'] || rowObj['date of interview']) || null,
+    Round: rowObj.round || rowObj.stage || '',
     Format: rowObj.format || '',
     Outcome: rowObj.outcome || 'Pending',
-    Interviewer: rowObj.interviewer || '',
+    Interviewer: rowObj.interviewer || rowObj['interviewer s name role'] || '',
     'Questions Asked': rowObj['questions asked'] || '',
     'Feedback Received': rowObj['feedback received'] || rowObj.feedback || '',
     'Follow-Up Sent': asBool(rowObj['follow-up sent'] || rowObj['follow up sent'] || rowObj['thank you sent']),
@@ -467,7 +467,7 @@ function pickInboundInterviewFields(rowObj) {
 }
 
 function pickInboundEventFields(rowObj) {
-  const name = rowObj.name || rowObj['event name'] || rowObj.event
+  const name = rowObj.name || rowObj['event name'] || rowObj.event || rowObj['name link']
   if (!name) return null
 
   return {
@@ -475,7 +475,7 @@ function pickInboundEventFields(rowObj) {
     Date: toIsoDate(rowObj.date || rowObj['event date']) || null,
     Price: rowObj.price || '',
     Status: rowObj.status || 'Interested',
-    'Registration Link': rowObj['registration link'] || rowObj.link || rowObj.url || '',
+    'Registration Link': rowObj['registration link'] || rowObj['registration link how to apply'] || rowObj.link || rowObj.url || '',
     Notes: rowObj.notes || ''
   }
 }
@@ -488,14 +488,14 @@ function patchOutboundContactValues(headers, rowValues, item) {
     if (idx >= 0 && value != null && String(value).trim() !== '') out[idx] = value
   }
 
-  patch(['name', 'contact', 'contact name', 'name of contact'], item.Name || '')
-  patch(['title'], item.Title || '')
+  patch(['name', 'contact', 'contact name', 'name of contact', 'name link'], item.Name || '')
+  patch(['title', 'stakeholder'], item.Title || '')
   patch(['company', 'company name'], item.Company || '')
   patch(['warmth'], item.Warmth || '')
   patch(['status'], item.Status || '')
   patch(['how we know each other'], item['How We Know Each Other'] || '')
-  patch(['linkedin url', 'linkedin', 'linkedin profile'], item['LinkedIn URL'] || '')
-  patch(['next follow up', 'next follow-up', 'follow up date', 'follow-up date'], item['Next Follow-Up'] || '')
+  patch(['linkedin url', 'linkedin', 'linkedin profile', 'name link'], item['LinkedIn URL'] || '')
+  patch(['next follow up', 'next follow-up', 'follow up date', 'follow-up date', 'outreach date'], item['Next Follow-Up'] || '')
   patch(['email', 'contact email'], item.Email || '')
   patch(['phone'], item.Phone || '')
   patch(['resume used', 'resume'], item['Resume Used'] || '')
@@ -513,14 +513,14 @@ function patchOutboundInterviewValues(headers, rowValues, item) {
 
   patch(['company', 'company name', 'employer'], item.Company || '')
   patch(['job title', 'role', 'title', 'position'], item['Job Title'] || '')
-  patch(['date', 'interview date'], item.Date || '')
-  patch(['round'], item.Round || '')
-  patch(['format'], item.Format || '')
+  patch(['date', 'interview date', 'date of interview'], item.Date || '')
+  patch(['round', 'stage'], item.Round || '')
+  patch(['format', 'interview format'], item.Format || '')
   patch(['outcome', 'result'], item.Outcome || '')
-  patch(['interviewer'], item.Interviewer || '')
-  patch(['questions asked'], item['Questions Asked'] || '')
+  patch(['interviewer', 'interviewer s name role'], item.Interviewer || '')
+  patch(['questions asked', 'questions asked for reference preparation'], item['Questions Asked'] || '')
   patch(['feedback received', 'feedback'], item['Feedback Received'] || '')
-  patch(['follow-up sent', 'follow up sent', 'thank you sent'], item['Follow-Up Sent'] ? 'TRUE' : 'FALSE')
+  patch(['follow-up sent', 'follow up sent', 'thank you sent', 'follow-up sent?'], item['Follow-Up Sent'] ? 'TRUE' : 'FALSE')
   patch(['notes'], item.Notes || '')
   return out
 }
@@ -533,11 +533,11 @@ function patchOutboundEventValues(headers, rowValues, item) {
     if (idx >= 0 && value != null && String(value).trim() !== '') out[idx] = value
   }
 
-  patch(['name', 'event', 'event name'], item.Name || '')
+  patch(['name', 'event', 'event name', 'name link'], item.Name || '')
   patch(['date', 'event date'], item.Date || '')
   patch(['price'], item.Price || '')
   patch(['status'], item.Status || '')
-  patch(['registration link', 'link', 'url'], item['Registration Link'] || '')
+  patch(['registration link', 'registration link how to apply', 'link', 'url'], item['Registration Link'] || '')
   patch(['notes'], item.Notes || '')
   return out
 }
@@ -1383,7 +1383,7 @@ export async function getSheetsSchemaReport(configOverrides = {}) {
     { key: 'notes', label: 'Notes', core: true, required: false, candidates: ['notes', 'application notes'] },
     { key: 'researchNotes', label: 'Research Notes', core: false, required: false, candidates: ['research notes', 'rr notes'] },
     { key: 'dateApplied', label: 'Date Applied', core: true, required: false, candidates: ['app date', 'date applied', 'applied date', 'application date'] },
-    { key: 'outcome', label: 'Outcome', core: true, required: false, candidates: ['outcome', 'result'] },
+    { key: 'outcome', label: 'Outcome', core: false, required: false, candidates: ['outcome', 'result'] },
     { key: 'resumeUrl', label: 'Resume URL', core: true, required: false, candidates: ['resume url', 'resume', 'resume link'] },
     { key: 'coverLetter', label: 'Cover Letter', core: true, required: false, candidates: ['cover letter', 'cover letter url', 'cover letter link'] },
     { key: 'contactName', label: 'Contact Name', required: false, candidates: ['contact name', 'contact'] },
@@ -1401,28 +1401,28 @@ export async function getSheetsSchemaReport(configOverrides = {}) {
   ]
 
   const contactsFields = [
-    { key: 'name', label: 'Name', core: true, required: false, candidates: ['name', 'contact', 'contact name', 'name of contact'] },
+    { key: 'name', label: 'Name', core: true, required: false, candidates: ['name', 'contact', 'contact name', 'name of contact', 'name & link'] },
     { key: 'company', label: 'Company', core: true, required: false, candidates: ['company', 'company name'] },
     { key: 'status', label: 'Status', core: true, required: false, candidates: ['status'] },
     { key: 'warmth', label: 'Warmth', core: false, required: false, candidates: ['warmth'] },
     { key: 'linkedin', label: 'LinkedIn URL', core: true, required: false, candidates: ['linkedin url', 'linkedin', 'linkedin profile'] },
-    { key: 'nextFollowUp', label: 'Next Follow-Up', core: true, required: false, candidates: ['next follow up', 'next follow-up', 'follow up date', 'follow-up date'] },
-    { key: 'email', label: 'Email', core: true, required: false, candidates: ['email', 'contact email'] }
+    { key: 'nextFollowUp', label: 'Next Follow-Up', core: false, required: false, candidates: ['next follow up', 'next follow-up', 'follow up date', 'follow-up date', 'outreach date'] },
+    { key: 'email', label: 'Email', core: false, required: false, candidates: ['email', 'contact email'] }
   ]
 
   const interviewsFields = [
     { key: 'company', label: 'Company', core: true, required: false, candidates: ['company', 'employer', 'company name'] },
     { key: 'jobTitle', label: 'Job Title', core: true, required: false, candidates: ['job title', 'role', 'title', 'position'] },
-    { key: 'date', label: 'Date', core: true, required: false, candidates: ['date', 'interview date'] },
-    { key: 'round', label: 'Round', core: true, required: false, candidates: ['round'] },
+    { key: 'date', label: 'Date', core: true, required: false, candidates: ['date', 'interview date', 'date of interview'] },
+    { key: 'round', label: 'Round', core: true, required: false, candidates: ['round', 'stage'] },
     { key: 'outcome', label: 'Outcome', core: true, required: false, candidates: ['outcome', 'result'] }
   ]
 
   const eventsFields = [
-    { key: 'name', label: 'Name', core: true, required: false, candidates: ['name', 'event', 'event name'] },
+    { key: 'name', label: 'Name', core: true, required: false, candidates: ['name', 'event', 'event name', 'name & link'] },
     { key: 'date', label: 'Date', core: true, required: false, candidates: ['date', 'event date'] },
     { key: 'status', label: 'Status', core: true, required: false, candidates: ['status'] },
-    { key: 'registrationLink', label: 'Registration Link', core: true, required: false, candidates: ['registration link', 'link', 'url'] }
+    { key: 'registrationLink', label: 'Registration Link', core: true, required: false, candidates: ['registration link', 'registration link/ how to apply', 'link', 'url'] }
   ]
 
   const report = {
