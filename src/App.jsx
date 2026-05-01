@@ -8,6 +8,7 @@ import Contacts from './components/Contacts.jsx'
 import DailyCheckin from './components/DailyCheckin.jsx'
 import Interviews from './components/Interviews.jsx'
 import Events from './components/Events.jsx'
+import Inbox from './components/Inbox.jsx'
 import Templates from './components/Templates.jsx'
 import Watchlist from './components/Watchlist.jsx'
 import Settings from './components/Settings.jsx'
@@ -20,6 +21,7 @@ const JOB_SEEKER_NAV = [
   { id: 'pipeline',    label: 'Pipeline',   icon: '🎯' },
   { id: 'contacts',    label: 'Outreach',   icon: '👥' },
   { id: 'interviews',  label: 'Interviews', icon: '📞' },
+  { id: 'inbox',       label: 'Inbox',      icon: '💬' },
   { id: 'events',      label: 'Events',     icon: '🗓️' },
   { id: 'templates',   label: 'Templates',  icon: '✉️' },
   { id: 'watchlist',   label: 'Watchlist',  icon: '🔭' },
@@ -157,6 +159,7 @@ export default function App() {
         {!isStaffLike && view === 'pipeline'   && <Pipeline navIntent={navIntent} />}
         {!isStaffLike && view === 'contacts'   && <Contacts />}
         {!isStaffLike && view === 'interviews' && <Interviews />}
+        {!isStaffLike && view === 'inbox'      && <Inbox />}
         {!isStaffLike && view === 'events'     && <Events />}
         {!isStaffLike && view === 'templates'  && <Templates />}
         {!isStaffLike && view === 'watchlist'  && <Watchlist />}

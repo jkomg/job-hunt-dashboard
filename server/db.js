@@ -878,6 +878,14 @@ export async function listCandidateThreads({
   return toPlainRows(res).map(toCandidateThread)
 }
 
+export async function listCandidateThreadsForMember({
+  organizationId = DEFAULT_ORG_ID,
+  jobSeekerUserId,
+  limit = 200
+} = {}) {
+  return listCandidateThreads({ organizationId, jobSeekerUserId, limit })
+}
+
 export async function listCandidateThreadsByScope({
   organizationId = DEFAULT_ORG_ID,
   staffUserId = null,
@@ -967,6 +975,26 @@ export async function listCandidateMessages(threadId, limit = 200) {
       LIMIT ?
     `,
     args: [String(threadId), Math.max(1, Math.min(1000, Number(limit) || 200))]
+  })
+  return toPlainRows(res).map(toCandidateMessage)
+}
+
+export async function listCandidateMessagesForMember(threadId, jobSeekerUserId, limit = 200) {
+  const res = await db.execute({
+    sql: `
+      SELECT
+        m.*,
+        u.username AS author_username
+      FROM candidate_messages m
+      JOIN users u ON u.id = m.author_user_id
+      JOIN candidate_threads t ON t.id = m.thread_id
+      WHERE m.thread_id = ?
+        AND t.job_seeker_user_id = ?
+        AND (m.visibility = 'shared_with_candidate' OR m.author_user_id = ?)
+      ORDER BY m.created_at ASC
+      LIMIT ?
+    `,
+    args: [String(threadId), Number(jobSeekerUserId), Number(jobSeekerUserId), Math.max(1, Math.min(1000, Number(limit) || 200))]
   })
   return toPlainRows(res).map(toCandidateMessage)
 }

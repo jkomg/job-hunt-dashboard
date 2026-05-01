@@ -20,6 +20,7 @@ import {
   getStaffTaskById, createStaffTask, updateStaffTask,
   listCandidateThreads, getCandidateThreadById, createCandidateThread, listCandidateMessages, createCandidateMessage,
   listCandidateThreadsByScope, updateCandidateThreadStatus,
+  listCandidateThreadsForMember, listCandidateMessagesForMember,
   createSession, getSession, deleteSession, updatePassword, updateUsername, getRecentSheetSyncRuns, getLocalDataLastUpdatedAt,
   getAppSetting, getAppSettings, setAppSetting, exportBackupSnapshot, restoreBackupSnapshot, createLocalDatabaseSnapshot,
   getDashboardData,
@@ -310,6 +311,11 @@ function requireAdmin(req, res, next) {
 function requireStaffOrAdmin(req, res, next) {
   if (req.isAdmin || req.userRole === 'staff') return next()
   return res.status(403).json({ error: 'Staff access required' })
+}
+
+function requireJobSeeker(req, res, next) {
+  if (req.userRole === 'job_seeker' && !req.isAdmin) return next()
+  return res.status(403).json({ error: 'Job seeker access required' })
 }
 
 function dataScope(req) {
@@ -1019,6 +1025,68 @@ app.post('/api/staff/threads/:threadId/messages', requireAuth, requireStaffOrAdm
     res.json({ ok: true, message })
   } catch (e) {
     console.error('staff.messages.create failed', e)
+    res.status(500).json({ error: 'Could not create message' })
+  }
+})
+
+app.get('/api/member/threads', requireAuth, requireJobSeeker, async (req, res) => {
+  try {
+    const threads = await listCandidateThreadsForMember({
+      organizationId: req.organizationId,
+      jobSeekerUserId: req.userId,
+      limit: 200
+    })
+    res.json({ ok: true, threads })
+  } catch (e) {
+    console.error('member.threads.list failed', e)
+    res.status(500).json({ error: 'Could not list member threads' })
+  }
+})
+
+app.get('/api/member/threads/:threadId/messages', requireAuth, requireJobSeeker, async (req, res) => {
+  try {
+    const thread = await getCandidateThreadById(req.params.threadId)
+    if (!thread || thread.organizationId !== req.organizationId || Number(thread.jobSeekerUserId) !== Number(req.userId)) {
+      return res.status(404).json({ error: 'Thread not found' })
+    }
+    const messages = await listCandidateMessagesForMember(thread.id, req.userId, 500)
+    res.json({ ok: true, thread, messages })
+  } catch (e) {
+    console.error('member.messages.list failed', e)
+    res.status(500).json({ error: 'Could not list thread messages' })
+  }
+})
+
+app.post('/api/member/threads/:threadId/messages', requireAuth, requireJobSeeker, async (req, res) => {
+  try {
+    const thread = await getCandidateThreadById(req.params.threadId)
+    if (!thread || thread.organizationId !== req.organizationId || Number(thread.jobSeekerUserId) !== Number(req.userId)) {
+      return res.status(404).json({ error: 'Thread not found' })
+    }
+    if (thread.status === 'closed') {
+      return res.status(409).json({ error: 'Thread is closed.' })
+    }
+    const body = String(req.body?.body || '').trim()
+    if (!body) return res.status(400).json({ error: 'message body is required' })
+    const message = await createCandidateMessage({
+      threadId: thread.id,
+      organizationId: req.organizationId,
+      authorUserId: req.userId,
+      visibility: 'shared_with_candidate',
+      body
+    })
+    await createAuditLog({
+      organizationId: req.organizationId,
+      actorUserId: req.userId,
+      targetUserId: req.userId,
+      action: 'member.message.created',
+      entityType: 'candidate_message',
+      entityId: message.id,
+      metadata: { threadId: thread.id }
+    })
+    res.json({ ok: true, message })
+  } catch (e) {
+    console.error('member.messages.create failed', e)
     res.status(500).json({ error: 'Could not create message' })
   }
 })
