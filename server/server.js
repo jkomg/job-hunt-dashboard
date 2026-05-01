@@ -33,7 +33,7 @@ import {
   getPipeline, updatePipelineEntry, updatePipelineStage, updatePipelineFollowUp, createPipelineEntry,
   ensureInterviewForPipelineStage, backfillInterviewsFromPipeline, applyPipelineStageAutomation
 } from './db.js'
-import { runSheetsSync, testSheetsConnection, getSheetsSyncStatus, normalizeSheetsSyncError } from './sheetsSync.js'
+import { runSheetsSync, testSheetsConnection, getSheetsSyncStatus, normalizeSheetsSyncError, getSheetsSchemaReport } from './sheetsSync.js'
 import { getGmailIntegrationConfig, buildGmailAuthUrl, exchangeGmailCode, importEventsFromGmail } from './gmailEvents.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -1588,6 +1588,22 @@ app.post('/api/sheets/test-connection', requireAuth, async (_req, res) => {
       code: normalized.code,
       fixSteps: normalized.fixSteps,
       retryable: normalized.retryable,
+      details: normalized.details
+    })
+  }
+})
+
+app.get('/api/sheets/schema-check', requireAuth, async (_req, res) => {
+  try {
+    const overrides = await getSheetsConfigOverrides()
+    const report = await getSheetsSchemaReport(overrides)
+    res.json(report)
+  } catch (e) {
+    const normalized = normalizeSheetsSyncError(e.normalized || e)
+    res.status(normalized.status || 500).json({
+      error: normalized.userMessage || 'Could not run schema check',
+      code: normalized.code || 'SYNC_UNKNOWN',
+      fixSteps: normalized.fixSteps || [],
       details: normalized.details
     })
   }
