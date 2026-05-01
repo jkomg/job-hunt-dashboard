@@ -760,6 +760,10 @@ async function runOutboundSync({ sheets, spreadsheetId, tabs, scope }) {
       const patched = patchOutboundValues(headers, currentRow, item)
 
       const outboundFingerprint = {
+        company: item.Company || null,
+        role: item.Role || null,
+        jobUrl: item['Job URL'] || null,
+        jobSource: item['Job Source'] || null,
         stage: item.Stage || null,
         followUp: item['Follow-Up Date'] || null,
         notes: item.Notes || null,
@@ -835,6 +839,10 @@ async function runOutboundSync({ sheets, spreadsheetId, tabs, scope }) {
           const inboundPayload = pickInboundFields(tab, rowObj)
           const inboundHash = inboundPayload ? hashObject({ payload: inboundPayload, tab, rowNumber }) : null
           const outboundHash = hashObject({
+            company: item.Company || null,
+            role: item.Role || null,
+            jobUrl: item['Job URL'] || null,
+            jobSource: item['Job Source'] || null,
             stage: item.Stage || null,
             followUp: item['Follow-Up Date'] || null,
             notes: item.Notes || null,
