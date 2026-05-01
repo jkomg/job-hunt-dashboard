@@ -801,6 +801,31 @@ app.post('/api/staff/recommendations/:id/post-to-pipeline', requireAuth, require
       userId: recommendation.jobSeekerUserId
     })
 
+    const notifyCandidate = req.body?.notifyCandidate !== false
+    let notification = null
+    if (notifyCandidate) {
+      const topic = `New opportunity: ${recommendation.company}${recommendation.role ? ` — ${recommendation.role}` : ''}`
+      const thread = await createCandidateThread({
+        organizationId: req.organizationId,
+        staffUserId: req.userId,
+        jobSeekerUserId: recommendation.jobSeekerUserId,
+        topic
+      })
+      const messageLines = [
+        `I added a new role to your pipeline: ${recommendation.company}${recommendation.role ? ` — ${recommendation.role}` : ''}.`,
+        recommendation.jobUrl ? `Job URL: ${recommendation.jobUrl}` : null,
+        recommendation.fitNote ? `Why this might fit: ${recommendation.fitNote}` : null
+      ].filter(Boolean)
+      const message = await createCandidateMessage({
+        threadId: thread.id,
+        organizationId: req.organizationId,
+        authorUserId: req.userId,
+        visibility: 'shared_with_candidate',
+        body: messageLines.join('\n')
+      })
+      notification = { threadId: thread.id, messageId: message.id }
+    }
+
     const updated = await markRecommendationPosted(recommendation.id, pipelineEntry.id)
     await createAuditLog({
       organizationId: req.organizationId,
@@ -813,11 +838,12 @@ app.post('/api/staff/recommendations/:id/post-to-pipeline', requireAuth, require
         recommendationId: recommendation.id,
         pipelineEntryId: pipelineEntry.id,
         company: recommendation.company,
-        role: recommendation.role
+        role: recommendation.role,
+        candidateNotified: notifyCandidate
       }
     })
 
-    res.json({ ok: true, recommendation: updated, pipelineEntryId: pipelineEntry.id })
+    res.json({ ok: true, recommendation: updated, pipelineEntryId: pipelineEntry.id, notification })
   } catch (e) {
     console.error('staff.recommendations.post failed', e)
     res.status(500).json({ error: 'Could not post recommendation to pipeline' })
