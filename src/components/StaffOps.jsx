@@ -54,6 +54,7 @@ export default function StaffOps({ me }) {
   const [messageVisibility, setMessageVisibility] = useState('shared_with_candidate')
   const [threadStatusFilter, setThreadStatusFilter] = useState('all')
   const [threadStaleFilter, setThreadStaleFilter] = useState('all')
+  const [candidateSignalFilter, setCandidateSignalFilter] = useState('all')
 
   async function load() {
     setLoading(true)
@@ -164,6 +165,29 @@ export default function StaffOps({ me }) {
       return true
     })
   }, [threads, threadStatusFilter, threadStaleFilter])
+  const candidateSignals = queue.candidateSignals || {}
+  const visibleCandidates = useMemo(() => {
+    const all = queue.candidates || []
+    if (candidateSignalFilter === 'all') return all
+    return all.filter(c => {
+      const s = candidateSignals[Number(c.id)] || {}
+      if (candidateSignalFilter === 'interview_active') return !!s.interviewActive
+      if (candidateSignalFilter === 'stale_followups') return !!s.staleFollowUps
+      if (candidateSignalFilter === 'no_recent_activity') return !!s.noRecentActivity
+      if (candidateSignalFilter === 'rr_posted_recently') return !!s.rrPostedRecently
+      return true
+    })
+  }, [queue.candidates, candidateSignals, candidateSignalFilter])
+  const selectedCandidateSignals = useMemo(() => {
+    return candidateSignals[Number(selectedCandidateId)] || null
+  }, [candidateSignals, selectedCandidateId])
+
+  useEffect(() => {
+    if (!visibleCandidates.length) return
+    if (!visibleCandidates.find(c => String(c.id) === String(selectedCandidateId))) {
+      setSelectedCandidateId(String(visibleCandidates[0].id))
+    }
+  }, [visibleCandidates, selectedCandidateId])
 
   async function createRecommendation() {
     setSavingRec(true)
@@ -363,10 +387,22 @@ export default function StaffOps({ me }) {
 
       <div className="card mb-16">
         <div className="card-title">Candidates</div>
+        <div className="settings-grid">
+          <div className="field">
+            <label>Focus Filter</label>
+            <select value={candidateSignalFilter} onChange={e => setCandidateSignalFilter(e.target.value)}>
+              <option value="all">all</option>
+              <option value="interview_active">interview_active</option>
+              <option value="stale_followups">stale_followups</option>
+              <option value="no_recent_activity">no_recent_activity_7d</option>
+              <option value="rr_posted_recently">new_rr_jobs_72h</option>
+            </select>
+          </div>
+        </div>
         {!queue.candidates?.length && <div style={{ color: 'var(--text-muted)' }}>No candidates assigned yet.</div>}
-        {!!queue.candidates?.length && (
+        {!!visibleCandidates.length && (
           <div className="tabs">
-            {queue.candidates.map(c => (
+            {visibleCandidates.map(c => (
               <button
                 key={c.id}
                 className={`tab ${String(c.id) === String(selectedCandidateId) ? 'active' : ''}`}
@@ -375,6 +411,17 @@ export default function StaffOps({ me }) {
                 {c.username}
               </button>
             ))}
+          </div>
+        )}
+        {!!queue.candidates?.length && !visibleCandidates.length && (
+          <div style={{ color: 'var(--text-muted)' }}>No candidates match this filter.</div>
+        )}
+        {!!selectedCandidateId && !!selectedCandidateSignals && (
+          <div className="quick-actions" style={{ marginTop: 8 }}>
+            {selectedCandidateSignals.interviewActive && <span className="badge badge-red">Interview Active</span>}
+            {selectedCandidateSignals.staleFollowUps && <span className="badge badge-yellow">Stale Follow-ups</span>}
+            {selectedCandidateSignals.noRecentActivity && <span className="badge badge-blue">No Check-in 7d+</span>}
+            {selectedCandidateSignals.rrPostedRecently && <span className="badge badge-green">RR Post 72h</span>}
           </div>
         )}
       </div>
