@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
+const BUNDLE_VERSION = String(import.meta.env.VITE_DEPLOY_VERSION || 'dev')
+
 function tabsToText(tabs) {
   return (tabs || []).join(', ')
 }
@@ -124,6 +126,7 @@ export default function Settings({ me, onProfileUpdated }) {
   const [gmailImporting, setGmailImporting] = useState(false)
   const [status, setStatus] = useState(null)
   const [runs, setRuns] = useState([])
+  const [healthMeta, setHealthMeta] = useState(null)
   const [error, setError] = useState(null)
   const [success, setSuccess] = useState('')
   const [displayName, setDisplayName] = useState(me?.displayName || '')
@@ -171,9 +174,11 @@ export default function Settings({ me, onProfileUpdated }) {
         api('/api/sheets/sync/runs'),
         api('/api/gmail/status')
       ])
+      const healthRes = await api('/api/health')
       setStatus(statusRes)
       setRuns(runsRes || [])
       setGmailStatus(gmailRes || null)
+      setHealthMeta(healthRes || null)
 
       const cfg = statusRes?.config || {}
       setEnabled(cfg.enabled !== false)
@@ -580,6 +585,13 @@ export default function Settings({ me, onProfileUpdated }) {
 
       {success && <div className="success-msg">{success}</div>}
       <ErrorCallout error={error} />
+
+      <div className="card mb-16">
+        <div className="card-title">Build Info</div>
+        <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Frontend bundle: <code>{BUNDLE_VERSION}</code></div>
+        <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Server deploy: <code>{healthMeta?.deployVersion || 'unknown'}</code></div>
+        <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Auth mode: <code>{healthMeta?.authMode || 'unknown'}</code></div>
+      </div>
 
       <div className="card mb-16">
         <div className="card-title">Profile</div>
