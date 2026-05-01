@@ -2884,15 +2884,20 @@ export async function getDashboardData(scope = {}) {
   const activeItems = pipeline.filter(p =>
     ['💬 In Conversation', '📞 Interview Scheduled', '🎯 Interviewing'].includes(p.Stage)
   )
+  const getPipelineDueDate = (p) => {
+    const nextActionDate = String(p['Next Action Date'] || '').trim()
+    if (nextActionDate) return nextActionDate
+    return String(p['Follow-Up Date'] || '').trim()
+  }
   const duePipelineFollowUps = pipeline
     .filter(p => {
-      const due = String(p['Follow-Up Date'] || '').trim()
+      const due = getPipelineDueDate(p)
       const stage = String(p.Stage || '')
       if (!due) return false
       if (stage.includes('Closed')) return false
       return due <= today
     })
-    .sort((a, b) => String(a['Follow-Up Date']).localeCompare(String(b['Follow-Up Date'])))
+    .sort((a, b) => getPipelineDueDate(a).localeCompare(getPipelineDueDate(b)))
 
   const dueInterviewActions = interviews
     .filter(i => i.Outcome === 'Pending' && i['Next Action Date'] && i['Next Action Date'] <= today)
@@ -2946,8 +2951,8 @@ export async function getDashboardData(scope = {}) {
       pillarId: 'follow_ups_due',
       title: `${p.Company}: ${p['Next Action'] || 'Follow up on application'}`,
       subtitle: p.Role || p.Stage,
-      dueDate: p['Follow-Up Date'],
-      reason: `Pipeline follow-up date is due (${p['Follow-Up Date']}).`,
+      dueDate: getPipelineDueDate(p),
+      reason: `Pipeline follow-up date is due (${getPipelineDueDate(p)}).`,
       actionLabel: 'Open Pipeline',
       route: 'pipeline',
       priority: 2
