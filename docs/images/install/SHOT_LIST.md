@@ -1,82 +1,86 @@
-# Install Screenshot Shot List
+# Hosted Screenshot Shot List
 
 Capture these in order and save with the exact filenames below.
 
-## 1) Start script run (macOS)
+## 1) Hosted login page
 
-- Filename: `mac-terminal-run-script.png`
+- Filename: `hosted-login-screen.png`
 - Show:
-  - running `./scripts/start-local-docker.sh`
-  - visible guided prompts
+  - app login page at hosted URL
 
-## 2) Start script run (Windows)
+## 2) Force password change
 
-- Filename: `windows-powershell-run-script.png`
+- Filename: `hosted-force-password-change.png`
 - Show:
-  - running `powershell -ExecutionPolicy Bypass -File .\scripts\start-local-docker.ps1`
-  - visible guided prompts
+  - first-login password change screen
 
-## 3) Install mode choice prompt
+## 3) Setup wizard
 
-- Filename: `installer-install-mode-choice.png`
+- Filename: `hosted-setup-wizard.png`
 - Show:
-  - the exact choice prompt
-  - option 1 = `No Google sync`
-  - option 2 = `With Google sync`
+  - display name/username setup
+  - optional sheet settings section
 
-## 4) Username prompt
+## 4) Job seeker briefing
 
-- Filename: `installer-username-prompt.png`
+- Filename: `jobseeker-briefing.png`
 - Show:
-  - the username prompt in install script
-  - sample response
+  - Today Queue and core briefing cards
 
-## 5) Google sync prompts
+## 5) Job seeker inbox
 
-- Filename: `installer-google-sync-prompts.png`
+- Filename: `jobseeker-inbox.png`
 - Show:
-  - sheet URL/ID prompt
-  - service account JSON path prompt
+  - candidate-visible support thread list/messages
 
-## 6) Service account creation screen
+## 6) Staff Ops candidate filter
 
-- Filename: `google-cloud-create-service-account.png`
+- Filename: `staffops-candidate-filters.png`
 - Show:
-  - Google Cloud Console
-  - Credentials page with Service Account flow
+  - candidate focus filters
+  - selected candidate summary signals
 
-## 7) JSON key download step
+## 7) Staff Ops distribution
 
-- Filename: `google-cloud-download-json-key.png`
+- Filename: `staffops-distribution-notify-toggle.png`
 - Show:
-  - service account key creation dialog
-  - JSON selected
+  - recommendation list
+  - `Notify candidate in Inbox when posting` toggle
 
-## 8) Share sheet with service account
+## 8) Staff Ops threads
 
-- Filename: `google-sheet-share-service-account.png`
+- Filename: `staffops-threads-visibility.png`
 - Show:
-  - Google Sheet share dialog
-  - service account email added as Editor
+  - message visibility options (`shared_with_candidate`, `internal_staff`)
 
-## 9) First login screen
+## 9) Admin team access
 
-- Filename: `first-login-screen.png`
+- Filename: `admin-team-access.png`
 - Show:
-  - app login page at `http://localhost:8080`
+  - create user form
+  - role selection
 
-## 10) Desktop launchers (macOS)
+## 10) Admin staff assignments
 
-- Filename: `desktop-launchers-mac.png`
+- Filename: `admin-staff-assignments.png`
 - Show:
-  - Desktop with:
-    - `Start Job Hunt.command`
-    - `Stop Job Hunt.command`
+  - assignment controls and current mappings
 
-## 11) Desktop launchers (Windows)
+## 11) Sync health/settings
 
-- Filename: `desktop-launchers-windows.png`
+- Filename: `settings-sync-health.png`
 - Show:
-  - Desktop with:
-    - `Start Job Hunt.bat`
-    - `Stop Job Hunt.bat`
+  - last local save vs last google sync
+  - per-entity sync summary
+
+## 12) Backup tools
+
+- Filename: `settings-backup-restore.png`
+- Show:
+  - export backup
+  - restore backup
+
+## Optional fallback (local reinstall only)
+
+- `mac-terminal-run-script.png`
+  - run `./scripts/start-local-docker.sh`
