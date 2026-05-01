@@ -23,6 +23,21 @@ The next major release track is the Remote Rebellion hosted platform shift:
 
 See [RR_PLATFORM_RELEASE_PLAN.md](./RR_PLATFORM_RELEASE_PLAN.md).
 
+## Current Release State (Post Phase 2 Slices)
+
+Shipped and active:
+
+- Multi-user role model (`job_seeker`, `staff`, `admin`)
+- Assignment-scoped staff access
+- Staff Ops workspace:
+  - recommendations + post-to-pipeline
+  - optional inbox notification on recommendation post
+  - candidate threads/messages
+  - candidate support summary signals
+  - staff tasks and quick attention flags
+- Member Inbox view for candidate-visible staff support threads
+- Audit log coverage for staff/admin actions
+
 ## Pre-Release Checklist
 
 1. Validate local easy install from scratch:

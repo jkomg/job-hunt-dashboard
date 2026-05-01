@@ -10,13 +10,17 @@ Operational guide for staff and admins using hosted Job Hunt Dashboard environme
 
 ## Daily Staff Workflow
 1. Open `Briefing` and review:
-   - tasks todo / in progress
-   - open candidate threads
-   - stale thread counts (48h+)
+  - tasks todo / in progress
+  - open candidate threads
+  - stale thread counts (48h+)
 2. Open `Staff Ops` and process in order:
-   - `Tasks`: complete overdue/high-priority items first
-   - `Candidate Threads`: reply or triage open conversations
-   - `Distribution`: post vetted recommendations to candidate pipelines
+  - `Candidates`: use focus filters (`interview_active`, `stale_followups`, `no_recent_activity`, `new_rr_jobs_72h`)
+  - `Candidate Summary`: verify check-in recency, queue size, stale totals, and top queue items
+  - `Tasks`: complete overdue/high-priority items first
+  - `Candidate Threads`: reply or triage open conversations
+  - `Distribution`: post vetted recommendations to candidate pipelines
+    - keep `Notify candidate in Inbox when posting` enabled unless you intentionally do silent posting
+    - use one-click flags for urgent needs (`Flag Follow-up`, `Flag Interview Prep`)
 3. Close completed threads and mark tasks done.
 
 ## Daily Admin Workflow
@@ -69,6 +73,9 @@ Operational guide for staff and admins using hosted Job Hunt Dashboard environme
 ### Recommendation cannot post to pipeline
 - If already posted, API blocks duplicate post intentionally.
 - Check recommendation status in `Distribution`.
+- If posting succeeds but candidate was not messaged:
+  - verify `Notify candidate in Inbox when posting` was enabled
+  - check candidate threads for the auto-created post thread
 
 ### Thread/message actions fail
 - Verify staff assignment still exists for that candidate.

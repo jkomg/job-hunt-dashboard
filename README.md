@@ -14,11 +14,18 @@ A free, self-hostable job search dashboard designed to be simple enough for non-
 - Daily check-in habit tracker
 - Next Action + Next Action Date fields across pipeline, contacts, and interviews
 - Optional Google Sheets bi-directional sync for team workflows
+- Staff Ops workspace for assigned-candidate operations:
+  - job recommendations and one-click post to candidate pipeline
+  - optional candidate Inbox notification when posting recommendations
+  - candidate support summary (check-in recency, queue/stale totals, interview/follow-up signals)
+  - candidate threads with `shared_with_candidate` and `internal_staff` visibility
+  - staff tasks and one-click flags (`follow_up`, `interview_prep`)
 
 ## Staff/Admin Docs
 
 - Staff + admin operations: `docs/STAFF_ADMIN_RUNBOOK.md`
 - Staff product scope and phased plan: `docs/STAFF_OPS_MVP_SPEC.md`
+- Remote Rebellion guided local install: `docs/REMOTE_REBELLION_HANDOUT.md`
 
 ## Command Center Workflow (Recommended)
 
@@ -181,6 +188,19 @@ Common errors and fixes:
 - `TAB_NOT_FOUND`: fix tab names in Settings to match exact sheet tab titles.
 - `GOOGLE_API_DISABLED`: enable Google Sheets API in Google Cloud project.
 - `GOOGLE_TEMPORARY`: retry later (rate-limit/outage/timeout).
+
+## Staff Ops Workflow (Hosted / Team Mode)
+
+For team deployments, staff and admins should operate from `Staff Ops` instead of external spreadsheets:
+
+1. Choose a candidate and review support summary signals.
+2. Add recommendations in `Job Research`.
+3. Use `Distribution` to post vetted recommendations to candidate pipeline.
+4. Keep `Notify candidate in Inbox when posting` enabled to send context automatically.
+5. Use candidate threads for support communication:
+   - `shared_with_candidate`: visible to candidate
+   - `internal_staff`: staff/admin only
+6. Track execution with tasks and quick flags (`Flag Follow-up`, `Flag Interview Prep`).
 
 ## Optional: Import Events from Gmail
 
