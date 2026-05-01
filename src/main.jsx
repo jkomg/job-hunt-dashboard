@@ -25,6 +25,14 @@ function isCsrfExempt(input) {
   )
 }
 
+function getUrl(input) {
+  return typeof input === 'string' ? input : input?.url || ''
+}
+
+function clearCsrfTokenCache() {
+  csrfTokenCache = null
+}
+
 async function ensureCsrfToken() {
   if (csrfTokenCache) return csrfTokenCache
   const r = await originalFetch('/api/csrf', { credentials: 'include' })
@@ -37,14 +45,31 @@ async function ensureCsrfToken() {
 }
 
 window.fetch = async (input, init = {}) => {
+  const url = getUrl(input)
   const method = String(init?.method || 'GET').toUpperCase()
+  const isAuthBoundary = url.startsWith('/api/login') || url.startsWith('/api/logout')
+
   if (isApiUrl(input) && isMutatingMethod(method) && !isCsrfExempt(input)) {
     const token = await ensureCsrfToken()
     const headers = new Headers(init.headers || {})
     if (token) headers.set('x-csrf-token', token)
-    return originalFetch(input, { ...init, headers })
+    let res = await originalFetch(input, { ...init, headers })
+    // Session/cookie state can rotate after logout/login; refresh and retry once.
+    if (res.status === 403) {
+      const body = await res.clone().json().catch(() => ({}))
+      if (body?.code === 'CSRF_INVALID') {
+        clearCsrfTokenCache()
+        const retryToken = await ensureCsrfToken()
+        const retryHeaders = new Headers(init.headers || {})
+        if (retryToken) retryHeaders.set('x-csrf-token', retryToken)
+        res = await originalFetch(input, { ...init, headers: retryHeaders })
+      }
+    }
+    return res
   }
-  return originalFetch(input, init)
+  const res = await originalFetch(input, init)
+  if (isAuthBoundary) clearCsrfTokenCache()
+  return res
 }
 
 createRoot(document.getElementById('root')).render(
