@@ -656,7 +656,40 @@ app.get('/api/staff/queue', requireAuth, requireStaffOrAdmin, async (req, res) =
       threadsOpen: threads.filter(t => t.status === 'open').length,
       threadsStale48h: threads.filter(t => t.status === 'open' && (Date.now() - Number(t.updatedAt || 0)) > 48 * 60 * 60 * 1000).length
     }
-    res.json({ ok: true, summary, candidates, staffUsers, recommendations, tasks, threads })
+
+    const postedSinceByUser = new Map()
+    for (const rec of recommendations) {
+      if (rec.status !== 'posted') continue
+      const uid = Number(rec.jobSeekerUserId)
+      const ts = Number(rec.postedAt || rec.updatedAt || 0)
+      const prev = postedSinceByUser.get(uid) || 0
+      if (ts > prev) postedSinceByUser.set(uid, ts)
+    }
+    const now = Date.now()
+    const sevenDaysMs = 7 * 24 * 60 * 60 * 1000
+    const threeDaysMs = 3 * 24 * 60 * 60 * 1000
+    const candidateSignals = {}
+    await Promise.all(candidates.map(async (candidate) => {
+      const uid = Number(candidate.id)
+      const dashboard = await getDashboardData({ organizationId: req.organizationId, userId: uid })
+      const staleFollowUps = Number(dashboard?.health?.stale?.pipeline || 0) > 0
+      const interviewActive = Number(dashboard?.upcomingInterviews?.length || 0) > 0 || Number(dashboard?.dueInterviewActions?.length || 0) > 0
+      const lastDaily = Number((dashboard?.recentLogs || [])[0]?.updatedAt || 0)
+      const noRecentActivity = !lastDaily || (now - lastDaily) > sevenDaysMs
+      const latestPosted = postedSinceByUser.get(uid) || 0
+      const rrPostedRecently = !!latestPosted && (now - latestPosted) <= threeDaysMs
+      candidateSignals[uid] = {
+        staleFollowUps,
+        interviewActive,
+        noRecentActivity,
+        rrPostedRecently,
+        queueSize: Number(dashboard?.health?.queueSize || 0),
+        staleTotal: Number(dashboard?.health?.staleTotal || 0),
+        lastCheckInAt: lastDaily || null
+      }
+    }))
+
+    res.json({ ok: true, summary, candidates, staffUsers, recommendations, tasks, threads, candidateSignals })
   } catch (e) {
     console.error('staff.queue failed', e)
     res.status(500).json({ error: 'Could not load staff queue' })
