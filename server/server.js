@@ -76,6 +76,7 @@ const API_RATE_LIMIT = Number(process.env.API_RATE_LIMIT || 400)
 const LOGIN_RATE_LIMIT = Number(process.env.LOGIN_RATE_LIMIT || 20)
 const LOGIN_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000
 const rateBuckets = new Map()
+const DEPLOY_VERSION = String(process.env.DEPLOY_VERSION || 'dev')
 const CSRF_EXEMPT_PATHS = new Set([
   '/api/login',
   '/api/health',
@@ -290,7 +291,7 @@ app.use('/api', (req, res, next) => {
   next()
 })
 app.get('/api/health', (_req, res) => {
-  res.json({ ok: true, authMode: AUTH_MODE, now: new Date().toISOString() })
+  res.json({ ok: true, authMode: AUTH_MODE, deployVersion: DEPLOY_VERSION, now: new Date().toISOString() })
 })
 
 function isValidInternalToken(req, headerName, expectedToken) {
