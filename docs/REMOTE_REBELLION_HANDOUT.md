@@ -114,6 +114,25 @@ What “stalled” means:
 - A record is stalled when it has no `Next Action` or no `Next Action Date`.
 - Keep stalled count low in Dashboard `System Health`.
 
+## Team Staff Workflow (Remote Rebellion)
+
+If you are a staff/admin user (not a job seeker), use `Staff Ops`:
+
+1. Select candidate using focus filters:
+   - interview active
+   - stale follow-ups
+   - no recent activity (7d+)
+   - new RR jobs (72h)
+2. Add recommendations in `Job Research`.
+3. Post recommendations in `Distribution`:
+   - leave `Notify candidate in Inbox when posting` enabled for normal use.
+4. Use `Candidate Threads` for support communication:
+   - `shared_with_candidate` for candidate-visible messages
+   - `internal_staff` for internal-only discussion
+5. Use tasks and quick flags:
+   - `Flag Follow-up`
+   - `Flag Interview Prep`
+
 ## Optional: Sync With Shared Google Sheet
 
 This is optional for team workflows.
