@@ -1787,6 +1787,10 @@ export async function updateSheetSyncOutboundHash(id, hash) {
     args: [hash, ts, ts, id]
   })
 }
+export async function deleteSheetSyncLink(id) {
+  await db.execute({ sql: `DELETE FROM sheet_sync_links WHERE id = ?`, args: [id] })
+}
+
 
 export async function getEntitySheetSyncLink(sheetId, tabName, rowNumber, entityType) {
   const res = await db.execute({

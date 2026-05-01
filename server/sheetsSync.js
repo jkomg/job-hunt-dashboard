@@ -12,7 +12,8 @@ import {
   updateEntitySheetSyncInboundHash,
   updateEntitySheetSyncOutboundHash,
   upsertEntitySheetSyncLink,
-  createSheetSyncRun
+  createSheetSyncRun,
+  deleteSheetSyncLink
 } from './db.js'
 
 import {
@@ -750,8 +751,8 @@ async function runOutboundSync({ sheets, spreadsheetId, tabs, scope }) {
     const updateLinks = []
     for (const link of tabLinks) {
       if (link.row_number > sheetMaxRow) {
-        summary.missingLinkedRecords++
-        summary.tabs[tab].missing++
+        await deleteSheetSyncLink(link.id)
+        linkedIds.delete(String(link.pipeline_page_id))
         continue
       }
 
