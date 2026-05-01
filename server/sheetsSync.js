@@ -745,9 +745,16 @@ async function runOutboundSync({ sheets, spreadsheetId, tabs, scope }) {
 
     const { headers, rows } = await readTabRows(sheets, spreadsheetId, tab)
 
+    const sheetMaxRow = rows.length + 1 // +1 for header row
     const updates = []
     const updateLinks = []
     for (const link of tabLinks) {
+      if (link.row_number > sheetMaxRow) {
+        summary.missingLinkedRecords++
+        summary.tabs[tab].missing++
+        continue
+      }
+
       const item = byId.get(link.pipeline_page_id)
       if (!item) {
         summary.missingLinkedRecords++
