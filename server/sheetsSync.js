@@ -428,17 +428,17 @@ function asBool(value) {
 }
 
 function pickInboundContactFields(rowObj) {
-  const name = rowObj.name || rowObj.contact || rowObj['contact name']
+  const name = rowObj.name || rowObj.contact || rowObj['contact name'] || rowObj['name of contact']
   if (!name) return null
 
   return {
     Name: name,
     Title: rowObj.title || '',
-    Company: rowObj.company || '',
+    Company: rowObj.company || rowObj['company name'] || '',
     Warmth: rowObj.warmth || '❄️ Cold — no contact yet',
     Status: rowObj.status || 'Need to reach out',
     'How We Know Each Other': rowObj['how we know each other'] || '',
-    'LinkedIn URL': rowObj['linkedin url'] || rowObj.linkedin || '',
+    'LinkedIn URL': rowObj['linkedin url'] || rowObj.linkedin || rowObj['linkedin profile'] || '',
     'Next Follow-Up': toIsoDate(rowObj['next follow up'] || rowObj['next follow-up'] || rowObj['follow up date'] || rowObj['follow-up date']) || null,
     Email: rowObj.email || '',
     Phone: rowObj.phone || '',
@@ -448,12 +448,12 @@ function pickInboundContactFields(rowObj) {
 }
 
 function pickInboundInterviewFields(rowObj) {
-  const company = rowObj.company || rowObj.employer
+  const company = rowObj.company || rowObj['company name'] || rowObj.employer
   if (!company) return null
 
   return {
     Company: company,
-    'Job Title': rowObj['job title'] || rowObj.role || rowObj.title || '',
+    'Job Title': rowObj['job title'] || rowObj.role || rowObj.title || rowObj.position || '',
     Date: toIsoDate(rowObj.date || rowObj['interview date']) || null,
     Round: rowObj.round || '',
     Format: rowObj.format || '',
@@ -467,7 +467,7 @@ function pickInboundInterviewFields(rowObj) {
 }
 
 function pickInboundEventFields(rowObj) {
-  const name = rowObj.name || rowObj.event
+  const name = rowObj.name || rowObj['event name'] || rowObj.event
   if (!name) return null
 
   return {
@@ -488,15 +488,15 @@ function patchOutboundContactValues(headers, rowValues, item) {
     if (idx >= 0 && value != null && String(value).trim() !== '') out[idx] = value
   }
 
-  patch(['name', 'contact', 'contact name'], item.Name || '')
+  patch(['name', 'contact', 'contact name', 'name of contact'], item.Name || '')
   patch(['title'], item.Title || '')
-  patch(['company'], item.Company || '')
+  patch(['company', 'company name'], item.Company || '')
   patch(['warmth'], item.Warmth || '')
   patch(['status'], item.Status || '')
   patch(['how we know each other'], item['How We Know Each Other'] || '')
-  patch(['linkedin url', 'linkedin'], item['LinkedIn URL'] || '')
+  patch(['linkedin url', 'linkedin', 'linkedin profile'], item['LinkedIn URL'] || '')
   patch(['next follow up', 'next follow-up', 'follow up date', 'follow-up date'], item['Next Follow-Up'] || '')
-  patch(['email'], item.Email || '')
+  patch(['email', 'contact email'], item.Email || '')
   patch(['phone'], item.Phone || '')
   patch(['resume used', 'resume'], item['Resume Used'] || '')
   patch(['notes'], item.Notes || '')
@@ -511,12 +511,12 @@ function patchOutboundInterviewValues(headers, rowValues, item) {
     if (idx >= 0 && value != null && String(value).trim() !== '') out[idx] = value
   }
 
-  patch(['company', 'employer'], item.Company || '')
-  patch(['job title', 'role', 'title'], item['Job Title'] || '')
+  patch(['company', 'company name', 'employer'], item.Company || '')
+  patch(['job title', 'role', 'title', 'position'], item['Job Title'] || '')
   patch(['date', 'interview date'], item.Date || '')
   patch(['round'], item.Round || '')
   patch(['format'], item.Format || '')
-  patch(['outcome'], item.Outcome || '')
+  patch(['outcome', 'result'], item.Outcome || '')
   patch(['interviewer'], item.Interviewer || '')
   patch(['questions asked'], item['Questions Asked'] || '')
   patch(['feedback received', 'feedback'], item['Feedback Received'] || '')
@@ -533,7 +533,7 @@ function patchOutboundEventValues(headers, rowValues, item) {
     if (idx >= 0 && value != null && String(value).trim() !== '') out[idx] = value
   }
 
-  patch(['name', 'event'], item.Name || '')
+  patch(['name', 'event', 'event name'], item.Name || '')
   patch(['date', 'event date'], item.Date || '')
   patch(['price'], item.Price || '')
   patch(['status'], item.Status || '')
