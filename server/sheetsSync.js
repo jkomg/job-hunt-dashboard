@@ -428,17 +428,17 @@ function asBool(value) {
 }
 
 function pickInboundContactFields(rowObj) {
-  const name = rowObj.name || rowObj.contact || rowObj['contact name']
+  const name = rowObj.name || rowObj.contact || rowObj['contact name'] || rowObj['name of contact']
   if (!name) return null
 
   return {
     Name: name,
     Title: rowObj.title || '',
-    Company: rowObj.company || '',
+    Company: rowObj.company || rowObj['company name'] || '',
     Warmth: rowObj.warmth || '❄️ Cold — no contact yet',
     Status: rowObj.status || 'Need to reach out',
     'How We Know Each Other': rowObj['how we know each other'] || '',
-    'LinkedIn URL': rowObj['linkedin url'] || rowObj.linkedin || '',
+    'LinkedIn URL': rowObj['linkedin url'] || rowObj.linkedin || rowObj['linkedin profile'] || '',
     'Next Follow-Up': toIsoDate(rowObj['next follow up'] || rowObj['next follow-up'] || rowObj['follow up date'] || rowObj['follow-up date']) || null,
     Email: rowObj.email || '',
     Phone: rowObj.phone || '',
@@ -448,12 +448,12 @@ function pickInboundContactFields(rowObj) {
 }
 
 function pickInboundInterviewFields(rowObj) {
-  const company = rowObj.company || rowObj.employer
+  const company = rowObj.company || rowObj['company name'] || rowObj.employer
   if (!company) return null
 
   return {
     Company: company,
-    'Job Title': rowObj['job title'] || rowObj.role || rowObj.title || '',
+    'Job Title': rowObj['job title'] || rowObj.role || rowObj.title || rowObj.position || '',
     Date: toIsoDate(rowObj.date || rowObj['interview date']) || null,
     Round: rowObj.round || '',
     Format: rowObj.format || '',
@@ -467,7 +467,7 @@ function pickInboundInterviewFields(rowObj) {
 }
 
 function pickInboundEventFields(rowObj) {
-  const name = rowObj.name || rowObj.event
+  const name = rowObj.name || rowObj['event name'] || rowObj.event
   if (!name) return null
 
   return {
@@ -488,15 +488,15 @@ function patchOutboundContactValues(headers, rowValues, item) {
     if (idx >= 0 && value != null && String(value).trim() !== '') out[idx] = value
   }
 
-  patch(['name', 'contact', 'contact name'], item.Name || '')
+  patch(['name', 'contact', 'contact name', 'name of contact'], item.Name || '')
   patch(['title'], item.Title || '')
-  patch(['company'], item.Company || '')
+  patch(['company', 'company name'], item.Company || '')
   patch(['warmth'], item.Warmth || '')
   patch(['status'], item.Status || '')
   patch(['how we know each other'], item['How We Know Each Other'] || '')
-  patch(['linkedin url', 'linkedin'], item['LinkedIn URL'] || '')
+  patch(['linkedin url', 'linkedin', 'linkedin profile'], item['LinkedIn URL'] || '')
   patch(['next follow up', 'next follow-up', 'follow up date', 'follow-up date'], item['Next Follow-Up'] || '')
-  patch(['email'], item.Email || '')
+  patch(['email', 'contact email'], item.Email || '')
   patch(['phone'], item.Phone || '')
   patch(['resume used', 'resume'], item['Resume Used'] || '')
   patch(['notes'], item.Notes || '')
@@ -511,12 +511,12 @@ function patchOutboundInterviewValues(headers, rowValues, item) {
     if (idx >= 0 && value != null && String(value).trim() !== '') out[idx] = value
   }
 
-  patch(['company', 'employer'], item.Company || '')
-  patch(['job title', 'role', 'title'], item['Job Title'] || '')
+  patch(['company', 'company name', 'employer'], item.Company || '')
+  patch(['job title', 'role', 'title', 'position'], item['Job Title'] || '')
   patch(['date', 'interview date'], item.Date || '')
   patch(['round'], item.Round || '')
   patch(['format'], item.Format || '')
-  patch(['outcome'], item.Outcome || '')
+  patch(['outcome', 'result'], item.Outcome || '')
   patch(['interviewer'], item.Interviewer || '')
   patch(['questions asked'], item['Questions Asked'] || '')
   patch(['feedback received', 'feedback'], item['Feedback Received'] || '')
@@ -533,7 +533,7 @@ function patchOutboundEventValues(headers, rowValues, item) {
     if (idx >= 0 && value != null && String(value).trim() !== '') out[idx] = value
   }
 
-  patch(['name', 'event'], item.Name || '')
+  patch(['name', 'event', 'event name'], item.Name || '')
   patch(['date', 'event date'], item.Date || '')
   patch(['price'], item.Price || '')
   patch(['status'], item.Status || '')
@@ -620,6 +620,28 @@ async function readTabRows(sheets, spreadsheetId, tabName) {
   const headers = values[0].map(v => (v || '').toString().trim())
   const rows = values.slice(1)
   return { headers, rows }
+}
+
+function isRetryableSheetsWriteError(error) {
+  const status = Number(error?.status || error?.code || 0)
+  const msg = String(error?.message || '').toLowerCase()
+  if ([429, 500, 502, 503, 504].includes(status)) return true
+  if (msg.includes('quota exceeded') || msg.includes('rate limit') || msg.includes('too many requests')) return true
+  return false
+}
+
+async function withSheetsWriteRetry(fn, maxAttempts = 5) {
+  let attempt = 0
+  while (true) {
+    try {
+      return await fn()
+    } catch (error) {
+      attempt += 1
+      if (!isRetryableSheetsWriteError(error) || attempt >= maxAttempts) throw error
+      const backoffMs = Math.min(30000, 1000 * (2 ** (attempt - 1))) + Math.floor(Math.random() * 400)
+      await new Promise(resolve => setTimeout(resolve, backoffMs))
+    }
+  }
 }
 
 async function runInboundSync({ sheets, spreadsheetId, tabs, scope }) {
@@ -718,6 +740,8 @@ async function runOutboundSync({ sheets, spreadsheetId, tabs, scope }) {
 
     const { headers, rows } = await readTabRows(sheets, spreadsheetId, tab)
 
+    const updates = []
+    const updateLinks = []
     for (const link of tabLinks) {
       const item = byId.get(link.pipeline_page_id)
       if (!item) {
@@ -769,16 +793,23 @@ async function runOutboundSync({ sheets, spreadsheetId, tabs, scope }) {
       const width = Math.max(headers.length, patched.length, 1)
       const range = `${tab}!A${link.row_number}:${colToA1(width)}${link.row_number}`
 
-      await sheets.spreadsheets.values.update({
-        spreadsheetId,
-        range,
-        valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [patched] }
-      })
+      updates.push({ range, values: [patched] })
+      updateLinks.push({ id: link.id, outboundHash })
+    }
 
-      await updateSheetSyncOutboundHash(link.id, outboundHash)
-      summary.updatedRows++
-      summary.tabs[tab].updated++
+    if (updates.length > 0) {
+      await withSheetsWriteRetry(() => sheets.spreadsheets.values.batchUpdate({
+        spreadsheetId,
+        requestBody: {
+          valueInputOption: 'USER_ENTERED',
+          data: updates
+        }
+      }))
+      for (const u of updateLinks) {
+        await updateSheetSyncOutboundHash(u.id, u.outboundHash)
+        summary.updatedRows++
+        summary.tabs[tab].updated++
+      }
     }
 
     // Append local pipeline entries that do not yet have a sheet link.
@@ -788,13 +819,13 @@ async function runOutboundSync({ sheets, spreadsheetId, tabs, scope }) {
         const base = new Array(Math.max(headers.length, 15)).fill('')
         const patched = patchOutboundValues(headers, base, item)
         if (patched.length < 15) patched.length = 15
-        const appendRes = await sheets.spreadsheets.values.append({
+        const appendRes = await withSheetsWriteRetry(() => sheets.spreadsheets.values.append({
           spreadsheetId,
           range: `${tab}!A:ZZ`,
           valueInputOption: 'USER_ENTERED',
           insertDataOption: 'INSERT_ROWS',
           requestBody: { values: [patched] }
-        })
+        }))
         const updatedRange = appendRes?.data?.updates?.updatedRange || ''
         const rowNumber = parseRowNumberFromRange(updatedRange)
         if (rowNumber) {
@@ -901,6 +932,8 @@ async function runContactsSync({ sheets, spreadsheetId, tabs, scope }) {
     if (!tabLinks.length) continue
 
     const { headers, rows } = await readTabRows(sheets, spreadsheetId, tab)
+    const updates = []
+    const updateLinks = []
     for (const link of tabLinks) {
       const item = byId.get(link.entity_id)
       if (!item) {
@@ -938,14 +971,22 @@ async function runContactsSync({ sheets, spreadsheetId, tabs, scope }) {
         outbound.skippedUnchanged++; outbound.tabs[tab].skipped++; continue
       }
 
-      await sheets.spreadsheets.values.update({
-        spreadsheetId,
+      updates.push({
         range: rowUpdateRange(tab, link.row_number, headers, patched),
-        valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [patched] }
+        values: [patched]
       })
-      await updateEntitySheetSyncOutboundHash(link.id, outboundHash)
-      outbound.updatedRows++; outbound.tabs[tab].updated++
+      updateLinks.push({ id: link.id, outboundHash })
+    }
+
+    if (updates.length > 0) {
+      await withSheetsWriteRetry(() => sheets.spreadsheets.values.batchUpdate({
+        spreadsheetId,
+        requestBody: { valueInputOption: 'USER_ENTERED', data: updates }
+      }))
+      for (const u of updateLinks) {
+        await updateEntitySheetSyncOutboundHash(u.id, u.outboundHash)
+        outbound.updatedRows++; outbound.tabs[tab].updated++
+      }
     }
   }
 
@@ -1017,6 +1058,8 @@ async function runInterviewsSync({ sheets, spreadsheetId, tabs, scope }) {
     if (!tabLinks.length) continue
 
     const { headers, rows } = await readTabRows(sheets, spreadsheetId, tab)
+    const updates = []
+    const updateLinks = []
     for (const link of tabLinks) {
       const item = byId.get(link.entity_id)
       if (!item) {
@@ -1055,14 +1098,22 @@ async function runInterviewsSync({ sheets, spreadsheetId, tabs, scope }) {
         outbound.skippedUnchanged++; outbound.tabs[tab].skipped++; continue
       }
 
-      await sheets.spreadsheets.values.update({
-        spreadsheetId,
+      updates.push({
         range: rowUpdateRange(tab, link.row_number, headers, patched),
-        valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [patched] }
+        values: [patched]
       })
-      await updateEntitySheetSyncOutboundHash(link.id, outboundHash)
-      outbound.updatedRows++; outbound.tabs[tab].updated++
+      updateLinks.push({ id: link.id, outboundHash })
+    }
+
+    if (updates.length > 0) {
+      await withSheetsWriteRetry(() => sheets.spreadsheets.values.batchUpdate({
+        spreadsheetId,
+        requestBody: { valueInputOption: 'USER_ENTERED', data: updates }
+      }))
+      for (const u of updateLinks) {
+        await updateEntitySheetSyncOutboundHash(u.id, u.outboundHash)
+        outbound.updatedRows++; outbound.tabs[tab].updated++
+      }
     }
   }
 
@@ -1134,6 +1185,8 @@ async function runEventsSync({ sheets, spreadsheetId, tabs, scope }) {
     if (!tabLinks.length) continue
 
     const { headers, rows } = await readTabRows(sheets, spreadsheetId, tab)
+    const updates = []
+    const updateLinks = []
     for (const link of tabLinks) {
       const item = byId.get(link.entity_id)
       if (!item) {
@@ -1170,14 +1223,22 @@ async function runEventsSync({ sheets, spreadsheetId, tabs, scope }) {
         outbound.skippedUnchanged++; outbound.tabs[tab].skipped++; continue
       }
 
-      await sheets.spreadsheets.values.update({
-        spreadsheetId,
+      updates.push({
         range: rowUpdateRange(tab, link.row_number, headers, patched),
-        valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [patched] }
+        values: [patched]
       })
-      await updateEntitySheetSyncOutboundHash(link.id, outboundHash)
-      outbound.updatedRows++; outbound.tabs[tab].updated++
+      updateLinks.push({ id: link.id, outboundHash })
+    }
+
+    if (updates.length > 0) {
+      await withSheetsWriteRetry(() => sheets.spreadsheets.values.batchUpdate({
+        spreadsheetId,
+        requestBody: { valueInputOption: 'USER_ENTERED', data: updates }
+      }))
+      for (const u of updateLinks) {
+        await updateEntitySheetSyncOutboundHash(u.id, u.outboundHash)
+        outbound.updatedRows++; outbound.tabs[tab].updated++
+      }
     }
   }
 
@@ -1283,6 +1344,7 @@ function mappingResultForHeaders(headers, fields) {
       key: field.key,
       label: field.label,
       required: !!field.required,
+      core: !!field.core,
       matched,
       matchedAny: matched.length > 0
     }
@@ -1294,12 +1356,18 @@ async function inspectTabMappings(sheets, spreadsheetId, tabName, fields) {
   const mappedFields = mappingResultForHeaders(headers, fields)
   const mappedCount = mappedFields.filter(f => f.matchedAny).length
   const requiredMissing = mappedFields.filter(f => f.required && !f.matchedAny).map(f => f.label)
+  const coreFields = mappedFields.filter(f => f.core)
+  const coreMappedCount = coreFields.filter(f => f.matchedAny).length
+  const coreMissing = coreFields.filter(f => !f.matchedAny).map(f => f.label)
   return {
     tabName,
     headerCount: headers.length,
     headers,
     mappedCount,
     totalFields: mappedFields.length,
+    coreMappedCount,
+    coreTotal: coreFields.length,
+    coreMissing,
     requiredMissing,
     fields: mappedFields
   }
@@ -1310,14 +1378,14 @@ export async function getSheetsSchemaReport(configOverrides = {}) {
   const sheets = await getSheetsClient(credentials)
 
   const pipelineFields = [
-    { key: 'status', label: 'Status / Stage', required: true, candidates: ['app status', 'status', 'stage'] },
-    { key: 'followUpDate', label: 'Follow-Up Date', required: false, candidates: ['follow up date', 'follow-up date', 'follow up', 'next follow-up'] },
-    { key: 'notes', label: 'Notes', required: false, candidates: ['notes'] },
-    { key: 'researchNotes', label: 'Research Notes', required: false, candidates: ['research notes'] },
-    { key: 'dateApplied', label: 'Date Applied', required: false, candidates: ['app date', 'date applied', 'applied date'] },
-    { key: 'outcome', label: 'Outcome', required: false, candidates: ['outcome'] },
-    { key: 'resumeUrl', label: 'Resume URL', required: false, candidates: ['resume url', 'resume', 'resume link'] },
-    { key: 'coverLetter', label: 'Cover Letter', required: false, candidates: ['cover letter', 'cover letter url', 'cover letter link'] },
+    { key: 'status', label: 'Status / Stage', core: true, required: true, candidates: ['app status', 'status', 'stage', 'application status', 'app status / stage'] },
+    { key: 'followUpDate', label: 'Follow-Up Date', core: true, required: false, candidates: ['follow up date', 'follow-up date', 'follow up', 'next follow-up', 'next action date'] },
+    { key: 'notes', label: 'Notes', core: true, required: false, candidates: ['notes', 'application notes'] },
+    { key: 'researchNotes', label: 'Research Notes', core: false, required: false, candidates: ['research notes', 'rr notes'] },
+    { key: 'dateApplied', label: 'Date Applied', core: true, required: false, candidates: ['app date', 'date applied', 'applied date', 'application date'] },
+    { key: 'outcome', label: 'Outcome', core: true, required: false, candidates: ['outcome', 'result'] },
+    { key: 'resumeUrl', label: 'Resume URL', core: true, required: false, candidates: ['resume url', 'resume', 'resume link'] },
+    { key: 'coverLetter', label: 'Cover Letter', core: true, required: false, candidates: ['cover letter', 'cover letter url', 'cover letter link'] },
     { key: 'contactName', label: 'Contact Name', required: false, candidates: ['contact name', 'contact'] },
     { key: 'contactTitle', label: 'Contact Title', required: false, candidates: ['contact title', 'title'] },
     { key: 'nextAction', label: 'Next Action', required: false, candidates: ['next action'] },
@@ -1333,28 +1401,28 @@ export async function getSheetsSchemaReport(configOverrides = {}) {
   ]
 
   const contactsFields = [
-    { key: 'name', label: 'Name', required: true, candidates: ['name', 'contact', 'contact name'] },
-    { key: 'company', label: 'Company', required: false, candidates: ['company'] },
-    { key: 'status', label: 'Status', required: false, candidates: ['status'] },
-    { key: 'warmth', label: 'Warmth', required: false, candidates: ['warmth'] },
-    { key: 'linkedin', label: 'LinkedIn URL', required: false, candidates: ['linkedin url', 'linkedin'] },
-    { key: 'nextFollowUp', label: 'Next Follow-Up', required: false, candidates: ['next follow up', 'next follow-up', 'follow up date', 'follow-up date'] },
-    { key: 'email', label: 'Email', required: false, candidates: ['email'] }
+    { key: 'name', label: 'Name', core: true, required: false, candidates: ['name', 'contact', 'contact name', 'name of contact'] },
+    { key: 'company', label: 'Company', core: true, required: false, candidates: ['company', 'company name'] },
+    { key: 'status', label: 'Status', core: true, required: false, candidates: ['status'] },
+    { key: 'warmth', label: 'Warmth', core: false, required: false, candidates: ['warmth'] },
+    { key: 'linkedin', label: 'LinkedIn URL', core: true, required: false, candidates: ['linkedin url', 'linkedin', 'linkedin profile'] },
+    { key: 'nextFollowUp', label: 'Next Follow-Up', core: true, required: false, candidates: ['next follow up', 'next follow-up', 'follow up date', 'follow-up date'] },
+    { key: 'email', label: 'Email', core: true, required: false, candidates: ['email', 'contact email'] }
   ]
 
   const interviewsFields = [
-    { key: 'company', label: 'Company', required: true, candidates: ['company', 'employer'] },
-    { key: 'jobTitle', label: 'Job Title', required: false, candidates: ['job title', 'role', 'title'] },
-    { key: 'date', label: 'Date', required: false, candidates: ['date', 'interview date'] },
-    { key: 'round', label: 'Round', required: false, candidates: ['round'] },
-    { key: 'outcome', label: 'Outcome', required: false, candidates: ['outcome'] }
+    { key: 'company', label: 'Company', core: true, required: false, candidates: ['company', 'employer', 'company name'] },
+    { key: 'jobTitle', label: 'Job Title', core: true, required: false, candidates: ['job title', 'role', 'title', 'position'] },
+    { key: 'date', label: 'Date', core: true, required: false, candidates: ['date', 'interview date'] },
+    { key: 'round', label: 'Round', core: true, required: false, candidates: ['round'] },
+    { key: 'outcome', label: 'Outcome', core: true, required: false, candidates: ['outcome', 'result'] }
   ]
 
   const eventsFields = [
-    { key: 'name', label: 'Name', required: true, candidates: ['name', 'event'] },
-    { key: 'date', label: 'Date', required: false, candidates: ['date', 'event date'] },
-    { key: 'status', label: 'Status', required: false, candidates: ['status'] },
-    { key: 'registrationLink', label: 'Registration Link', required: false, candidates: ['registration link', 'link', 'url'] }
+    { key: 'name', label: 'Name', core: true, required: false, candidates: ['name', 'event', 'event name'] },
+    { key: 'date', label: 'Date', core: true, required: false, candidates: ['date', 'event date'] },
+    { key: 'status', label: 'Status', core: true, required: false, candidates: ['status'] },
+    { key: 'registrationLink', label: 'Registration Link', core: true, required: false, candidates: ['registration link', 'link', 'url'] }
   ]
 
   const report = {
