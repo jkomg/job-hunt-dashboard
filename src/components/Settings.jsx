@@ -998,8 +998,8 @@ export default function Settings({ me, onProfileUpdated }) {
                 {tabs.map(tab => (
                   <div key={`schema-${sectionLabel}-${tab.tabName}`} style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
                     <span style={{ color: 'var(--text)' }}>{tab.tabName}</span>
-                    {`: ${tab.mappedCount}/${tab.totalFields} mapped`}
-                    {tab.requiredMissing?.length > 0 ? ` • Missing required: ${tab.requiredMissing.join(', ')}` : ''}
+                    {`: core ${tab.coreMappedCount ?? 0}/${tab.coreTotal ?? 0} • total ${tab.mappedCount}/${tab.totalFields}`}
+                    {tab.coreMissing?.length > 0 ? ` • Missing core: ${tab.coreMissing.join(', ')}` : ''}
                   </div>
                 ))}
               </div>
