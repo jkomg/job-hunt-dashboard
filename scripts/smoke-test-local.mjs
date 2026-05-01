@@ -13,6 +13,7 @@ const NEXT_PASSWORD = 'smoke-password-2026!'
 const SECOND_TEMP_PASSWORD = 'smoke2-temp-password-2026!'
 const SECOND_NEXT_PASSWORD = 'smoke2-password-2026!'
 const THIRD_TEMP_PASSWORD = 'smoke3-temp-password-2026!'
+const THIRD_NEXT_PASSWORD = 'smoke3-password-2026!'
 const FOURTH_USERNAME = 'smoke4'
 const FOURTH_TEMP_PASSWORD = 'smoke4-temp-password-2026!'
 
@@ -369,11 +370,125 @@ async function run() {
   }
   note('Cross-user write isolation passed')
 
+  const reassign = await api('/api/admin/staff-assignments', {
+    method: 'POST',
+    body: {
+      staffUserId: createUser.body.id,
+      jobSeekerUserId: createThirdUser.body.id
+    },
+    allowStatuses: [200]
+  })
+  if (!reassign.body?.ok) throw new Error(`Could not reassign staff for member thread test: ${JSON.stringify(reassign.body)}`)
+
+  await api('/api/logout', { method: 'POST', allowStatuses: [200] })
+  cookieJar.clear()
+
+  await api('/api/login', {
+    method: 'POST',
+    body: { username: SECOND_USERNAME, password: SECOND_NEXT_PASSWORD },
+    allowStatuses: [200]
+  })
+  const createThread = await api(`/api/staff/candidates/${createThirdUser.body.id}/threads`, {
+    method: 'POST',
+    body: { topic: 'Interview prep thread' },
+    allowStatuses: [200]
+  })
+  const threadId = createThread.body?.thread?.id
+  if (!threadId) throw new Error(`Staff thread create failed: ${JSON.stringify(createThread.body)}`)
+
+  await api(`/api/staff/threads/${threadId}/messages`, {
+    method: 'POST',
+    body: { visibility: 'internal_staff', body: 'Internal-only note' },
+    allowStatuses: [200]
+  })
+  await api(`/api/staff/threads/${threadId}/messages`, {
+    method: 'POST',
+    body: { visibility: 'shared_with_candidate', body: 'Candidate-visible note' },
+    allowStatuses: [200]
+  })
+
+  await api('/api/logout', { method: 'POST', allowStatuses: [200] })
+  cookieJar.clear()
+
+  const thirdLogin = await api('/api/login', {
+    method: 'POST',
+    body: { username: THIRD_USERNAME, password: THIRD_TEMP_PASSWORD },
+    allowStatuses: [200]
+  })
+  if (!thirdLogin.body?.mustChangePassword) throw new Error('Expected third user to require password change')
+  await api('/api/change-password', {
+    method: 'POST',
+    body: { currentPassword: THIRD_TEMP_PASSWORD, newPassword: THIRD_NEXT_PASSWORD },
+    allowStatuses: [200]
+  })
+  await api('/api/setup/complete', {
+    method: 'POST',
+    body: { displayName: 'Smoke Member', username: THIRD_USERNAME },
+    allowStatuses: [200]
+  })
+  const memberThreads = await api('/api/member/threads', { allowStatuses: [200] })
+  if (!Array.isArray(memberThreads.body?.threads) || memberThreads.body.threads.length !== 1) {
+    throw new Error(`Member thread list failed: ${JSON.stringify(memberThreads.body)}`)
+  }
+  const memberMessages = await api(`/api/member/threads/${threadId}/messages`, { allowStatuses: [200] })
+  const bodies = (memberMessages.body?.messages || []).map(m => m.body)
+  if (!bodies.includes('Candidate-visible note') || bodies.includes('Internal-only note')) {
+    throw new Error(`Member message visibility guard failed: ${JSON.stringify(memberMessages.body)}`)
+  }
+  await api(`/api/member/threads/${threadId}/messages`, {
+    method: 'POST',
+    body: { body: 'Got it, thanks.' },
+    allowStatuses: [200]
+  })
+  note('Member inbox read/reply access passed')
+
+  await api('/api/logout', { method: 'POST', allowStatuses: [200] })
+  cookieJar.clear()
+
+  await api('/api/login', {
+    method: 'POST',
+    body: { username: SECOND_USERNAME, password: SECOND_NEXT_PASSWORD },
+    allowStatuses: [200]
+  })
+  await api(`/api/staff/threads/${threadId}`, {
+    method: 'PATCH',
+    body: { status: 'closed' },
+    allowStatuses: [200]
+  })
+  await api('/api/logout', { method: 'POST', allowStatuses: [200] })
+  cookieJar.clear()
+
+  await api('/api/login', {
+    method: 'POST',
+    body: { username: THIRD_USERNAME, password: THIRD_NEXT_PASSWORD },
+    allowStatuses: [200]
+  })
+  const closedReply = await api(`/api/member/threads/${threadId}/messages`, {
+    method: 'POST',
+    body: { body: 'Can I add one more thing?' },
+    allowStatuses: [409]
+  })
+  if (!String(closedReply.body?.error || '').includes('closed')) {
+    throw new Error(`Expected closed-thread guard for member reply, got ${JSON.stringify(closedReply.body)}`)
+  }
+  note('Member inbox closed-thread guard passed')
+
+  await api('/api/logout', { method: 'POST', allowStatuses: [200] })
+  cookieJar.clear()
+  await api('/api/login', {
+    method: 'POST',
+    body: { username: TEST_USERNAME, password: NEXT_PASSWORD },
+    allowStatuses: [200]
+  })
+
   const sync = await api('/api/sheets/sync', {
     method: 'POST',
     body: {},
     allowStatuses: [200, 400, 401, 403, 500]
   })
+  if (sync.status === 403) {
+    throw new Error(`Sync should be exercised under admin session, got 403: ${JSON.stringify(sync.body)}`)
+  }
   if (sync.status !== 200) {
     if (!sync.body?.error || !sync.body?.code) {
       throw new Error(`Sync error response missing details: ${JSON.stringify(sync.body)}`)
