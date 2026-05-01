@@ -975,6 +975,42 @@ app.post('/api/staff/candidates/:candidateUserId/threads', requireAuth, requireS
   }
 })
 
+app.get('/api/staff/candidates/:candidateUserId/support-summary', requireAuth, requireStaffOrAdmin, async (req, res) => {
+  try {
+    const candidateUserId = Number(req.params.candidateUserId)
+    if (!candidateUserId) return res.status(400).json({ error: 'candidateUserId is required' })
+    if (!await canAccessCandidate(req, candidateUserId)) {
+      return res.status(403).json({ error: 'Not allowed to view this candidate' })
+    }
+
+    const dashboard = await getDashboardData({ organizationId: req.organizationId, userId: candidateUserId })
+    const recentLogs = dashboard?.recentLogs || []
+    const lastLog = recentLogs[0] || null
+    const supportSummary = {
+      lastCheckInAt: lastLog?.updatedAt || null,
+      lastCheckInDate: lastLog?.Date || null,
+      queueSize: Number(dashboard?.health?.queueSize || 0),
+      staleTotal: Number(dashboard?.health?.staleTotal || 0),
+      duePipelineFollowUps: Number(dashboard?.duePipelineFollowUps?.length || 0),
+      dueInterviewActions: Number(dashboard?.dueInterviewActions?.length || 0),
+      upcomingInterviews: Number(dashboard?.upcomingInterviews?.length || 0),
+      overdueContacts: Number(dashboard?.overdueContacts?.length || 0),
+      topQueue: (dashboard?.todayQueue || []).slice(0, 3).map(item => ({
+        id: item.id,
+        title: item.title,
+        route: item.route,
+        type: item.type,
+        dueDate: item.dueDate || null
+      }))
+    }
+
+    res.json({ ok: true, supportSummary })
+  } catch (e) {
+    console.error('staff.candidate.supportSummary failed', e)
+    res.status(500).json({ error: 'Could not load candidate support summary' })
+  }
+})
+
 app.get('/api/staff/threads/:threadId/messages', requireAuth, requireStaffOrAdmin, async (req, res) => {
   try {
     const thread = await getCandidateThreadById(req.params.threadId)
