@@ -584,9 +584,18 @@ function patchOutboundValues(headers, rowValues, pipelineItem) {
 
   const contacts = Array.isArray(pipelineItem['Application Contacts']) ? pipelineItem['Application Contacts'] : []
   const first = contacts[0] || null
+  const second = contacts[1] || null
   if (first) {
-    patch(['linkedin', 'linkedin url', 'linked in'], first.linkedinUrl || '')
+    patch(['linkedin', 'linkedin url', 'linked in', 'contact linkedin'], first.linkedinUrl || '')
     patch(['email', 'contact email'], first.email || '')
+    patch(['contact 1 name', 'contact1 name'], first.name || '')
+    patch(['contact 1 title', 'contact1 title', 'contact 1 role', 'contact1 role'], first.title || '')
+  }
+  if (second) {
+    patch(['contact 2 name', 'contact2 name'], second.name || '')
+    patch(['contact 2 title', 'contact2 title', 'contact 2 role', 'contact2 role'], second.title || '')
+    patch(['contact 2 linkedin', 'contact2 linkedin', 'contact 2 linkedin url', 'contact2 linkedin url'], second.linkedinUrl || '')
+    patch(['contact 2 email', 'contact2 email'], second.email || '')
   }
 
   return out
