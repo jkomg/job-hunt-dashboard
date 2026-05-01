@@ -68,6 +68,7 @@ export default function StaffOps({ me }) {
   const [threadStaleFilter, setThreadStaleFilter] = useState('all')
   const [candidateSignalFilter, setCandidateSignalFilter] = useState('all')
   const [candidateSupportSummary, setCandidateSupportSummary] = useState(null)
+  const [notifyOnPost, setNotifyOnPost] = useState(true)
   const candidateSummaryRequestRef = useRef(0)
 
   async function load() {
@@ -255,8 +256,14 @@ export default function StaffOps({ me }) {
     setError('')
     setSuccess('')
     try {
-      await api(`/api/staff/recommendations/${rec.id}/post-to-pipeline`, { method: 'POST' })
-      setSuccess('Posted to candidate pipeline.')
+      const result = await api(`/api/staff/recommendations/${rec.id}/post-to-pipeline`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notifyCandidate: notifyOnPost })
+      })
+      setSuccess(result?.notification
+        ? 'Posted to candidate pipeline and sent Inbox notification.'
+        : 'Posted to candidate pipeline.')
       await load()
     } catch (e) {
       setError(e.message)
@@ -524,6 +531,16 @@ export default function StaffOps({ me }) {
 
       <div className="card mb-16">
         <div className="card-title">Distribution</div>
+        <div className="field" style={{ marginBottom: 8 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input
+              type="checkbox"
+              checked={notifyOnPost}
+              onChange={e => setNotifyOnPost(e.target.checked)}
+            />
+            Notify candidate in Inbox when posting
+          </label>
+        </div>
         {!candidateRecommendations.length && <div style={{ color: 'var(--text-muted)' }}>No recommendations for this candidate yet.</div>}
         {!!candidateRecommendations.length && (
           <table className="data-table">
