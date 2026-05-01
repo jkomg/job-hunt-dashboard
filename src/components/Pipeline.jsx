@@ -43,11 +43,38 @@ function emptyForm(defaults = {}) {
     'Company Address': '', 'Company Phone': '', Notes: '', 'Research Notes': '',
     'Filed for Unemployment': false, Outcome: '', 'Resume URL': '', 'Cover Letter': '', 'Work Location': '',
     'Next Action': '', 'Next Action Date': '',
+    'Application Contacts': [],
     ...defaults
   }
 }
 
 function PipelineForm({ form, set }) {
+  const contacts = Array.isArray(form['Application Contacts']) ? form['Application Contacts'] : []
+  function applyContacts(next) {
+    const normalized = (next || [])
+      .slice(0, 3)
+      .map(c => ({
+        name: c?.name || '',
+        title: c?.title || '',
+        email: c?.email || '',
+        linkedinUrl: c?.linkedinUrl || '',
+        note: c?.note || ''
+      }))
+    set('Application Contacts', normalized)
+    set('Contact Name', normalized[0]?.name || '')
+    set('Contact Title', normalized[0]?.title || '')
+  }
+  function updateContact(idx, key, value) {
+    const next = contacts.map((c, i) => i === idx ? { ...c, [key]: value } : c)
+    applyContacts(next)
+  }
+  function addContact() {
+    applyContacts([...contacts, { name: '', title: '', email: '', linkedinUrl: '', note: '' }])
+  }
+  function removeContact(idx) {
+    applyContacts(contacts.filter((_, i) => i !== idx))
+  }
+
   return (
     <>
       <div className="checkin-grid">
@@ -67,8 +94,6 @@ function PipelineForm({ form, set }) {
           <input type="date" value={form['Follow-Up Date']} onChange={e => set('Follow-Up Date', e.target.value)} />
           <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>Use this to surface reminders in your briefing.</div>
         </div>
-        <div className="field"><label>Contact Name</label><input value={form['Contact Name']} onChange={e => set('Contact Name', e.target.value)} /></div>
-        <div className="field"><label>Contact Title</label><input value={form['Contact Title']} onChange={e => set('Contact Title', e.target.value)} /></div>
         <div className="field"><label>Work Location</label><select value={form['Work Location']} onChange={e => set('Work Location', e.target.value)}><option value="">—</option>{WORK_LOCATIONS.map(l => <option key={l}>{l}</option>)}</select></div>
         <div className="field"><label>Job Source</label><select value={form['Job Source']} onChange={e => set('Job Source', e.target.value)}><option value="">—</option>{JOB_SOURCES.map(s => <option key={s}>{s}</option>)}</select></div>
         <div className="field"><label>Outreach Method</label><select value={form['Outreach Method']} onChange={e => set('Outreach Method', e.target.value)}><option value="">—</option>{OUTREACH_METHODS.map(o => <option key={o}>{o}</option>)}</select></div>
@@ -82,6 +107,35 @@ function PipelineForm({ form, set }) {
         <div className="field"><label>Company Address</label><input value={form['Company Address']} onChange={e => set('Company Address', e.target.value)} placeholder="123 Main St, City, ST" /></div>
         <div className="field"><label>Company Phone</label><input type="tel" value={form['Company Phone']} onChange={e => set('Company Phone', e.target.value)} placeholder="(555) 555-5555" /></div>
       </div>
+
+      <div className="field">
+        <label>Application Contacts (up to 3)</label>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>
+          Add recruiter/hiring manager/referral contacts with LinkedIn or email to complete an application.
+        </div>
+        {!contacts.length && (
+          <div style={{ color: 'var(--text-muted)', fontSize: 12, marginBottom: 8 }}>No contacts added yet.</div>
+        )}
+        {contacts.map((contact, idx) => (
+          <div key={`contact-${idx}`} className="card" style={{ marginBottom: 8 }}>
+            <div className="quick-actions" style={{ justifyContent: 'space-between', marginBottom: 6 }}>
+              <strong>Contact {idx + 1}</strong>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => removeContact(idx)}>Remove</button>
+            </div>
+            <div className="checkin-grid">
+              <div className="field"><label>Name</label><input value={contact.name} onChange={e => updateContact(idx, 'name', e.target.value)} /></div>
+              <div className="field"><label>Title / Role</label><input value={contact.title} onChange={e => updateContact(idx, 'title', e.target.value)} /></div>
+              <div className="field"><label>Email</label><input value={contact.email} onChange={e => updateContact(idx, 'email', e.target.value)} /></div>
+              <div className="field"><label>LinkedIn URL</label><input value={contact.linkedinUrl} onChange={e => updateContact(idx, 'linkedinUrl', e.target.value)} /></div>
+            </div>
+            <div className="field"><label>Contact Note</label><input value={contact.note} onChange={e => updateContact(idx, 'note', e.target.value)} placeholder="Context for this contact" /></div>
+          </div>
+        ))}
+        {contacts.length < 3 && (
+          <button type="button" className="btn btn-ghost btn-sm" onClick={addContact}>+ Add Contact</button>
+        )}
+      </div>
+
       <div className="field"><label>Job URL</label><input value={form['Job URL']} onChange={e => set('Job URL', e.target.value)} placeholder="https://…" /></div>
       <div className="field"><label>Notes</label><textarea value={form.Notes} onChange={e => set('Notes', e.target.value)} /></div>
       <div className="field"><label>Research Notes</label><textarea value={form['Research Notes']} onChange={e => set('Research Notes', e.target.value)} placeholder="Company background, culture, products, interview prep…" /></div>
@@ -174,7 +228,8 @@ function CardModal({ card, onClose, onUpdate }) {
     'Cover Letter': card['Cover Letter'] || '',
     'Work Location': card['Work Location'] || '',
     'Next Action': card['Next Action'] || '',
-    'Next Action Date': card['Next Action Date'] || ''
+    'Next Action Date': card['Next Action Date'] || '',
+    'Application Contacts': Array.isArray(card['Application Contacts']) ? card['Application Contacts'] : []
   }))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -314,10 +369,25 @@ export default function Pipeline({ navIntent }) {
     if (i.Stage?.includes('Closed')) return false
     return !String(i['Next Action'] || '').trim() || !String(i['Next Action Date'] || '').trim()
   }
+  const isIncompleteApplication = (i) => {
+    if (i.Stage?.includes('Closed')) return false
+    const stage = String(i.Stage || '')
+    const applyingStages = new Set(['📨 Applied', '🤝 Warm Outreach Sent', '💬 In Conversation', '📞 Interview Scheduled', '🎯 Interviewing', '📋 Offer'])
+    if (!applyingStages.has(stage)) return false
+    const hasDateApplied = !!String(i['Date Applied'] || '').trim()
+    const hasNextAction = !!String(i['Next Action'] || '').trim()
+    const hasNextActionDate = !!String(i['Next Action Date'] || '').trim()
+    const hasJobUrl = !!String(i['Job URL'] || '').trim()
+    const contacts = Array.isArray(i['Application Contacts']) ? i['Application Contacts'] : []
+    const hasContact = contacts.some(c => String(c?.name || '').trim() && (String(c?.linkedinUrl || '').trim() || String(c?.email || '').trim()))
+      || (!!String(i['Contact Name'] || '').trim() && !!(String(i['Contact Title'] || '').trim()))
+    return !(hasDateApplied && hasNextAction && hasNextActionDate && hasJobUrl && hasContact)
+  }
 
   const visible = filter === 'all' ? items
     : filter === 'active' ? items.filter(i => !i.Stage?.includes('Closed'))
     : filter === 'due_followups' ? items.filter(isDueFollowup)
+    : filter === 'incomplete' ? items.filter(isIncompleteApplication)
     : filter === 'stale_actions' ? items.filter(isStaleAction)
     : items.filter(i => i.Stage === filter)
 
@@ -348,6 +418,7 @@ export default function Pipeline({ navIntent }) {
         <button className={`tab${filter === 'active' ? ' active' : ''}`} onClick={() => setFilter('active')}>Active</button>
         <button className={`tab${filter === 'all' ? ' active' : ''}`} onClick={() => setFilter('all')}>All</button>
         <button className={`tab${filter === 'due_followups' ? ' active' : ''}`} onClick={() => setFilter('due_followups')}>Due Follow-ups</button>
+        <button className={`tab${filter === 'incomplete' ? ' active' : ''}`} onClick={() => setFilter('incomplete')}>Incomplete Applications</button>
         <button className={`tab${filter === 'stale_actions' ? ' active' : ''}`} onClick={() => setFilter('stale_actions')}>Missing Next Action</button>
         {['💬 In Conversation', '📞 Interview Scheduled', '🎯 Interviewing'].map(s => (
           <button key={s} className={`tab${filter === s ? ' active' : ''}`} onClick={() => setFilter(s)}>{s}</button>
@@ -411,6 +482,7 @@ export default function Pipeline({ navIntent }) {
                         <span className="badge badge-blue" style={{ fontSize: 10 }}>{getDueSourceLabel(card)}</span>
                       )}
                       {card['Filed for Unemployment'] && <span className="badge badge-gray" style={{ fontSize: 10 }}>✓ UE Filed</span>}
+                      {isIncompleteApplication(card) && <span className="badge badge-yellow" style={{ fontSize: 10 }}>Incomplete</span>}
                       {card.Outcome && <span className={`badge ${card.Outcome.includes('Accepted') ? 'badge-green' : card.Outcome.includes('Withdrew') ? 'badge-gray' : 'badge-red'}`} style={{ fontSize: 10 }}>{card.Outcome}</span>}
                       {card['Work Location'] && <span className={`badge ${card['Work Location'].startsWith('Remote') ? 'badge-green' : 'badge-gray'}`} style={{ fontSize: 10 }}>{card['Work Location']}</span>}
                       {card['Resume Version'] === 'Tailored' && card['Resume URL'] && (
