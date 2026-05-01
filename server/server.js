@@ -674,7 +674,8 @@ app.get('/api/staff/queue', requireAuth, requireStaffOrAdmin, async (req, res) =
       const dashboard = await getDashboardData({ organizationId: req.organizationId, userId: uid })
       const staleFollowUps = Number(dashboard?.health?.stale?.pipeline || 0) > 0
       const interviewActive = Number(dashboard?.upcomingInterviews?.length || 0) > 0 || Number(dashboard?.dueInterviewActions?.length || 0) > 0
-      const lastDaily = Number((dashboard?.recentLogs || [])[0]?.updatedAt || 0)
+      const lastDailyIso = (dashboard?.recentLogs || [])[0]?._lastEditedTime || null
+      const lastDaily = lastDailyIso ? Date.parse(lastDailyIso) : 0
       const noRecentActivity = !lastDaily || (now - lastDaily) > sevenDaysMs
       const latestPosted = postedSinceByUser.get(uid) || 0
       const rrPostedRecently = !!latestPosted && (now - latestPosted) <= threeDaysMs
@@ -986,8 +987,10 @@ app.get('/api/staff/candidates/:candidateUserId/support-summary', requireAuth, r
     const dashboard = await getDashboardData({ organizationId: req.organizationId, userId: candidateUserId })
     const recentLogs = dashboard?.recentLogs || []
     const lastLog = recentLogs[0] || null
+    const lastCheckInIso = lastLog?._lastEditedTime || null
+    const lastCheckInTs = lastCheckInIso ? Date.parse(lastCheckInIso) : null
     const supportSummary = {
-      lastCheckInAt: lastLog?.updatedAt || null,
+      lastCheckInAt: Number.isFinite(lastCheckInTs) ? lastCheckInTs : null,
       lastCheckInDate: lastLog?.Date || null,
       queueSize: Number(dashboard?.health?.queueSize || 0),
       staleTotal: Number(dashboard?.health?.staleTotal || 0),

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 async function api(path, options = {}) {
   const res = await fetch(path, { credentials: 'include', ...options })
@@ -68,6 +68,7 @@ export default function StaffOps({ me }) {
   const [threadStaleFilter, setThreadStaleFilter] = useState('all')
   const [candidateSignalFilter, setCandidateSignalFilter] = useState('all')
   const [candidateSupportSummary, setCandidateSupportSummary] = useState(null)
+  const candidateSummaryRequestRef = useRef(0)
 
   async function load() {
     setLoading(true)
@@ -143,10 +144,13 @@ export default function StaffOps({ me }) {
         setCandidateSupportSummary(null)
         return
       }
+      const requestId = ++candidateSummaryRequestRef.current
       try {
         const d = await api(`/api/staff/candidates/${selectedCandidateId}/support-summary`)
+        if (requestId !== candidateSummaryRequestRef.current) return
         setCandidateSupportSummary(d.supportSummary || null)
       } catch (e) {
+        if (requestId !== candidateSummaryRequestRef.current) return
         setCandidateSupportSummary(null)
         setError(e.message)
       }
