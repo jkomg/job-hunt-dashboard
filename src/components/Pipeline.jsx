@@ -297,6 +297,13 @@ export default function Pipeline({ navIntent }) {
     if (nextActionDate) return nextActionDate
     return String(i['Follow-Up Date'] || '').trim()
   }
+  const getDueSourceLabel = (i) => {
+    const nextActionDate = String(i['Next Action Date'] || '').trim()
+    if (nextActionDate) return `Next Action Date: ${nextActionDate}`
+    const followUpDate = String(i['Follow-Up Date'] || '').trim()
+    if (followUpDate) return `Follow-Up Date: ${followUpDate}`
+    return ''
+  }
   const isDueFollowup = (i) => {
     const due = getDueDate(i)
     if (!due) return false
@@ -400,6 +407,9 @@ export default function Pipeline({ navIntent }) {
                     <div className="kanban-card-meta">
                       {card.Priority && <span className={`badge ${priorityColor(card.Priority)}`} style={{ fontSize: 10 }}>{card.Priority}</span>}
                       {card['Follow-Up Date'] && <span className="text-muted text-sm">↩ {card['Follow-Up Date']}</span>}
+                      {filter === 'due_followups' && getDueSourceLabel(card) && (
+                        <span className="badge badge-blue" style={{ fontSize: 10 }}>{getDueSourceLabel(card)}</span>
+                      )}
                       {card['Filed for Unemployment'] && <span className="badge badge-gray" style={{ fontSize: 10 }}>✓ UE Filed</span>}
                       {card.Outcome && <span className={`badge ${card.Outcome.includes('Accepted') ? 'badge-green' : card.Outcome.includes('Withdrew') ? 'badge-gray' : 'badge-red'}`} style={{ fontSize: 10 }}>{card.Outcome}</span>}
                       {card['Work Location'] && <span className={`badge ${card['Work Location'].startsWith('Remote') ? 'badge-green' : 'badge-gray'}`} style={{ fontSize: 10 }}>{card['Work Location']}</span>}
