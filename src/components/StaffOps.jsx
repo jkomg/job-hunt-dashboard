@@ -16,6 +16,18 @@ function formatDateTime(ts) {
   return d.toLocaleString()
 }
 
+function formatRelative(ts) {
+  if (!ts) return 'never'
+  const d = new Date(Number(ts))
+  if (!Number.isFinite(d.getTime())) return 'unknown'
+  const mins = Math.floor((Date.now() - d.getTime()) / 60000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  return `${Math.floor(hrs / 24)}d ago`
+}
+
 export default function StaffOps({ me }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -55,6 +67,7 @@ export default function StaffOps({ me }) {
   const [threadStatusFilter, setThreadStatusFilter] = useState('all')
   const [threadStaleFilter, setThreadStaleFilter] = useState('all')
   const [candidateSignalFilter, setCandidateSignalFilter] = useState('all')
+  const [candidateSupportSummary, setCandidateSupportSummary] = useState(null)
 
   async function load() {
     setLoading(true)
@@ -123,6 +136,23 @@ export default function StaffOps({ me }) {
     }
     loadMessages()
   }, [selectedThreadId])
+
+  useEffect(() => {
+    async function loadCandidateSummary() {
+      if (!selectedCandidateId) {
+        setCandidateSupportSummary(null)
+        return
+      }
+      try {
+        const d = await api(`/api/staff/candidates/${selectedCandidateId}/support-summary`)
+        setCandidateSupportSummary(d.supportSummary || null)
+      } catch (e) {
+        setCandidateSupportSummary(null)
+        setError(e.message)
+      }
+    }
+    loadCandidateSummary()
+  }, [selectedCandidateId])
 
   const candidateRecommendations = useMemo(() => {
     const id = Number(selectedCandidateId)
@@ -422,6 +452,35 @@ export default function StaffOps({ me }) {
             {selectedCandidateSignals.staleFollowUps && <span className="badge badge-yellow">Stale Follow-ups</span>}
             {selectedCandidateSignals.noRecentActivity && <span className="badge badge-blue">No Check-in 7d+</span>}
             {selectedCandidateSignals.rrPostedRecently && <span className="badge badge-green">RR Post 72h</span>}
+          </div>
+        )}
+        {!!selectedCandidateId && !!candidateSupportSummary && (
+          <div style={{ marginTop: 10 }}>
+            <div style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 6 }}>
+              Last check-in: {candidateSupportSummary.lastCheckInDate || 'none'} ({formatRelative(candidateSupportSummary.lastCheckInAt)})
+            </div>
+            <div className="stats-grid">
+              <div className="stat-card"><div className="stat-label">Queue</div><div className="stat-value">{candidateSupportSummary.queueSize || 0}</div></div>
+              <div className="stat-card"><div className="stat-label">Stale</div><div className="stat-value">{candidateSupportSummary.staleTotal || 0}</div></div>
+              <div className="stat-card"><div className="stat-label">Follow-ups Due</div><div className="stat-value">{candidateSupportSummary.duePipelineFollowUps || 0}</div></div>
+              <div className="stat-card"><div className="stat-label">Interview Actions</div><div className="stat-value">{(candidateSupportSummary.dueInterviewActions || 0) + (candidateSupportSummary.upcomingInterviews || 0)}</div></div>
+            </div>
+            <div style={{ marginTop: 8, color: 'var(--text-muted)', fontSize: 13 }}>Top candidate queue items</div>
+            {!candidateSupportSummary.topQueue?.length && (
+              <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>No active queue items.</div>
+            )}
+            {!!candidateSupportSummary.topQueue?.length && (
+              <div style={{ marginTop: 6 }}>
+                {candidateSupportSummary.topQueue.map(item => (
+                  <div key={`queue-${item.id}`} className="contact-row" style={{ padding: '6px 0' }}>
+                    <div className="contact-info">
+                      <div className="contact-name">{item.title}</div>
+                      <div className="contact-meta">{item.type || 'queue_item'} {item.dueDate ? `· due ${item.dueDate}` : ''}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
