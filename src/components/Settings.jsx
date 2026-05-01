@@ -129,6 +129,7 @@ export default function Settings({ me, onProfileUpdated }) {
   const [healthMeta, setHealthMeta] = useState(null)
   const [error, setError] = useState(null)
   const [success, setSuccess] = useState('')
+  const [copyingDiagnostics, setCopyingDiagnostics] = useState(false)
   const [displayName, setDisplayName] = useState(me?.displayName || '')
   const backupFileInputRef = useRef(null)
 
@@ -161,6 +162,38 @@ export default function Settings({ me, onProfileUpdated }) {
   }, [healthState])
   const serverDeployVersion = String(healthMeta?.deployVersion || '')
   const hasVersionMismatch = !!serverDeployVersion && serverDeployVersion !== BUNDLE_VERSION
+  const diagnosticsText = [
+    `timestamp=${new Date().toISOString()}`,
+    `frontend_bundle=${BUNDLE_VERSION}`,
+    `server_deploy=${serverDeployVersion || 'unknown'}`,
+    `auth_mode=${healthMeta?.authMode || 'unknown'}`,
+    `role=${me?.role || 'unknown'}`,
+    `is_admin=${me?.isAdmin ? 'true' : 'false'}`
+  ].join('\n')
+
+  async function copyDiagnostics() {
+    setCopyingDiagnostics(true)
+    setError(null)
+    setSuccess('')
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(diagnosticsText)
+      } else {
+        throw new Error('Clipboard API unavailable')
+      }
+      setSuccess('Diagnostics copied.')
+    } catch {
+      setError({
+        error: 'Could not access clipboard automatically.',
+        fixSteps: [
+          'Select and copy the diagnostics text manually from Settings > Build Info.',
+          'Paste it in your support report.'
+        ]
+      })
+    } finally {
+      setCopyingDiagnostics(false)
+    }
+  }
   const usersById = useMemo(() => {
     const map = new Map()
     for (const user of adminUsers) map.set(Number(user.id), user)
@@ -593,6 +626,12 @@ export default function Settings({ me, onProfileUpdated }) {
         <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Frontend bundle: <code>{BUNDLE_VERSION}</code></div>
         <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Server deploy: <code>{serverDeployVersion || 'unknown'}</code></div>
         <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Auth mode: <code>{healthMeta?.authMode || 'unknown'}</code></div>
+        <div style={{ marginTop: 8 }}>
+          <button className="btn btn-ghost btn-sm" onClick={copyDiagnostics} disabled={copyingDiagnostics}>
+            {copyingDiagnostics ? 'Copying…' : 'Copy Diagnostics'}
+          </button>
+        </div>
+        <pre style={{ marginTop: 8, whiteSpace: 'pre-wrap', fontSize: 12, color: 'var(--text-muted)' }}>{diagnosticsText}</pre>
         {hasVersionMismatch && (
           <div className="error-msg" style={{ marginTop: 10 }}>
             <div style={{ fontWeight: 700 }}>Version mismatch detected</div>
