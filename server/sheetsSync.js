@@ -560,7 +560,7 @@ function hasSyncConflict({ lastInboundHash, currentInboundHash, lastOutboundHash
   return sheetChanged && localChanged
 }
 
-function patchOutboundValues(headers, rowValues, pipelineItem) {
+function patchOutboundValues(headers, rowValues, pipelineItem, { foundBy = null } = {}) {
   const headerIndex = buildHeaderIndex(headers)
   const out = [...rowValues]
 
@@ -569,11 +569,16 @@ function patchOutboundValues(headers, rowValues, pipelineItem) {
     if (idx >= 0 && value != null && String(value).trim() !== '') out[idx] = value
   }
 
+  patch(['company name', 'company', 'employer'], pipelineItem.Company || '')
+  patch(['job title', 'role', 'position'], pipelineItem.Role || '')
+  patch(['link to posting', 'job url', 'url', 'application link'], pipelineItem['Job URL'] || '')
+  if (foundBy) patch(['found by'], foundBy)
+  patch(['job source'], pipelineItem['Job Source'] || '')
   patch(['app status', 'status', 'stage'], STAGE_TO_SHEET_STATUS.get(pipelineItem.Stage) || pipelineItem.Stage || '')
   patch(['follow up date', 'follow-up date', 'follow up', 'next follow-up'], pipelineItem['Follow-Up Date'] || '')
   patch(['notes'], pipelineItem.Notes || '')
   patch(['research notes'], pipelineItem['Research Notes'] || '')
-  patch(['app date', 'date applied', 'applied date'], pipelineItem['Date Applied'] || '')
+  patch(['app date', 'date applied', 'applied date', 'date added'], pipelineItem['Date Applied'] || '')
   patch(['outcome'], pipelineItem.Outcome || '')
   patch(['resume url', 'resume', 'resume link'], pipelineItem['Resume URL'] || '')
   patch(['cover letter', 'cover letter url', 'cover letter link'], pipelineItem['Cover Letter'] || '')
@@ -753,8 +758,6 @@ async function runOutboundSync({ sheets, spreadsheetId, tabs, scope }) {
       const rowIdx = link.row_number - 2
       const currentRow = rows[rowIdx] || []
       const patched = patchOutboundValues(headers, currentRow, item)
-      if (patched.length < 15) patched.length = 15
-      patched[14] = `=TODAY()-I${link.row_number}`
 
       const outboundFingerprint = {
         stage: item.Stage || null,
@@ -814,11 +817,10 @@ async function runOutboundSync({ sheets, spreadsheetId, tabs, scope }) {
 
     // Append local pipeline entries that do not yet have a sheet link.
     if (tab === tabs[0]) {
-      const unlinked = pipeline.filter(item => !linkedIds.has(String(item.id)))
+      const unlinked = pipeline.filter(item => !linkedIds.has(String(item.id)) && item.Stage !== '❌ Closed')
       for (const item of unlinked) {
-        const base = new Array(Math.max(headers.length, 15)).fill('')
-        const patched = patchOutboundValues(headers, base, item)
-        if (patched.length < 15) patched.length = 15
+        const base = new Array(headers.length).fill('')
+        const patched = patchOutboundValues(headers, base, item, { foundBy: 'Me' })
         const appendRes = await withSheetsWriteRetry(() => sheets.spreadsheets.values.append({
           spreadsheetId,
           range: `${tab}!A:ZZ`,
@@ -1378,13 +1380,18 @@ export async function getSheetsSchemaReport(configOverrides = {}) {
   const sheets = await getSheetsClient(credentials)
 
   const pipelineFields = [
-    { key: 'status', label: 'Status / Stage', core: true, required: true, candidates: ['app status', 'status', 'stage', 'application status', 'app status / stage'] },
+    { key: 'company', label: 'Company Name', core: true, required: true, candidates: ['company name', 'company', 'employer'] },
+    { key: 'role', label: 'Job Title', core: true, required: true, candidates: ['job title', 'role', 'position'] },
+    { key: 'jobUrl', label: 'Link to Posting', core: true, required: false, candidates: ['link to posting', 'job url', 'url', 'application link'] },
+    { key: 'foundBy', label: 'Found By', core: true, required: false, candidates: ['found by'] },
+    { key: 'jobSource', label: 'Job Source', core: true, required: false, candidates: ['job source'] },
+    { key: 'status', label: 'App Status', core: true, required: true, candidates: ['app status', 'status', 'stage', 'application status', 'app status / stage'] },
     { key: 'followUpDate', label: 'Follow-Up Date', core: true, required: false, candidates: ['follow up date', 'follow-up date', 'follow up', 'next follow-up', 'next action date'] },
     { key: 'notes', label: 'Notes', core: true, required: false, candidates: ['notes', 'application notes'] },
     { key: 'researchNotes', label: 'Research Notes', core: false, required: false, candidates: ['research notes', 'rr notes'] },
-    { key: 'dateApplied', label: 'Date Applied', core: true, required: false, candidates: ['app date', 'date applied', 'applied date', 'application date'] },
+    { key: 'dateApplied', label: 'Date Added / App Date', core: true, required: false, candidates: ['app date', 'date applied', 'applied date', 'application date', 'date added'] },
     { key: 'outcome', label: 'Outcome', core: false, required: false, candidates: ['outcome', 'result'] },
-    { key: 'resumeUrl', label: 'Resume URL', core: true, required: false, candidates: ['resume url', 'resume', 'resume link'] },
+    { key: 'resumeUrl', label: 'Resume', core: true, required: false, candidates: ['resume url', 'resume', 'resume link'] },
     { key: 'coverLetter', label: 'Cover Letter', core: true, required: false, candidates: ['cover letter', 'cover letter url', 'cover letter link'] },
     { key: 'contactName', label: 'Contact Name', required: false, candidates: ['contact name', 'contact'] },
     { key: 'contactTitle', label: 'Contact Title', required: false, candidates: ['contact title', 'title'] },
