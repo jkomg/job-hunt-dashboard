@@ -21,13 +21,13 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.21.2",
-    "googleapis": "^144.0.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "googleapis": "^144.0.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",
     "concurrently": "^9.1.2",
-    "vite": "^5.4.12"
+    "vite": "^5.4.12",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
   }
 }
