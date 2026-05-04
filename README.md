@@ -67,34 +67,31 @@ This project is now documented as a **server/client app** first:
 
 ## Staff Ops Workflow
 
-1. Select candidate and use focus filters:
-   - `interview_active`
-   - `stale_followups`
-   - `no_recent_activity`
-   - `new_rr_jobs_72h`
-2. Review candidate support summary (check-in recency, queue/stale, top queue)
-3. Add recommendations in `Job Research`
-4. Post recommendations from `Distribution`
-5. Keep `Notify candidate in Inbox when posting` enabled for normal workflow
-6. Use candidate threads and tasks to close support loops
+1. Use the candidate overview table to scan all assigned candidates at a glance
+   - Signal badges: `Interview`, `Stale`, `Inactive 7d`, `RR 72h`
+   - Use the signal filter dropdown to focus (`interview_active`, `stale_followups`, `no_recent_activity`, `rr_posted_recently`)
+2. Select a candidate from the "Working on" context bar or the table
+3. Review the candidate support summary (check-in recency, queue/stale counts, signals)
+4. Draft and post recommendations in **Research & Recommend** (unified card)
+   - Keep `Notify candidate in Inbox when posting` enabled for normal workflow
+5. Use the separate **Tasks** and **Threads** cards to close support loops
+
+### Creating candidates (staff)
+
+Staff can create new `job_seeker` accounts directly from Staff Ops without going through Settings — the new account is automatically assigned to them. Staff can also self-assign to existing unassigned candidates.
 
 ## Google Sheets Sync (Optional)
 
 Sheets are integration/backup, not source of truth.
 
-In app `Settings`:
+All sync controls live in the **Google Sheets Sync** card in `Settings`:
 
 - Save sheet ID + tab mapping
-- Test connection
-- Run sync now
-- Review sync health and per-entity details
-- Download sync logs CSV
+- Test connection, run sync now, check sheet mapping
+- Health status + per-entity status (Pipeline, Networking, Interviews, Events) in one place
+- Recent runs log (collapsible, with CSV download)
 
-Pipeline sync notes:
-
-- app `Date Applied` -> sheet `App Date`
-- app `Resume URL` and `Cover Letter` -> matching sheet columns
-- sheet column O formula is maintained as `=TODAY()-I{row}` during outbound sync
+Pipeline sync writes: Company, Role, Job URL, Job Source, Found By, Stage, Follow-Up, Notes, Research Notes, Date Applied, Resume URL, Cover Letter. Closed entries are excluded from outbound export.
 
 ## Admin Operations
 
@@ -103,7 +100,7 @@ From `Settings`:
 - Team access (create users/roles)
 - Staff assignments
 - Audit log
-- Sync health/details
+- Google Sheets Sync (health, details, config, recent runs — all one card)
 - Backup export/restore
 
 ## Docs Index

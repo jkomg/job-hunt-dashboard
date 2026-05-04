@@ -22,12 +22,10 @@ Define a clear staff/admin operating model that is distinct from the job-seeker 
 ### Staff
 - Primary nav:
   - Briefing (staff queue summary)
-  - Candidates
-  - Job Research
-  - Distribution
-  - Messages
+  - Staff Ops (candidates, tasks, threads, recommendations)
   - Settings
 - No personal job-seeker pipeline workflow by default.
+- Staff Ops layout: candidate overview table → "Working on" context bar → Research & Recommend, Tasks, Threads cards scoped to selected candidate.
 
 ### Admin
 - All staff capabilities plus:
@@ -88,19 +86,25 @@ Define a clear staff/admin operating model that is distinct from the job-seeker 
 - `created_by_user_id`
 - `created_at`, `updated_at`
 
-## API Surface (Phase 1)
+## API Surface (shipped)
 - `GET /api/staff/queue`
-- `GET /api/staff/candidates`
+- `GET /api/staff/candidates` (via queue)
 - `GET /api/staff/candidates/:id/recommendations`
 - `POST /api/staff/candidates/:id/recommendations`
 - `PATCH /api/staff/recommendations/:id`
 - `POST /api/staff/recommendations/:id/post-to-pipeline`
 - `GET /api/staff/candidates/:id/threads`
 - `POST /api/staff/candidates/:id/threads`
+- `GET /api/staff/threads/:id/messages`
 - `POST /api/staff/threads/:id/messages`
 - `GET /api/staff/tasks`
 - `POST /api/staff/tasks`
 - `PATCH /api/staff/tasks/:id`
+- `GET /api/staff/candidates/:id/support-summary`
+- `POST /api/staff/candidates` — staff creates job_seeker + auto-assigns to self
+- `POST /api/staff/self-assign` — staff self-assigns to existing unassigned candidate
+- `GET /api/staff/unassigned-candidates` — list unassigned job_seekers in org
+- `GET /api/staff/assigned-users`
 
 All staff endpoints require staff/admin role and assignment/org scope checks.
 
@@ -131,19 +135,25 @@ Fallback in all phases: use in-app messages as source of truth and optionally mi
 
 ## Phase Plan
 
-### Phase A (1-2 sprints): Staff Ops Foundation
-- Add `job_recommendations`, `candidate_threads`, `candidate_messages`, `staff_tasks`.
-- Build staff queue + candidate list + recommendation posting.
-- Add audit events for all new staff/admin actions.
+### Phase A — ✅ Complete
+- `job_recommendations`, `candidate_threads`, `candidate_messages`, `staff_tasks` all shipped.
+- Staff queue, candidate list, recommendation draft/post, threads, tasks all live.
+- Audit events for all staff/admin actions.
 
-### Phase B (1 sprint): Messaging + Visibility
-- Add in-app candidate/staff threads.
-- Add admin oversight for unresolved high-priority threads/tasks.
-- Add “last contact” and SLA metrics.
+### Phase B — ✅ Complete
+- In-app candidate/staff threads with `shared_with_candidate` / `internal_staff` visibility.
+- Candidate support summary (check-in recency, queue/stale signals).
 
-### Phase C (1 sprint): Integrations
-- Add optional Circle import/export adapter.
-- Extend Google sync mappings for recommendation and status mirror fields.
+### Phase C — Deferred
+- Optional Circle import/export connector: not started.
+- Google sync recommendation mirror fields: not started.
+
+### Phase D — ✅ Shipped (post-spec)
+- Staff Ops UI rewrite: candidate overview table, signal badges, “Working on” context bar.
+- Merged “Job Research” + “Distribution” → “Research & Recommend”.
+- Separate New Task / Task list cards; separate New Thread / Thread list cards.
+- Staff can create `job_seeker` accounts and self-assign directly from Staff Ops.
+- Settings consolidation: Sync Health + Sync Details + Recent Sync Runs → one “Google Sheets Sync” card.
 
 ## Interview Script For Staff Discovery
 1. What actions do you take daily for candidates?
