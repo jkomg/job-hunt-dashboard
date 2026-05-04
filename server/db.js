@@ -1736,6 +1736,12 @@ export async function upsertSheetSyncLink({
   sheetId, tabName, rowNumber, pipelinePageId, lastInboundHash = null, lastOutboundHash = null
 }) {
   const ts = now()
+  // Remove any stale link for this pipeline_page_id at a different row so the
+  // UNIQUE(pipeline_page_id) constraint doesn't block the insert below.
+  await db.execute({
+    sql: `DELETE FROM sheet_sync_links WHERE pipeline_page_id = ? AND NOT (sheet_id = ? AND tab_name = ? AND row_number = ?)`,
+    args: [pipelinePageId, sheetId, tabName, rowNumber]
+  })
   await db.execute({
     sql: `
       INSERT INTO sheet_sync_links (
