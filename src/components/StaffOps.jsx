@@ -3,20 +3,17 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 async function api(path, options = {}) {
   const res = await fetch(path, { credentials: 'include', ...options })
   const data = await res.json().catch(() => ({}))
-  if (!res.ok) {
-    throw new Error(data?.error || `Request failed (${res.status})`)
-  }
+  if (!res.ok) throw new Error(data?.error || `Request failed (${res.status})`)
   return data
 }
 
-function formatDateTime(ts) {
+function fmt(ts) {
   if (!ts) return '—'
   const d = new Date(Number(ts))
-  if (!Number.isFinite(d.getTime())) return '—'
-  return d.toLocaleString()
+  return Number.isFinite(d.getTime()) ? d.toLocaleString() : '—'
 }
 
-function formatRelative(ts) {
+function rel(ts) {
   if (!ts) return 'never'
   const d = new Date(Number(ts))
   if (!Number.isFinite(d.getTime())) return 'unknown'
@@ -28,63 +25,83 @@ function formatRelative(ts) {
   return `${Math.floor(hrs / 24)}d ago`
 }
 
+function SignalBadges({ signals }) {
+  if (!signals) return null
+  return (
+    <span style={{ display: 'inline-flex', gap: 4, flexWrap: 'wrap' }}>
+      {signals.interviewActive && <span className="badge badge-red">Interview</span>}
+      {signals.staleFollowUps && <span className="badge badge-yellow">Stale</span>}
+      {signals.noRecentActivity && <span className="badge badge-blue">Inactive 7d</span>}
+      {signals.rrPostedRecently && <span className="badge badge-green">RR 72h</span>}
+    </span>
+  )
+}
+
 export default function StaffOps({ me }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [queue, setQueue] = useState({ summary: {}, candidates: [], staffUsers: [], recommendations: [], tasks: [] })
+  const [unassigned, setUnassigned] = useState([])
   const [selectedCandidateId, setSelectedCandidateId] = useState('')
+  const [candidateSignalFilter, setCandidateSignalFilter] = useState('all')
+
+  // new candidate form
+  const [showNewCandidate, setShowNewCandidate] = useState(false)
+  const [newUsername, setNewUsername] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [newEmail, setNewEmail] = useState('')
+  const [creatingCandidate, setCreatingCandidate] = useState(false)
+
+  // self-assign
+  const [selfAssignId, setSelfAssignId] = useState('')
+  const [assigning, setAssigning] = useState(false)
+
+  // rec form
+  const [recForm, setRecForm] = useState({ company: '', role: '', jobUrl: '', source: '', fitNote: '' })
   const [savingRec, setSavingRec] = useState(false)
-  const [savingTask, setSavingTask] = useState(false)
   const [postingRecId, setPostingRecId] = useState('')
+  const [notifyOnPost, setNotifyOnPost] = useState(true)
+
+  // task form
+  const [taskForm, setTaskForm] = useState({ assigneeUserId: '', type: 'research', priority: 'normal', dueDate: '', notes: '' })
+  const [savingTask, setSavingTask] = useState(false)
   const [updatingTaskId, setUpdatingTaskId] = useState('')
-  const [form, setForm] = useState({
-    company: '',
-    role: '',
-    jobUrl: '',
-    source: '',
-    fitNote: ''
-  })
-  const [taskForm, setTaskForm] = useState({
-    assigneeUserId: '',
-    type: 'research',
-    priority: 'normal',
-    dueDate: '',
-    notes: ''
-  })
-  const [taskStatusFilter, setTaskStatusFilter] = useState('all')
+  const [taskStatusFilter, setTaskStatusFilter] = useState('open')
   const [taskPriorityFilter, setTaskPriorityFilter] = useState('all')
   const [taskDueFilter, setTaskDueFilter] = useState('all')
-  const [taskAssigneeFilter, setTaskAssigneeFilter] = useState('all')
+
+  // threads
   const [threads, setThreads] = useState([])
   const [selectedThreadId, setSelectedThreadId] = useState('')
   const [threadMessages, setThreadMessages] = useState([])
-  const [creatingThread, setCreatingThread] = useState(false)
-  const [sendingMessage, setSendingMessage] = useState(false)
   const [threadTopic, setThreadTopic] = useState('')
   const [messageBody, setMessageBody] = useState('')
   const [messageVisibility, setMessageVisibility] = useState('shared_with_candidate')
-  const [threadStatusFilter, setThreadStatusFilter] = useState('all')
-  const [threadStaleFilter, setThreadStaleFilter] = useState('all')
-  const [candidateSignalFilter, setCandidateSignalFilter] = useState('all')
+  const [creatingThread, setCreatingThread] = useState(false)
+  const [sendingMessage, setSendingMessage] = useState(false)
+  const [threadStatusFilter, setThreadStatusFilter] = useState('open')
+
+  // candidate support summary
   const [candidateSupportSummary, setCandidateSupportSummary] = useState(null)
-  const [notifyOnPost, setNotifyOnPost] = useState(true)
-  const candidateSummaryRequestRef = useRef(0)
+  const summaryReqRef = useRef(0)
 
   async function load() {
     setLoading(true)
     setError('')
     try {
-      const data = await api('/api/staff/queue')
+      const [data, unassignedData] = await Promise.all([
+        api('/api/staff/queue'),
+        api('/api/staff/unassigned-candidates')
+      ])
       setQueue(data)
+      setUnassigned(unassignedData.candidates || [])
       if (!selectedCandidateId && data.candidates?.length) {
         setSelectedCandidateId(String(data.candidates[0].id))
       }
       if (me?.isAdmin && !taskForm.assigneeUserId) {
         const first = (data.staffUsers || [])[0]
-        if (first?.id) {
-          setTaskForm(prev => ({ ...prev, assigneeUserId: String(first.id) }))
-        }
+        if (first?.id) setTaskForm(prev => ({ ...prev, assigneeUserId: String(first.id) }))
       }
     } catch (e) {
       setError(e.message)
@@ -93,114 +110,33 @@ export default function StaffOps({ me }) {
     }
   }
 
-  useEffect(() => {
-    load()
-  }, [])
+  useEffect(() => { load() }, [])
 
   useEffect(() => {
-    async function loadThreads() {
-      if (!selectedCandidateId) {
-        setThreads([])
-        setSelectedThreadId('')
-        setThreadMessages([])
-        return
-      }
-      // Clear previous candidate context immediately to prevent stale sends.
-      setThreads([])
-      setSelectedThreadId('')
-      setThreadMessages([])
-      try {
-        const d = await api(`/api/staff/candidates/${selectedCandidateId}/threads`)
-        const list = d.threads || []
-        setThreads(list)
-        if (!list.find(t => t.id === selectedThreadId)) {
-          setSelectedThreadId(list[0]?.id || '')
-        }
-      } catch (e) {
-        setError(e.message)
-      }
-    }
-    loadThreads()
+    if (!selectedCandidateId) { setThreads([]); setSelectedThreadId(''); setThreadMessages([]); return }
+    setThreads([]); setSelectedThreadId(''); setThreadMessages([])
+    api(`/api/staff/candidates/${selectedCandidateId}/threads`)
+      .then(d => { const list = d.threads || []; setThreads(list); setSelectedThreadId(list[0]?.id || '') })
+      .catch(e => setError(e.message))
   }, [selectedCandidateId])
 
   useEffect(() => {
-    async function loadMessages() {
-      if (!selectedThreadId) {
-        setThreadMessages([])
-        return
-      }
-      try {
-        const d = await api(`/api/staff/threads/${selectedThreadId}/messages`)
-        setThreadMessages(d.messages || [])
-      } catch (e) {
-        setError(e.message)
-      }
-    }
-    loadMessages()
+    if (!selectedThreadId) { setThreadMessages([]); return }
+    api(`/api/staff/threads/${selectedThreadId}/messages`)
+      .then(d => setThreadMessages(d.messages || []))
+      .catch(e => setError(e.message))
   }, [selectedThreadId])
 
   useEffect(() => {
-    async function loadCandidateSummary() {
-      if (!selectedCandidateId) {
-        setCandidateSupportSummary(null)
-        return
-      }
-      const requestId = ++candidateSummaryRequestRef.current
-      try {
-        const d = await api(`/api/staff/candidates/${selectedCandidateId}/support-summary`)
-        if (requestId !== candidateSummaryRequestRef.current) return
-        setCandidateSupportSummary(d.supportSummary || null)
-      } catch (e) {
-        if (requestId !== candidateSummaryRequestRef.current) return
-        setCandidateSupportSummary(null)
-        setError(e.message)
-      }
-    }
-    loadCandidateSummary()
+    if (!selectedCandidateId) { setCandidateSupportSummary(null); return }
+    const reqId = ++summaryReqRef.current
+    api(`/api/staff/candidates/${selectedCandidateId}/support-summary`)
+      .then(d => { if (reqId === summaryReqRef.current) setCandidateSupportSummary(d.supportSummary || null) })
+      .catch(e => { if (reqId === summaryReqRef.current) { setCandidateSupportSummary(null); setError(e.message) } })
   }, [selectedCandidateId])
 
-  const candidateRecommendations = useMemo(() => {
-    const id = Number(selectedCandidateId)
-    return (queue.recommendations || []).filter(r => Number(r.jobSeekerUserId) === id)
-  }, [queue.recommendations, selectedCandidateId])
-  const candidateTasks = useMemo(() => {
-    const id = Number(selectedCandidateId)
-    return (queue.tasks || []).filter(t => Number(t.relatedUserId) === id)
-  }, [queue.tasks, selectedCandidateId])
-  const filteredCandidateTasks = useMemo(() => {
-    const startToday = new Date()
-    startToday.setHours(0, 0, 0, 0)
-    const endToday = new Date(startToday)
-    endToday.setDate(endToday.getDate() + 1)
-    return candidateTasks.filter(task => {
-      if (taskStatusFilter !== 'all' && task.status !== taskStatusFilter) return false
-      if (taskPriorityFilter !== 'all' && task.priority !== taskPriorityFilter) return false
-      if (taskAssigneeFilter !== 'all' && Number(task.assigneeUserId) !== Number(taskAssigneeFilter)) return false
-      if (taskDueFilter === 'all') return true
-      if (!task.dueAt) return taskDueFilter === 'no_due'
-      if (taskDueFilter === 'no_due') return false
-      const due = Number(task.dueAt)
-      if (taskDueFilter === 'overdue') return due < startToday.getTime() && task.status !== 'done'
-      if (taskDueFilter === 'today') return due >= startToday.getTime() && due < endToday.getTime() && task.status !== 'done'
-      if (taskDueFilter === 'upcoming') return due >= endToday.getTime() && task.status !== 'done'
-      return true
-    })
-  }, [candidateTasks, taskStatusFilter, taskPriorityFilter, taskDueFilter, taskAssigneeFilter])
-  const selectedThread = useMemo(
-    () => (threads || []).find(t => t.id === selectedThreadId) || null,
-    [threads, selectedThreadId]
-  )
-  const filteredThreads = useMemo(() => {
-    const staleMs = 48 * 60 * 60 * 1000
-    return (threads || []).filter(t => {
-      const isStale = (Date.now() - Number(t.updatedAt || 0)) > staleMs
-      if (threadStatusFilter !== 'all' && t.status !== threadStatusFilter) return false
-      if (threadStaleFilter === 'stale' && !isStale) return false
-      if (threadStaleFilter === 'fresh' && isStale) return false
-      return true
-    })
-  }, [threads, threadStatusFilter, threadStaleFilter])
   const candidateSignals = queue.candidateSignals || {}
+
   const visibleCandidates = useMemo(() => {
     const all = queue.candidates || []
     if (candidateSignalFilter === 'all') return all
@@ -213,69 +149,124 @@ export default function StaffOps({ me }) {
       return true
     })
   }, [queue.candidates, candidateSignals, candidateSignalFilter])
-  const selectedCandidateSignals = useMemo(() => {
-    return candidateSignals[Number(selectedCandidateId)] || null
-  }, [candidateSignals, selectedCandidateId])
 
   useEffect(() => {
     if (!visibleCandidates.length) return
     if (!visibleCandidates.find(c => String(c.id) === String(selectedCandidateId))) {
       setSelectedCandidateId(String(visibleCandidates[0].id))
     }
-  }, [visibleCandidates, selectedCandidateId])
+  }, [visibleCandidates])
+
+  const selectedCandidate = useMemo(
+    () => (queue.candidates || []).find(c => String(c.id) === String(selectedCandidateId)) || null,
+    [queue.candidates, selectedCandidateId]
+  )
+  const selectedCandidateSignals = useMemo(() => candidateSignals[Number(selectedCandidateId)] || null, [candidateSignals, selectedCandidateId])
+
+  const candidateRecommendations = useMemo(() => {
+    const id = Number(selectedCandidateId)
+    return (queue.recommendations || []).filter(r => Number(r.jobSeekerUserId) === id)
+  }, [queue.recommendations, selectedCandidateId])
+
+  const candidateTasks = useMemo(() => {
+    const id = Number(selectedCandidateId)
+    return (queue.tasks || []).filter(t => Number(t.relatedUserId) === id)
+  }, [queue.tasks, selectedCandidateId])
+
+  const filteredTasks = useMemo(() => {
+    const now = Date.now()
+    const startToday = new Date(); startToday.setHours(0, 0, 0, 0)
+    const endToday = new Date(startToday); endToday.setDate(endToday.getDate() + 1)
+    return candidateTasks.filter(t => {
+      if (taskStatusFilter === 'open' && t.status === 'done') return false
+      if (taskStatusFilter !== 'open' && taskStatusFilter !== 'all' && t.status !== taskStatusFilter) return false
+      if (taskPriorityFilter !== 'all' && t.priority !== taskPriorityFilter) return false
+      if (taskDueFilter === 'all') return true
+      if (!t.dueAt) return taskDueFilter === 'no_due'
+      if (taskDueFilter === 'no_due') return false
+      const due = Number(t.dueAt)
+      if (taskDueFilter === 'overdue') return due < startToday.getTime() && t.status !== 'done'
+      if (taskDueFilter === 'today') return due >= startToday.getTime() && due < endToday.getTime() && t.status !== 'done'
+      if (taskDueFilter === 'upcoming') return due >= endToday.getTime() && t.status !== 'done'
+      return true
+    })
+  }, [candidateTasks, taskStatusFilter, taskPriorityFilter, taskDueFilter])
+
+  const selectedThread = useMemo(() => threads.find(t => t.id === selectedThreadId) || null, [threads, selectedThreadId])
+
+  const filteredThreads = useMemo(() => {
+    const staleMs = 48 * 60 * 60 * 1000
+    return threads.filter(t => {
+      if (threadStatusFilter === 'open' && t.status === 'closed') return false
+      if (threadStatusFilter !== 'open' && threadStatusFilter !== 'all' && t.status !== threadStatusFilter) return false
+      return true
+    })
+  }, [threads, threadStatusFilter])
+
+  async function createCandidate() {
+    setCreatingCandidate(true); setError(''); setSuccess('')
+    try {
+      const res = await api('/api/staff/candidates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: newUsername, password: newPassword, email: newEmail || undefined })
+      })
+      setSuccess(`Candidate "${res.username}" created and assigned to you.`)
+      setNewUsername(''); setNewPassword(''); setNewEmail('')
+      setShowNewCandidate(false)
+      await load()
+      setSelectedCandidateId(String(res.id))
+    } catch (e) { setError(e.message) }
+    finally { setCreatingCandidate(false) }
+  }
+
+  async function selfAssign() {
+    if (!selfAssignId) return
+    setAssigning(true); setError(''); setSuccess('')
+    try {
+      await api('/api/staff/self-assign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobSeekerUserId: Number(selfAssignId) })
+      })
+      setSuccess('Assigned successfully.')
+      setSelfAssignId('')
+      await load()
+    } catch (e) { setError(e.message) }
+    finally { setAssigning(false) }
+  }
 
   async function createRecommendation() {
-    setSavingRec(true)
-    setError('')
-    setSuccess('')
+    setSavingRec(true); setError(''); setSuccess('')
     try {
       await api('/api/staff/recommendations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jobSeekerUserId: Number(selectedCandidateId),
-          company: form.company,
-          role: form.role,
-          jobUrl: form.jobUrl,
-          source: form.source,
-          fitNote: form.fitNote
-        })
+        body: JSON.stringify({ jobSeekerUserId: Number(selectedCandidateId), ...recForm })
       })
-      setForm({ company: '', role: '', jobUrl: '', source: '', fitNote: '' })
-      setSuccess('Recommendation saved.')
+      setRecForm({ company: '', role: '', jobUrl: '', source: '', fitNote: '' })
+      setSuccess('Recommendation saved as draft.')
       await load()
-    } catch (e) {
-      setError(e.message)
-    } finally {
-      setSavingRec(false)
-    }
+    } catch (e) { setError(e.message) }
+    finally { setSavingRec(false) }
   }
 
   async function postToPipeline(rec) {
-    setPostingRecId(rec.id)
-    setError('')
-    setSuccess('')
+    setPostingRecId(rec.id); setError(''); setSuccess('')
     try {
       const result = await api(`/api/staff/recommendations/${rec.id}/post-to-pipeline`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ notifyCandidate: notifyOnPost })
       })
-      setSuccess(result?.notification
-        ? 'Posted to candidate pipeline and sent Inbox notification.'
-        : 'Posted to candidate pipeline.')
+      setSuccess(result?.notification ? 'Posted and notified candidate.' : 'Posted to pipeline.')
       await load()
-    } catch (e) {
-      setError(e.message)
-    } finally {
-      setPostingRecId('')
-    }
+    } catch (e) { setError(e.message) }
+    finally { setPostingRecId('') }
   }
 
   async function createTask() {
-    setSavingTask(true)
-    setError('')
-    setSuccess('')
+    setSavingTask(true); setError(''); setSuccess('')
     try {
       await api('/api/staff/tasks', {
         method: 'POST',
@@ -292,36 +283,30 @@ export default function StaffOps({ me }) {
       setTaskForm(prev => ({ ...prev, type: 'research', priority: 'normal', dueDate: '', notes: '' }))
       setSuccess('Task created.')
       await load()
-    } catch (e) {
-      setError(e.message)
-    } finally {
-      setSavingTask(false)
-    }
+    } catch (e) { setError(e.message) }
+    finally { setSavingTask(false) }
   }
 
   async function updateTaskStatus(task, status) {
-    setUpdatingTaskId(task.id)
-    setError('')
-    setSuccess('')
+    setUpdatingTaskId(task.id); setError(''); setSuccess('')
     try {
-      await api(`/api/staff/tasks/${task.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status })
-      })
-      setSuccess('Task updated.')
+      await api(`/api/staff/tasks/${task.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) })
       await load()
-    } catch (e) {
-      setError(e.message)
-    } finally {
-      setUpdatingTaskId('')
-    }
+    } catch (e) { setError(e.message) }
+    finally { setUpdatingTaskId('') }
+  }
+
+  async function reassignTask(task, assigneeUserId) {
+    setUpdatingTaskId(task.id); setError('')
+    try {
+      await api(`/api/staff/tasks/${task.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ assigneeUserId: Number(assigneeUserId) }) })
+      await load()
+    } catch (e) { setError(e.message) }
+    finally { setUpdatingTaskId('') }
   }
 
   async function createThread() {
-    setCreatingThread(true)
-    setError('')
-    setSuccess('')
+    setCreatingThread(true); setError(''); setSuccess('')
     try {
       await api(`/api/staff/candidates/${selectedCandidateId}/threads`, {
         method: 'POST',
@@ -333,17 +318,12 @@ export default function StaffOps({ me }) {
       setThreads(d.threads || [])
       setSelectedThreadId((d.threads || [])[0]?.id || '')
       setSuccess('Thread created.')
-    } catch (e) {
-      setError(e.message)
-    } finally {
-      setCreatingThread(false)
-    }
+    } catch (e) { setError(e.message) }
+    finally { setCreatingThread(false) }
   }
 
   async function sendMessage() {
-    setSendingMessage(true)
-    setError('')
-    setSuccess('')
+    setSendingMessage(true); setError(''); setSuccess('')
     try {
       await api(`/api/staff/threads/${selectedThreadId}/messages`, {
         method: 'POST',
@@ -353,486 +333,428 @@ export default function StaffOps({ me }) {
       setMessageBody('')
       const d = await api(`/api/staff/threads/${selectedThreadId}/messages`)
       setThreadMessages(d.messages || [])
-      setSuccess('Message sent.')
-    } catch (e) {
-      setError(e.message)
-    } finally {
-      setSendingMessage(false)
-    }
+    } catch (e) { setError(e.message) }
+    finally { setSendingMessage(false) }
   }
 
   async function updateThreadStatus(status) {
     if (!selectedThread) return
-    setError('')
-    setSuccess('')
     try {
-      await api(`/api/staff/threads/${selectedThread.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status })
-      })
+      await api(`/api/staff/threads/${selectedThread.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) })
       const d = await api(`/api/staff/candidates/${selectedCandidateId}/threads`)
       setThreads(d.threads || [])
-      setSuccess(`Thread marked ${status}.`)
-    } catch (e) {
-      setError(e.message)
-    }
+    } catch (e) { setError(e.message) }
   }
 
-  async function reassignTask(task, assigneeUserId) {
-    setUpdatingTaskId(task.id)
-    setError('')
-    setSuccess('')
-    try {
-      await api(`/api/staff/tasks/${task.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ assigneeUserId: Number(assigneeUserId) })
-      })
-      setSuccess('Task reassigned.')
-      await load()
-    } catch (e) {
-      setError(e.message)
-    } finally {
-      setUpdatingTaskId('')
-    }
-  }
-
-  if (loading) {
-    return <div className="loading"><div className="spin" />Loading staff workspace…</div>
-  }
+  if (loading) return <div className="loading"><div className="spin" />Loading staff workspace…</div>
 
   return (
     <div>
       <div className="page-header">
         <div>
           <h1>Staff Ops</h1>
-          <div className="subtle">Research jobs, distribute opportunities, and track assigned candidate support.</div>
+          <div className="subtle">Research jobs, distribute opportunities, and track candidate support.</div>
         </div>
       </div>
 
       {error && <div className="error-msg mb-16">{error}</div>}
       {success && <div className="success-msg mb-16">{success}</div>}
 
+      {/* Queue Summary */}
       <div className="card mb-16">
         <div className="card-title">Queue Summary</div>
         <div className="stats-grid">
           <div className="stat-card"><div className="stat-label">Candidates</div><div className="stat-value">{queue.summary?.candidates || 0}</div></div>
           <div className="stat-card"><div className="stat-label">Draft Recs</div><div className="stat-value">{queue.summary?.recommendationsDraft || 0}</div></div>
           <div className="stat-card"><div className="stat-label">Posted Recs</div><div className="stat-value">{queue.summary?.recommendationsPosted || 0}</div></div>
-          <div className="stat-card"><div className="stat-label">Tasks Todo</div><div className="stat-value">{queue.summary?.tasksTodo || 0}</div></div>
+          <div className="stat-card"><div className="stat-label">Tasks Open</div><div className="stat-value">{queue.summary?.tasksTodo || 0}</div></div>
           <div className="stat-card"><div className="stat-label">Open Threads</div><div className="stat-value">{queue.summary?.threadsOpen || 0}</div></div>
-          <div className="stat-card"><div className="stat-label">Stale Threads (48h+)</div><div className="stat-value">{queue.summary?.threadsStale48h || 0}</div></div>
+          <div className="stat-card"><div className="stat-label">Stale Threads</div><div className="stat-value">{queue.summary?.threadsStale48h || 0}</div></div>
         </div>
       </div>
 
+      {/* Candidates */}
       <div className="card mb-16">
-        <div className="card-title">Candidates</div>
-        <div className="settings-grid">
-          <div className="field">
-            <label>Focus Filter</label>
-            <select value={candidateSignalFilter} onChange={e => setCandidateSignalFilter(e.target.value)}>
-              <option value="all">all</option>
-              <option value="interview_active">interview_active</option>
-              <option value="stale_followups">stale_followups</option>
-              <option value="no_recent_activity">no_recent_activity_7d</option>
-              <option value="rr_posted_recently">new_rr_jobs_72h</option>
-            </select>
-          </div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+          <div className="card-title" style={{ margin: 0 }}>Candidates</div>
+          <button className="btn btn-ghost btn-sm" onClick={() => setShowNewCandidate(v => !v)}>
+            {showNewCandidate ? 'Cancel' : '+ New Candidate'}
+          </button>
         </div>
-        {!queue.candidates?.length && <div style={{ color: 'var(--text-muted)' }}>No candidates assigned yet.</div>}
-        {!!visibleCandidates.length && (
-          <div className="tabs">
-            {visibleCandidates.map(c => (
-              <button
-                key={c.id}
-                className={`tab ${String(c.id) === String(selectedCandidateId) ? 'active' : ''}`}
-                onClick={() => setSelectedCandidateId(String(c.id))}
-              >
-                {c.username}
-              </button>
-            ))}
-          </div>
-        )}
-        {!!queue.candidates?.length && !visibleCandidates.length && (
-          <div style={{ color: 'var(--text-muted)' }}>No candidates match this filter.</div>
-        )}
-        {!!selectedCandidateId && !!selectedCandidateSignals && (
-          <div className="quick-actions" style={{ marginTop: 8 }}>
-            {selectedCandidateSignals.interviewActive && <span className="badge badge-red">Interview Active</span>}
-            {selectedCandidateSignals.staleFollowUps && <span className="badge badge-yellow">Stale Follow-ups</span>}
-            {selectedCandidateSignals.noRecentActivity && <span className="badge badge-blue">No Check-in 7d+</span>}
-            {selectedCandidateSignals.rrPostedRecently && <span className="badge badge-green">RR Post 72h</span>}
-          </div>
-        )}
-        {!!selectedCandidateId && !!candidateSupportSummary && (
-          <div style={{ marginTop: 10 }}>
-            <div style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 6 }}>
-              Last check-in: {candidateSupportSummary.lastCheckInDate || 'none'} ({formatRelative(candidateSupportSummary.lastCheckInAt)})
-            </div>
-            <div className="stats-grid">
-              <div className="stat-card"><div className="stat-label">Queue</div><div className="stat-value">{candidateSupportSummary.queueSize || 0}</div></div>
-              <div className="stat-card"><div className="stat-label">Stale</div><div className="stat-value">{candidateSupportSummary.staleTotal || 0}</div></div>
-              <div className="stat-card"><div className="stat-label">Follow-ups Due</div><div className="stat-value">{candidateSupportSummary.duePipelineFollowUps || 0}</div></div>
-              <div className="stat-card"><div className="stat-label">Interview Actions</div><div className="stat-value">{(candidateSupportSummary.dueInterviewActions || 0) + (candidateSupportSummary.upcomingInterviews || 0)}</div></div>
-            </div>
-            <div style={{ marginTop: 8, color: 'var(--text-muted)', fontSize: 13 }}>Top candidate queue items</div>
-            {!candidateSupportSummary.topQueue?.length && (
-              <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>No active queue items.</div>
-            )}
-            {!!candidateSupportSummary.topQueue?.length && (
-              <div style={{ marginTop: 6 }}>
-                {candidateSupportSummary.topQueue.map(item => (
-                  <div key={`queue-${item.id}`} className="contact-row" style={{ padding: '6px 0' }}>
-                    <div className="contact-info">
-                      <div className="contact-name">{item.title}</div>
-                      <div className="contact-meta">{item.type || 'queue_item'} {item.dueDate ? `· due ${item.dueDate}` : ''}</div>
-                    </div>
-                  </div>
-                ))}
+
+        {showNewCandidate && (
+          <div style={{ background: 'var(--bg-alt)', borderRadius: 8, padding: 14, marginBottom: 14 }}>
+            <div style={{ fontWeight: 600, marginBottom: 10 }}>Create Candidate Account</div>
+            <div className="settings-grid">
+              <div className="field">
+                <label>Username</label>
+                <input value={newUsername} onChange={e => setNewUsername(e.target.value)} placeholder="jane.doe" />
               </div>
-            )}
+              <div className="field">
+                <label>Temp Password</label>
+                <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="10+ characters" />
+              </div>
+              <div className="field">
+                <label>Email (optional)</label>
+                <input value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="jane@example.com" />
+              </div>
+            </div>
+            <button className="btn btn-primary" onClick={createCandidate}
+              disabled={creatingCandidate || !newUsername.trim() || newPassword.length < 10}>
+              {creatingCandidate ? 'Creating…' : 'Create & Assign'}
+            </button>
           </div>
         )}
-      </div>
 
-      <div className="card mb-16">
-        <div className="card-title">Job Research</div>
-        <div className="settings-grid">
-          <div className="field">
-            <label>Company</label>
-            <input value={form.company} onChange={e => setForm({ ...form, company: e.target.value })} />
+        {!!unassigned.length && (
+          <div style={{ marginBottom: 14, display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+            <div className="field" style={{ margin: 0, flex: 1 }}>
+              <label>Assign Existing Candidate to Me</label>
+              <select value={selfAssignId} onChange={e => setSelfAssignId(e.target.value)}>
+                <option value="">— pick a candidate —</option>
+                {unassigned.map(u => <option key={u.id} value={u.id}>{u.username}</option>)}
+              </select>
+            </div>
+            <button className="btn btn-ghost" onClick={selfAssign} disabled={assigning || !selfAssignId}>
+              {assigning ? 'Assigning…' : 'Assign'}
+            </button>
           </div>
-          <div className="field">
-            <label>Role</label>
-            <input value={form.role} onChange={e => setForm({ ...form, role: e.target.value })} />
-          </div>
-          <div className="field">
-            <label>Job URL</label>
-            <input value={form.jobUrl} onChange={e => setForm({ ...form, jobUrl: e.target.value })} />
-          </div>
-          <div className="field">
-            <label>Source</label>
-            <input value={form.source} onChange={e => setForm({ ...form, source: e.target.value })} />
-          </div>
-        </div>
-        <div className="field">
-          <label>Fit Note</label>
-          <textarea rows={3} value={form.fitNote} onChange={e => setForm({ ...form, fitNote: e.target.value })} />
-        </div>
-        <button
-          className="btn btn-primary"
-          onClick={createRecommendation}
-          disabled={savingRec || !selectedCandidateId || !form.company.trim()}
-        >
-          {savingRec ? 'Saving…' : 'Save Recommendation'}
-        </button>
-      </div>
+        )}
 
-      <div className="card mb-16">
-        <div className="card-title">Distribution</div>
-        <div className="field" style={{ marginBottom: 8 }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <input
-              type="checkbox"
-              checked={notifyOnPost}
-              onChange={e => setNotifyOnPost(e.target.checked)}
-            />
-            Notify candidate in Inbox when posting
-          </label>
-        </div>
-        {!candidateRecommendations.length && <div style={{ color: 'var(--text-muted)' }}>No recommendations for this candidate yet.</div>}
-        {!!candidateRecommendations.length && (
-          <table className="data-table">
+        {/* Candidate overview table */}
+        {!!(queue.candidates || []).length && (
+          <table className="data-table" style={{ marginBottom: 14 }}>
             <thead>
               <tr>
-                <th>Company</th>
-                <th>Role</th>
-                <th>Status</th>
-                <th>Updated</th>
-                <th />
+                <th>
+                  <select value={candidateSignalFilter} onChange={e => setCandidateSignalFilter(e.target.value)}
+                    style={{ fontSize: 12, background: 'transparent', border: 'none', fontWeight: 700, cursor: 'pointer' }}>
+                    <option value="all">All Candidates</option>
+                    <option value="interview_active">Interview Active</option>
+                    <option value="stale_followups">Stale Follow-ups</option>
+                    <option value="no_recent_activity">Inactive 7d+</option>
+                    <option value="rr_posted_recently">RR Post 72h</option>
+                  </select>
+                </th>
+                <th>Queue</th>
+                <th>Stale</th>
+                <th>Follow-ups Due</th>
+                <th>Last Check-in</th>
+                <th>Signals</th>
               </tr>
             </thead>
             <tbody>
-              {candidateRecommendations.map(rec => (
-                <tr key={rec.id}>
-                  <td>{rec.company}</td>
-                  <td>{rec.role || '—'}</td>
-                  <td>{rec.status}</td>
-                  <td>{formatDateTime(rec.updatedAt)}</td>
-                  <td style={{ textAlign: 'right' }}>
-                    <button
-                      className="btn btn-ghost btn-sm"
-                      disabled={rec.status === 'posted' || postingRecId === rec.id}
-                      onClick={() => postToPipeline(rec)}
-                    >
-                      {postingRecId === rec.id ? 'Posting…' : rec.status === 'posted' ? 'Posted' : 'Post to Pipeline'}
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {visibleCandidates.map(c => {
+                const sig = candidateSignals[Number(c.id)] || {}
+                const sum = c.supportSummary || {}
+                const isSelected = String(c.id) === String(selectedCandidateId)
+                return (
+                  <tr key={c.id}
+                    onClick={() => setSelectedCandidateId(String(c.id))}
+                    style={{ cursor: 'pointer', background: isSelected ? 'var(--bg-alt)' : undefined, fontWeight: isSelected ? 600 : undefined }}>
+                    <td>{c.username}</td>
+                    <td>{sum.queueSize ?? '—'}</td>
+                    <td>{sum.staleTotal ?? '—'}</td>
+                    <td>{sum.duePipelineFollowUps ?? '—'}</td>
+                    <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>{sum.lastCheckInDate ? `${sum.lastCheckInDate}` : 'none'}</td>
+                    <td><SignalBadges signals={sig} /></td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         )}
+        {!!(queue.candidates || []).length && !visibleCandidates.length && (
+          <div style={{ color: 'var(--text-muted)' }}>No candidates match this filter.</div>
+        )}
+        {!(queue.candidates || []).length && (
+          <div style={{ color: 'var(--text-muted)' }}>No candidates assigned yet. Create or assign one above.</div>
+        )}
       </div>
 
-      <div className="card mb-16">
-        <div className="card-title">Tasks</div>
-        <div className="settings-grid">
-          <div className="field">
-            <label>Status Filter</label>
-            <select value={taskStatusFilter} onChange={e => setTaskStatusFilter(e.target.value)}>
-              <option value="all">all</option>
-              <option value="todo">todo</option>
-              <option value="in_progress">in_progress</option>
-              <option value="done">done</option>
-            </select>
-          </div>
-          <div className="field">
-            <label>Priority Filter</label>
-            <select value={taskPriorityFilter} onChange={e => setTaskPriorityFilter(e.target.value)}>
-              <option value="all">all</option>
-              <option value="urgent">urgent</option>
-              <option value="high">high</option>
-              <option value="normal">normal</option>
-              <option value="low">low</option>
-            </select>
-          </div>
-          <div className="field">
-            <label>Due Filter</label>
-            <select value={taskDueFilter} onChange={e => setTaskDueFilter(e.target.value)}>
-              <option value="all">all</option>
-              <option value="overdue">overdue</option>
-              <option value="today">due_today</option>
-              <option value="upcoming">upcoming</option>
-              <option value="no_due">no_due_date</option>
-            </select>
-          </div>
-          {me?.isAdmin && (
-            <div className="field">
-              <label>Assignee Filter</label>
-              <select value={taskAssigneeFilter} onChange={e => setTaskAssigneeFilter(e.target.value)}>
-                <option value="all">all</option>
-                {(queue.staffUsers || []).map(u => (
-                  <option key={`assignee-filter-${u.id}`} value={u.id}>{u.username}</option>
-                ))}
-              </select>
-            </div>
+      {/* Candidate context — everything below is scoped to selected candidate */}
+      {!!selectedCandidate && (
+        <div style={{ background: 'var(--bg-alt)', borderRadius: 8, padding: '10px 14px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <span style={{ fontWeight: 700 }}>Working on: {selectedCandidate.username}</span>
+          <SignalBadges signals={selectedCandidateSignals} />
+          {candidateSupportSummary && (
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+              Last check-in: {candidateSupportSummary.lastCheckInDate || 'none'} ({rel(candidateSupportSummary.lastCheckInAt)})
+              {' · '}Queue: {candidateSupportSummary.queueSize || 0}
+              {' · '}Stale: {candidateSupportSummary.staleTotal || 0}
+              {' · '}Follow-ups due: {candidateSupportSummary.duePipelineFollowUps || 0}
+            </span>
           )}
-        </div>
-        <div className="settings-grid">
-          {me?.isAdmin && (
-            <div className="field">
-              <label>Assign To</label>
-              <select value={taskForm.assigneeUserId} onChange={e => setTaskForm({ ...taskForm, assigneeUserId: e.target.value })}>
-                <option value="">Select staff</option>
-                {(queue.staffUsers || []).map(u => (
-                  <option key={`assign-to-${u.id}`} value={u.id}>{u.username}</option>
-                ))}
-              </select>
-            </div>
-          )}
-          <div className="field">
-            <label>Type</label>
-            <select value={taskForm.type} onChange={e => setTaskForm({ ...taskForm, type: e.target.value })}>
-              <option value="research">research</option>
-              <option value="follow_up">follow_up</option>
-              <option value="interview_prep">interview_prep</option>
-              <option value="admin">admin</option>
+          <div style={{ marginLeft: 'auto' }}>
+            <select value={selectedCandidateId} onChange={e => setSelectedCandidateId(e.target.value)}
+              style={{ fontSize: 13 }}>
+              {(queue.candidates || []).map(c => <option key={c.id} value={c.id}>{c.username}</option>)}
             </select>
           </div>
-          <div className="field">
-            <label>Priority</label>
-            <select value={taskForm.priority} onChange={e => setTaskForm({ ...taskForm, priority: e.target.value })}>
-              <option value="low">low</option>
-              <option value="normal">normal</option>
-              <option value="high">high</option>
-              <option value="urgent">urgent</option>
-            </select>
-          </div>
-          <div className="field">
-            <label>Due Date</label>
-            <input type="date" value={taskForm.dueDate} onChange={e => setTaskForm({ ...taskForm, dueDate: e.target.value })} />
-          </div>
         </div>
-        <div className="field">
-          <label>Notes</label>
-          <textarea rows={2} value={taskForm.notes} onChange={e => setTaskForm({ ...taskForm, notes: e.target.value })} />
-        </div>
-        <button
-          className="btn btn-primary"
-          onClick={createTask}
-          disabled={savingTask || !taskForm.notes.trim() || !selectedCandidateId || (me?.isAdmin && !taskForm.assigneeUserId)}
-        >
-          {savingTask ? 'Creating…' : 'Create Task'}
-        </button>
+      )}
 
-        <div style={{ marginTop: 14 }}>
-          {!filteredCandidateTasks.length && <div style={{ color: 'var(--text-muted)' }}>No tasks match current filters.</div>}
-          {!!filteredCandidateTasks.length && (
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Assignee</th>
-                  <th>Type</th>
-                  <th>Priority</th>
-                  <th>Status</th>
-                  <th>Due</th>
-                  <th>Notes</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {filteredCandidateTasks.map(task => (
-                  <tr key={task.id}>
-                    <td>
-                      {me?.isAdmin ? (
-                        <select
-                          value={String(task.assigneeUserId || '')}
-                          disabled={updatingTaskId === task.id}
-                          onChange={e => reassignTask(task, e.target.value)}
-                        >
-                          {(queue.staffUsers || []).map(u => (
-                            <option key={`reassign-${task.id}-${u.id}`} value={u.id}>{u.username}</option>
-                          ))}
-                        </select>
-                      ) : (task.assigneeUsername || task.assigneeUserId)}
-                    </td>
-                    <td>{task.type}</td>
-                    <td>{task.priority}</td>
-                    <td>{task.status}</td>
-                    <td>
-                      {formatDateTime(task.dueAt)}
-                      {task.dueAt && task.status !== 'done' && Number(task.dueAt) < Date.now() && (
-                        <span className="badge badge-red" style={{ marginLeft: 6 }}>Overdue</span>
-                      )}
-                    </td>
-                    <td>{task.notes || '—'}</td>
-                    <td style={{ textAlign: 'right' }}>
-                      {task.status !== 'in_progress' && (
-                        <button className="btn btn-ghost btn-sm" disabled={updatingTaskId === task.id} onClick={() => updateTaskStatus(task, 'in_progress')}>
-                          Start
-                        </button>
-                      )}
-                      {task.status !== 'done' && (
-                        <button className="btn btn-ghost btn-sm" disabled={updatingTaskId === task.id} onClick={() => updateTaskStatus(task, 'done')}>
-                          Done
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      </div>
-
-      <div className="card mb-16">
-        <div className="card-title">Candidate Threads</div>
-        <div className="settings-grid">
-          <div className="field">
-            <label>Status Filter</label>
-            <select value={threadStatusFilter} onChange={e => setThreadStatusFilter(e.target.value)}>
-              <option value="all">all</option>
-              <option value="open">open</option>
-              <option value="closed">closed</option>
-            </select>
+      {/* Research & Recommend */}
+      {!!selectedCandidateId && (
+        <div className="card mb-16">
+          <div className="card-title">Research &amp; Recommend</div>
+          <div className="settings-grid">
+            <div className="field"><label>Company</label><input value={recForm.company} onChange={e => setRecForm({ ...recForm, company: e.target.value })} /></div>
+            <div className="field"><label>Role</label><input value={recForm.role} onChange={e => setRecForm({ ...recForm, role: e.target.value })} /></div>
+            <div className="field"><label>Job URL</label><input value={recForm.jobUrl} onChange={e => setRecForm({ ...recForm, jobUrl: e.target.value })} /></div>
+            <div className="field"><label>Source</label><input value={recForm.source} onChange={e => setRecForm({ ...recForm, source: e.target.value })} /></div>
           </div>
-          <div className="field">
-            <label>Freshness Filter</label>
-            <select value={threadStaleFilter} onChange={e => setThreadStaleFilter(e.target.value)}>
-              <option value="all">all</option>
-              <option value="stale">stale_48h_plus</option>
-              <option value="fresh">fresh_under_48h</option>
-            </select>
-          </div>
-        </div>
-        <div className="settings-grid">
-          <div className="field">
-            <label>New Thread Topic</label>
-            <input value={threadTopic} onChange={e => setThreadTopic(e.target.value)} placeholder="Follow-up strategy, interview prep, etc." />
-          </div>
-          <div className="field">
-            <label>&nbsp;</label>
-            <button className="btn btn-primary" onClick={createThread} disabled={creatingThread || !selectedCandidateId || !threadTopic.trim()}>
-              {creatingThread ? 'Creating…' : 'Create Thread'}
+          <div className="field"><label>Fit Note</label><textarea rows={2} value={recForm.fitNote} onChange={e => setRecForm({ ...recForm, fitNote: e.target.value })} /></div>
+          <div className="quick-actions" style={{ marginBottom: 16 }}>
+            <button className="btn btn-primary" onClick={createRecommendation}
+              disabled={savingRec || !recForm.company.trim()}>
+              {savingRec ? 'Saving…' : 'Save as Draft'}
             </button>
           </div>
+
+          {!candidateRecommendations.length && <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>No recommendations yet for {selectedCandidate?.username}.</div>}
+          {!!candidateRecommendations.length && (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+                  <input type="checkbox" checked={notifyOnPost} onChange={e => setNotifyOnPost(e.target.checked)} />
+                  Notify candidate in Inbox when posting
+                </label>
+              </div>
+              <table className="data-table">
+                <thead><tr><th>Company</th><th>Role</th><th>Status</th><th>Updated</th><th /></tr></thead>
+                <tbody>
+                  {candidateRecommendations.map(rec => (
+                    <tr key={rec.id}>
+                      <td>{rec.company}</td>
+                      <td>{rec.role || '—'}</td>
+                      <td><span className={`badge ${rec.status === 'posted' ? 'badge-green' : ''}`}>{rec.status}</span></td>
+                      <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>{fmt(rec.updatedAt)}</td>
+                      <td style={{ textAlign: 'right' }}>
+                        <button className="btn btn-ghost btn-sm"
+                          disabled={rec.status === 'posted' || postingRecId === rec.id}
+                          onClick={() => postToPipeline(rec)}>
+                          {postingRecId === rec.id ? 'Posting…' : rec.status === 'posted' ? 'Posted ✓' : 'Post to Pipeline'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
         </div>
+      )}
 
-        {!filteredThreads.length && <div style={{ color: 'var(--text-muted)' }}>No threads match current filters.</div>}
-        {!!filteredThreads.length && (
-          <div className="tabs">
-            {filteredThreads.map(t => (
-              <button key={t.id} className={`tab ${selectedThreadId === t.id ? 'active' : ''}`} onClick={() => setSelectedThreadId(t.id)}>
-                {t.topic} {t.status === 'closed' ? '• closed' : ''}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {!!selectedThreadId && (
-          <div style={{ marginTop: 10 }}>
-            <div className="quick-actions" style={{ marginBottom: 10 }}>
-              {selectedThread?.status !== 'closed' && (
-                <button className="btn btn-ghost btn-sm" onClick={() => updateThreadStatus('closed')}>
-                  Close Thread
-                </button>
-              )}
-              {selectedThread?.status === 'closed' && (
-                <button className="btn btn-ghost btn-sm" onClick={() => updateThreadStatus('open')}>
-                  Reopen Thread
-                </button>
-              )}
-            </div>
-            <div className="field">
-              <label>Message</label>
-              <textarea rows={3} value={messageBody} onChange={e => setMessageBody(e.target.value)} />
-            </div>
+      {/* Tasks */}
+      {!!selectedCandidateId && (
+        <>
+          <div className="card mb-16">
+            <div className="card-title">New Task</div>
             <div className="settings-grid">
+              {me?.isAdmin && (
+                <div className="field">
+                  <label>Assign To</label>
+                  <select value={taskForm.assigneeUserId} onChange={e => setTaskForm({ ...taskForm, assigneeUserId: e.target.value })}>
+                    <option value="">Select staff</option>
+                    {(queue.staffUsers || []).map(u => <option key={u.id} value={u.id}>{u.username}</option>)}
+                  </select>
+                </div>
+              )}
               <div className="field">
-                <label>Visibility</label>
-                <select value={messageVisibility} onChange={e => setMessageVisibility(e.target.value)}>
-                  <option value="shared_with_candidate">shared_with_candidate</option>
-                  <option value="internal_staff">internal_staff</option>
+                <label>Type</label>
+                <select value={taskForm.type} onChange={e => setTaskForm({ ...taskForm, type: e.target.value })}>
+                  <option value="research">Research</option>
+                  <option value="follow_up">Follow-up</option>
+                  <option value="interview_prep">Interview Prep</option>
+                  <option value="admin">Admin</option>
                 </select>
               </div>
               <div className="field">
+                <label>Priority</label>
+                <select value={taskForm.priority} onChange={e => setTaskForm({ ...taskForm, priority: e.target.value })}>
+                  <option value="low">Low</option>
+                  <option value="normal">Normal</option>
+                  <option value="high">High</option>
+                  <option value="urgent">Urgent</option>
+                </select>
+              </div>
+              <div className="field">
+                <label>Due Date</label>
+                <input type="date" value={taskForm.dueDate} onChange={e => setTaskForm({ ...taskForm, dueDate: e.target.value })} />
+              </div>
+            </div>
+            <div className="field"><label>Notes</label><textarea rows={2} value={taskForm.notes} onChange={e => setTaskForm({ ...taskForm, notes: e.target.value })} /></div>
+            <button className="btn btn-primary" onClick={createTask}
+              disabled={savingTask || !taskForm.notes.trim() || (me?.isAdmin && !taskForm.assigneeUserId)}>
+              {savingTask ? 'Creating…' : 'Create Task'}
+            </button>
+          </div>
+
+          <div className="card mb-16">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
+              <div className="card-title" style={{ margin: 0 }}>Tasks — {selectedCandidate?.username}</div>
+              <select value={taskStatusFilter} onChange={e => setTaskStatusFilter(e.target.value)} style={{ fontSize: 12 }}>
+                <option value="open">Open</option>
+                <option value="all">All</option>
+                <option value="todo">To Do</option>
+                <option value="in_progress">In Progress</option>
+                <option value="done">Done</option>
+              </select>
+              <select value={taskPriorityFilter} onChange={e => setTaskPriorityFilter(e.target.value)} style={{ fontSize: 12 }}>
+                <option value="all">Any Priority</option>
+                <option value="urgent">Urgent</option>
+                <option value="high">High</option>
+                <option value="normal">Normal</option>
+                <option value="low">Low</option>
+              </select>
+              <select value={taskDueFilter} onChange={e => setTaskDueFilter(e.target.value)} style={{ fontSize: 12 }}>
+                <option value="all">Any Due</option>
+                <option value="overdue">Overdue</option>
+                <option value="today">Due Today</option>
+                <option value="upcoming">Upcoming</option>
+                <option value="no_due">No Due Date</option>
+              </select>
+            </div>
+            {!filteredTasks.length && <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>No tasks match these filters.</div>}
+            {!!filteredTasks.length && (
+              <table className="data-table">
+                <thead><tr>
+                  {me?.isAdmin && <th>Assignee</th>}
+                  <th>Type</th><th>Priority</th><th>Status</th><th>Due</th><th>Notes</th><th />
+                </tr></thead>
+                <tbody>
+                  {filteredTasks.map(task => (
+                    <tr key={task.id}>
+                      {me?.isAdmin && (
+                        <td>
+                          <select value={String(task.assigneeUserId || '')} disabled={updatingTaskId === task.id}
+                            onChange={e => reassignTask(task, e.target.value)}>
+                            {(queue.staffUsers || []).map(u => <option key={u.id} value={u.id}>{u.username}</option>)}
+                          </select>
+                        </td>
+                      )}
+                      <td>{task.type}</td>
+                      <td>{task.priority}</td>
+                      <td><span className={`badge ${task.status === 'done' ? 'badge-green' : task.status === 'in_progress' ? 'badge-yellow' : ''}`}>{task.status}</span></td>
+                      <td style={{ fontSize: 12 }}>
+                        {fmt(task.dueAt)}
+                        {task.dueAt && task.status !== 'done' && Number(task.dueAt) < Date.now() && (
+                          <span className="badge badge-red" style={{ marginLeft: 4 }}>Overdue</span>
+                        )}
+                      </td>
+                      <td style={{ maxWidth: 200, fontSize: 13 }}>{task.notes || '—'}</td>
+                      <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                        {task.status !== 'in_progress' && task.status !== 'done' && (
+                          <button className="btn btn-ghost btn-sm" disabled={updatingTaskId === task.id} onClick={() => updateTaskStatus(task, 'in_progress')}>Start</button>
+                        )}
+                        {task.status !== 'done' && (
+                          <button className="btn btn-ghost btn-sm" disabled={updatingTaskId === task.id} onClick={() => updateTaskStatus(task, 'done')}>Done</button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* Threads */}
+      {!!selectedCandidateId && (
+        <>
+          <div className="card mb-16">
+            <div className="card-title">New Thread</div>
+            <div style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 10 }}>
+              Threads are conversations about a candidate — shared with them or internal staff-only notes.
+            </div>
+            <div className="settings-grid">
+              <div className="field">
+                <label>Topic</label>
+                <input value={threadTopic} onChange={e => setThreadTopic(e.target.value)} placeholder="e.g. Interview prep, follow-up strategy…" />
+              </div>
+              <div className="field">
                 <label>&nbsp;</label>
-                <button className="btn btn-primary" onClick={sendMessage} disabled={sendingMessage || !messageBody.trim() || selectedThread?.status === 'closed'}>
-                  {sendingMessage ? 'Sending…' : 'Send Message'}
+                <button className="btn btn-primary" onClick={createThread} disabled={creatingThread || !threadTopic.trim()}>
+                  {creatingThread ? 'Creating…' : 'Create Thread'}
                 </button>
               </div>
             </div>
-            {selectedThread?.status === 'closed' && (
-              <div style={{ color: 'var(--text-muted)', fontSize: 12, marginBottom: 8 }}>
-                Thread is closed. Reopen to send a new message.
+          </div>
+
+          <div className="card mb-16">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
+              <div className="card-title" style={{ margin: 0 }}>Threads — {selectedCandidate?.username}</div>
+              <select value={threadStatusFilter} onChange={e => setThreadStatusFilter(e.target.value)} style={{ fontSize: 12 }}>
+                <option value="open">Open</option>
+                <option value="all">All</option>
+                <option value="closed">Closed</option>
+              </select>
+            </div>
+
+            {!filteredThreads.length && <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>No threads yet.</div>}
+            {!!filteredThreads.length && (
+              <div className="tabs" style={{ marginBottom: 12 }}>
+                {filteredThreads.map(t => (
+                  <button key={t.id} className={`tab ${selectedThreadId === t.id ? 'active' : ''}`} onClick={() => setSelectedThreadId(t.id)}>
+                    {t.topic}{t.status === 'closed' ? ' · closed' : ''}
+                  </button>
+                ))}
               </div>
             )}
-            <table className="data-table" style={{ marginTop: 10 }}>
-              <thead>
-                <tr>
-                  <th>When</th>
-                  <th>Author</th>
-                  <th>Visibility</th>
-                  <th>Message</th>
-                </tr>
-              </thead>
-              <tbody>
-                {threadMessages.map(m => (
-                  <tr key={m.id}>
-                    <td>{formatDateTime(m.createdAt)}</td>
-                    <td>{m.authorUsername || m.authorUserId}</td>
-                    <td>{m.visibility}</td>
-                    <td>{m.body}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+
+            {!!selectedThreadId && (
+              <div>
+                <div className="quick-actions" style={{ marginBottom: 10 }}>
+                  {selectedThread?.status !== 'closed'
+                    ? <button className="btn btn-ghost btn-sm" onClick={() => updateThreadStatus('closed')}>Close Thread</button>
+                    : <button className="btn btn-ghost btn-sm" onClick={() => updateThreadStatus('open')}>Reopen Thread</button>
+                  }
+                </div>
+
+                {selectedThread?.status === 'closed' && (
+                  <div style={{ color: 'var(--text-muted)', fontSize: 12, marginBottom: 8 }}>Thread is closed — reopen to send messages.</div>
+                )}
+
+                <div className="field"><label>Message</label><textarea rows={3} value={messageBody} onChange={e => setMessageBody(e.target.value)} /></div>
+                <div className="settings-grid" style={{ marginBottom: 10 }}>
+                  <div className="field">
+                    <label>Visibility</label>
+                    <select value={messageVisibility} onChange={e => setMessageVisibility(e.target.value)}>
+                      <option value="shared_with_candidate">Shared with candidate</option>
+                      <option value="internal_staff">Internal staff only</option>
+                    </select>
+                  </div>
+                  <div className="field">
+                    <label>&nbsp;</label>
+                    <button className="btn btn-primary" onClick={sendMessage}
+                      disabled={sendingMessage || !messageBody.trim() || selectedThread?.status === 'closed'}>
+                      {sendingMessage ? 'Sending…' : 'Send'}
+                    </button>
+                  </div>
+                </div>
+
+                {!!threadMessages.length && (
+                  <table className="data-table">
+                    <thead><tr><th>When</th><th>Author</th><th>Visibility</th><th>Message</th></tr></thead>
+                    <tbody>
+                      {threadMessages.map(m => (
+                        <tr key={m.id}>
+                          <td style={{ fontSize: 12, whiteSpace: 'nowrap' }}>{fmt(m.createdAt)}</td>
+                          <td>{m.authorUsername || m.authorUserId}</td>
+                          <td><span className={`badge ${m.visibility === 'internal_staff' ? 'badge-yellow' : ''}`}>{m.visibility === 'internal_staff' ? 'Internal' : 'Shared'}</span></td>
+                          <td style={{ fontSize: 13 }}>{m.body}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        </>
+      )}
     </div>
   )
 }

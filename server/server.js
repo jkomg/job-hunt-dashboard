@@ -728,6 +728,59 @@ app.patch('/api/staff/threads/:threadId', requireAuth, requireStaffOrAdmin, asyn
   }
 })
 
+
+// Staff: create a job_seeker account and auto-assign to themselves
+app.post('/api/staff/candidates', requireAuth, requireStaffOrAdmin, async (req, res) => {
+  try {
+    const username = String(req.body?.username || '').trim().toLowerCase()
+    const password = String(req.body?.password || '').trim()
+    const email = req.body?.email == null ? null : String(req.body.email).trim().toLowerCase() || null
+    if (!/^[a-z0-9._-]{3,32}$/.test(username)) {
+      return res.status(400).json({ error: 'Username must be 3–32 chars: letters, numbers, dot, dash, underscore' })
+    }
+    if (password.length < 10) {
+      return res.status(400).json({ error: 'Temporary password must be at least 10 characters' })
+    }
+    const user = await createUserAccount({ username, password, email, role: 'job_seeker', organizationId: req.organizationId, mustChangePassword: true })
+    await createStaffAssignment({ organizationId: req.organizationId, staffUserId: req.userId, jobSeekerUserId: user.id })
+    await createAuditLog({ organizationId: req.organizationId, actorUserId: req.userId, targetUserId: user.id, action: 'staff.candidate.created', entityType: 'user', entityId: String(user.id), metadata: { username: user.username, role: 'job_seeker', autoAssigned: true } })
+    res.json({ ok: true, id: Number(user.id), username: user.username })
+  } catch (e) {
+    console.error('staff.candidates.create failed', e)
+    if (String(e?.message || '').includes('UNIQUE constraint failed')) return res.status(409).json({ error: 'That username or email is already taken' })
+    res.status(500).json({ error: 'Could not create candidate account' })
+  }
+})
+
+// Staff: self-assign to an existing unassigned job_seeker in the org
+app.post('/api/staff/self-assign', requireAuth, requireStaffOrAdmin, async (req, res) => {
+  try {
+    const jobSeekerUserId = Number(req.body?.jobSeekerUserId)
+    if (!jobSeekerUserId) return res.status(400).json({ error: 'jobSeekerUserId required' })
+    const assignment = await createStaffAssignment({ organizationId: req.organizationId, staffUserId: req.userId, jobSeekerUserId })
+    await createAuditLog({ organizationId: req.organizationId, actorUserId: req.userId, targetUserId: jobSeekerUserId, action: 'staff.self_assign', entityType: 'staff_assignment', entityId: assignment.id, metadata: { staffUserId: req.userId, jobSeekerUserId } })
+    res.json({ ok: true, assignment })
+  } catch (e) {
+    console.error('staff.selfAssign failed', e)
+    const msg = String(e?.message || '')
+    if (msg.includes('required') || msg.includes('different') || msg.includes('belong') || msg.includes('staff') || msg.includes('job_seeker')) return res.status(400).json({ error: msg })
+    res.status(500).json({ error: 'Could not create assignment' })
+  }
+})
+
+// Staff: list unassigned job_seekers in the org (for self-assign picker)
+app.get('/api/staff/unassigned-candidates', requireAuth, requireStaffOrAdmin, async (req, res) => {
+  try {
+    const [allUsers, assignments] = await Promise.all([listOrganizationUsers(req.organizationId), listStaffAssignments(req.organizationId)])
+    const assignedIds = new Set(assignments.map(a => String(a.jobSeekerUserId)))
+    const unassigned = allUsers.filter(u => u.role === 'job_seeker' && !assignedIds.has(String(u.id)))
+    res.json({ ok: true, candidates: unassigned })
+  } catch (e) {
+    console.error('staff.unassignedCandidates failed', e)
+    res.status(500).json({ error: 'Could not list unassigned candidates' })
+  }
+})
+
 app.post('/api/staff/recommendations', requireAuth, requireStaffOrAdmin, async (req, res) => {
   try {
     const jobSeekerUserId = Number(req.body?.jobSeekerUserId)
