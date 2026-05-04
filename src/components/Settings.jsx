@@ -155,6 +155,7 @@ export default function Settings({ me, onProfileUpdated }) {
   const [assignJobSeekerUserId, setAssignJobSeekerUserId] = useState('')
   const [savingAssignment, setSavingAssignment] = useState(false)
   const [removingAssignmentId, setRemovingAssignmentId] = useState('')
+  const [showRuns, setShowRuns] = useState(false)
 
   const healthState = status?.health?.status || 'unknown'
   const healthColor = useMemo(() => {
@@ -632,12 +633,13 @@ export default function Settings({ me, onProfileUpdated }) {
     <div>
       <div className="page-header">
         <h1>Settings</h1>
-        <div className="subtitle">Google Sheets sync setup, health, and troubleshooting</div>
+        <div className="subtitle">Profile, integrations, and administration</div>
       </div>
 
       {success && <div className="success-msg">{success}</div>}
       <ErrorCallout error={error} />
 
+      {/* ── Build Info ── */}
       <div className="card mb-16">
         <div className="card-title">Build Info</div>
         <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Frontend bundle: <code>{BUNDLE_VERSION}</code></div>
@@ -662,6 +664,7 @@ export default function Settings({ me, onProfileUpdated }) {
         )}
       </div>
 
+      {/* ── Profile ── */}
       <div className="card mb-16">
         <div className="card-title">Profile</div>
         <div className="field">
@@ -683,6 +686,232 @@ export default function Settings({ me, onProfileUpdated }) {
         </div>
       </div>
 
+      {/* ── Google Sheets Sync (merged: health + details + config + runs) ── */}
+      <div className="card mb-16">
+        <div className="card-title">Google Sheets Sync</div>
+
+        {/* Health summary */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
+          <strong style={{ color: healthColor }}>
+            {healthState === 'healthy' ? 'Healthy' : healthState === 'needs_attention' ? 'Needs attention' : 'Unknown'}
+          </strong>
+          <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+            Last success: {formatDateTime(status?.health?.lastSuccessAt)}
+          </span>
+          {status?.health?.lastErrorAt && (
+            <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+              · Last error: {formatDateTime(status.health.lastErrorAt)}
+            </span>
+          )}
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>
+          Saved locally: {formatDateTime(status?.freshness?.localLastSavedAt)}
+          {' · '}Synced to Google: {formatDateTime(status?.freshness?.googleLastSyncedAt)}
+        </div>
+        {status?.health?.lastError?.details && (
+          <div style={{ fontSize: 12, color: 'var(--red, #c0392b)', marginBottom: 8 }}>
+            Last error: {status.health.lastError.details}
+          </div>
+        )}
+
+        {/* Per-entity status */}
+        <div style={{ margin: '12px 0', borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+          {[
+            ['Pipeline', status?.entities?.pipeline],
+            ['Networking', status?.entities?.contacts],
+            ['Interviews', status?.entities?.interviews],
+            ['Events', status?.entities?.events]
+          ].map(([label, run]) => (
+            <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
+              <div>
+                <span style={{ fontWeight: 600, fontSize: 13 }}>{label}</span>
+                <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 8 }}>
+                  {run?.createdAt ? formatDateTime(run.createdAt) : 'No sync run yet'}
+                </span>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <span className={`badge ${run?.status === 'ok' ? 'badge-green' : run?.status === 'error' ? 'badge-red' : ''}`}>
+                  {run?.status || 'unknown'}
+                </span>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{describeRun(run)}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Connection config */}
+        <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12, marginBottom: 4 }}>
+          <div className="check-row" style={{ marginBottom: 12 }}>
+            <input
+              id="sync-enabled"
+              type="checkbox"
+              checked={enabled}
+              onChange={e => setEnabled(e.target.checked)}
+            />
+            <label htmlFor="sync-enabled">Enable Google Sheets sync</label>
+          </div>
+
+          <div className="field">
+            <label>Google Sheet ID</label>
+            <input
+              type="text"
+              value={sheetId}
+              onChange={e => setSheetId(e.target.value)}
+              placeholder="Paste sheet ID or URL"
+            />
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
+              Tip: you can paste the full URL; only the ID is used.
+            </div>
+          </div>
+          <div className="field">
+            <label>Pipeline Tabs (comma-separated)</label>
+            <input value={pipelineTabsText} onChange={e => setPipelineTabsText(e.target.value)} />
+          </div>
+          <div className="field">
+            <label>Networking Tabs (comma-separated)</label>
+            <input value={contactsTabsText} onChange={e => setContactsTabsText(e.target.value)} />
+          </div>
+          <div className="field">
+            <label>Interview Tabs (comma-separated)</label>
+            <input value={interviewsTabsText} onChange={e => setInterviewsTabsText(e.target.value)} />
+          </div>
+          <div className="field">
+            <label>Events Tabs (comma-separated)</label>
+            <input value={eventsTabsText} onChange={e => setEventsTabsText(e.target.value)} />
+          </div>
+          <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 }}>
+            Service account: {status?.config?.serviceAccountEmail || 'Not detected'}
+          </div>
+
+          <div className="quick-actions">
+            <button className="btn btn-primary" onClick={saveSettings} disabled={saving}>
+              {saving ? 'Saving…' : 'Save Settings'}
+            </button>
+            <button className="btn btn-ghost" onClick={testConnection} disabled={testing}>
+              {testing ? 'Testing…' : 'Test Connection'}
+            </button>
+            <button className="btn btn-ghost" onClick={syncNow} disabled={syncing}>
+              {syncing ? 'Syncing…' : 'Run Sync Now'}
+            </button>
+            <button className="btn btn-ghost" onClick={checkSchema} disabled={checkingSchema}>
+              {checkingSchema ? 'Checking…' : 'Check Sheet Mapping'}
+            </button>
+            <button className="btn btn-ghost" onClick={reconcileInterviews} disabled={reconcilingInterviews}>
+              {reconcilingInterviews ? 'Repairing…' : 'Repair Interviews from Pipeline'}
+            </button>
+          </div>
+        </div>
+
+        {/* Schema check results */}
+        {!!schemaReport && (
+          <div style={{ marginTop: 14, borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+            <div style={{ fontWeight: 700, marginBottom: 8 }}>Schema Check</div>
+            {[
+              ['Pipeline', schemaReport?.entities?.pipeline?.tabs || []],
+              ['Networking', schemaReport?.entities?.contacts?.tabs || []],
+              ['Interviews', schemaReport?.entities?.interviews?.tabs || []],
+              ['Events', schemaReport?.entities?.events?.tabs || []]
+            ].map(([sectionLabel, tabs]) => (
+              <div key={`schema-${sectionLabel}`} style={{ marginBottom: 10 }}>
+                <div style={{ fontWeight: 600, fontSize: 13 }}>{sectionLabel}</div>
+                {!tabs.length && <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>No tabs configured.</div>}
+                {tabs.map(tab => (
+                  <div key={`schema-${sectionLabel}-${tab.tabName}`} style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
+                    <span style={{ color: 'var(--text)' }}>{tab.tabName}</span>
+                    {`: core ${tab.coreMappedCount ?? 0}/${tab.coreTotal ?? 0} • total ${tab.mappedCount}/${tab.totalFields}`}
+                    {tab.coreMissing?.length > 0 ? ` • Missing core: ${tab.coreMissing.join(', ')}` : ''}
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Recent runs — collapsible */}
+        <div style={{ marginTop: 12, borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ fontWeight: 600, fontSize: 13 }}>
+              Recent Runs {runs.length > 0 && <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>({runs.length})</span>}
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="btn btn-ghost btn-sm" onClick={downloadSyncLogs} disabled={downloadingLogs}>
+                {downloadingLogs ? 'Downloading…' : 'Download CSV'}
+              </button>
+              <button className="btn btn-ghost btn-sm" onClick={() => setShowRuns(v => !v)}>
+                {showRuns ? 'Hide' : 'Show'}
+              </button>
+            </div>
+          </div>
+          {showRuns && (
+            <div style={{ marginTop: 8 }}>
+              {!runs.length && <div style={{ color: 'var(--text-muted)' }}>No sync runs yet.</div>}
+              {runs.slice(0, 20).map(run => (
+                <div
+                  key={run.id}
+                  className="contact-row"
+                  style={{ padding: '8px 0', borderBottom: '1px solid var(--border)' }}
+                >
+                  <div className="contact-info">
+                    <div className="contact-name">{run.direction}</div>
+                    <div className="contact-meta">{new Date(run.createdAt).toLocaleString()}</div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <span className={`badge ${run.status === 'ok' ? 'badge-green' : 'badge-red'}`}>{run.status}</span>
+                    {run.errorText && (
+                      <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4, maxWidth: 360 }}>
+                        {run.errorText}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Email Event Import (Gmail) ── */}
+      <div className="card mb-16">
+        <div className="card-title">Email Event Import (Gmail)</div>
+        <div style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 10 }}>
+          Imports interview/calendar invite events from Gmail into the Events section.
+        </div>
+        {!gmailStatus?.configured && (
+          <div style={{ color: 'var(--text-muted)', fontSize: 12, marginBottom: 10 }}>
+            Gmail import is not configured on this deployment yet.
+          </div>
+        )}
+        {gmailStatus?.configured && (
+          <div style={{ fontSize: 13, marginBottom: 10 }}>
+            Connection: <strong>{gmailStatus.connected ? `Connected (${gmailStatus.email || 'Unknown account'})` : 'Not connected'}</strong>
+          </div>
+        )}
+        <div className="quick-actions">
+          <button
+            className="btn btn-primary"
+            onClick={connectGmail}
+            disabled={gmailConnecting || !gmailStatus?.configured}
+          >
+            {gmailConnecting ? 'Connecting…' : gmailStatus?.connected ? 'Reconnect Gmail' : 'Connect Gmail'}
+          </button>
+          <button
+            className="btn btn-ghost"
+            onClick={importFromGmail}
+            disabled={gmailImporting || !gmailStatus?.connected}
+          >
+            {gmailImporting ? 'Importing…' : 'Import Events from Gmail'}
+          </button>
+          <button
+            className="btn btn-ghost"
+            onClick={disconnectGmail}
+            disabled={!gmailStatus?.connected}
+          >
+            Disconnect
+          </button>
+        </div>
+      </div>
+
+      {/* ── Assigned Users (staff/admin) ── */}
       {(me?.isAdmin || me?.role === 'staff') && (
         <div className="card mb-16">
           <div className="card-title">Assigned Users</div>
@@ -716,6 +945,7 @@ export default function Settings({ me, onProfileUpdated }) {
         </div>
       )}
 
+      {/* ── Admin: Team Access ── */}
       {me?.isAdmin && (
         <div className="card mb-16">
           <div className="card-title">Team Access</div>
@@ -767,6 +997,7 @@ export default function Settings({ me, onProfileUpdated }) {
         </div>
       )}
 
+      {/* ── Admin: Staff Assignments ── */}
       {me?.isAdmin && (
         <div className="card mb-16">
           <div className="card-title">Staff Assignments</div>
@@ -829,6 +1060,7 @@ export default function Settings({ me, onProfileUpdated }) {
         </div>
       )}
 
+      {/* ── Admin: Audit Log ── */}
       {me?.isAdmin && (
         <div className="card mb-16">
           <div className="card-title">Audit Log</div>
@@ -862,192 +1094,7 @@ export default function Settings({ me, onProfileUpdated }) {
         </div>
       )}
 
-      <div className="card mb-16">
-        <div className="card-title">Sync Health</div>
-        <div style={{ marginBottom: 8 }}>
-          <strong style={{ color: healthColor }}>
-            {healthState === 'healthy' ? 'Healthy' : healthState === 'needs_attention' ? 'Needs attention' : 'Unknown'}
-          </strong>
-        </div>
-        <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-          Last success: {formatDateTime(status?.health?.lastSuccessAt)}
-        </div>
-        <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-          Last error: {status?.health?.lastErrorAt ? formatDateTime(status.health.lastErrorAt) : 'None'}
-        </div>
-        <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>
-          Last saved locally: {formatDateTime(status?.freshness?.localLastSavedAt)}
-        </div>
-        <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-          Last synced to Google: {formatDateTime(status?.freshness?.googleLastSyncedAt)}
-        </div>
-        {status?.health?.lastError?.details && (
-          <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-muted)' }}>
-            Last error detail: {status.health.lastError.details}
-          </div>
-        )}
-      </div>
-
-      <div className="card mb-16">
-        <div className="card-title">Sync Details</div>
-        {[
-          ['Pipeline', status?.entities?.pipeline],
-          ['Networking', status?.entities?.contacts],
-          ['Interviews', status?.entities?.interviews],
-          ['Events', status?.entities?.events]
-        ].map(([label, run]) => (
-          <div key={label} className="contact-row" style={{ padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
-            <div className="contact-info">
-              <div className="contact-name">{label}</div>
-              <div className="contact-meta">{run?.createdAt ? formatDateTime(run.createdAt) : 'No sync run yet'}</div>
-            </div>
-            <div style={{ textAlign: 'right', maxWidth: 360 }}>
-              <span className={`badge ${run?.status === 'ok' ? 'badge-green' : run?.status === 'error' ? 'badge-red' : ''}`}>
-                {run?.status || 'unknown'}
-              </span>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
-                {describeRun(run)}
-              </div>
-            </div>
-          </div>
-        ))}
-        <div className="quick-actions" style={{ marginTop: 12 }}>
-          <button className="btn btn-ghost" onClick={downloadSyncLogs} disabled={downloadingLogs}>
-            {downloadingLogs ? 'Downloading…' : 'Download Sync Logs (CSV)'}
-          </button>
-        </div>
-      </div>
-
-      <div className="card mb-16">
-        <div className="card-title">Google Sheets Connection</div>
-
-        <div className="check-row" style={{ marginBottom: 12 }}>
-          <input
-            id="sync-enabled"
-            type="checkbox"
-            checked={enabled}
-            onChange={e => setEnabled(e.target.checked)}
-          />
-          <label htmlFor="sync-enabled">Enable Google Sheets sync</label>
-        </div>
-
-        <div className="field">
-          <label>Google Sheet ID</label>
-          <input
-            type="text"
-            value={sheetId}
-            onChange={e => setSheetId(e.target.value)}
-            placeholder="Paste sheet ID or URL"
-          />
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
-            Tip: you can paste the full URL; only the ID is used.
-          </div>
-        </div>
-
-        <div className="field">
-          <label>Pipeline Tabs (comma-separated)</label>
-          <input value={pipelineTabsText} onChange={e => setPipelineTabsText(e.target.value)} />
-        </div>
-        <div className="field">
-          <label>Networking Tabs (comma-separated)</label>
-          <input value={contactsTabsText} onChange={e => setContactsTabsText(e.target.value)} />
-        </div>
-        <div className="field">
-          <label>Interview Tabs (comma-separated)</label>
-          <input value={interviewsTabsText} onChange={e => setInterviewsTabsText(e.target.value)} />
-        </div>
-        <div className="field">
-          <label>Events Tabs (comma-separated)</label>
-          <input value={eventsTabsText} onChange={e => setEventsTabsText(e.target.value)} />
-        </div>
-
-        <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 }}>
-          Service account: {status?.config?.serviceAccountEmail || 'Not detected'}
-        </div>
-
-        <div className="quick-actions">
-          <button className="btn btn-primary" onClick={saveSettings} disabled={saving}>
-            {saving ? 'Saving…' : 'Save Settings'}
-          </button>
-          <button className="btn btn-ghost" onClick={testConnection} disabled={testing}>
-            {testing ? 'Testing…' : 'Test Connection'}
-          </button>
-          <button className="btn btn-ghost" onClick={syncNow} disabled={syncing}>
-            {syncing ? 'Syncing…' : 'Run Sync Now'}
-          </button>
-          <button className="btn btn-ghost" onClick={checkSchema} disabled={checkingSchema}>
-            {checkingSchema ? 'Checking…' : 'Check Sheet Mapping'}
-          </button>
-          <button className="btn btn-ghost" onClick={reconcileInterviews} disabled={reconcilingInterviews}>
-            {reconcilingInterviews ? 'Repairing…' : 'Repair Interviews from Pipeline'}
-          </button>
-        </div>
-
-        {!!schemaReport && (
-          <div style={{ marginTop: 14, borderTop: '1px solid var(--border)', paddingTop: 12 }}>
-            <div style={{ fontWeight: 700, marginBottom: 8 }}>Schema Check</div>
-            {[
-              ['Pipeline', schemaReport?.entities?.pipeline?.tabs || []],
-              ['Networking', schemaReport?.entities?.contacts?.tabs || []],
-              ['Interviews', schemaReport?.entities?.interviews?.tabs || []],
-              ['Events', schemaReport?.entities?.events?.tabs || []]
-            ].map(([sectionLabel, tabs]) => (
-              <div key={`schema-${sectionLabel}`} style={{ marginBottom: 10 }}>
-                <div style={{ fontWeight: 600, fontSize: 13 }}>{sectionLabel}</div>
-                {!tabs.length && <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>No tabs configured.</div>}
-                {tabs.map(tab => (
-                  <div key={`schema-${sectionLabel}-${tab.tabName}`} style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
-                    <span style={{ color: 'var(--text)' }}>{tab.tabName}</span>
-                    {`: core ${tab.coreMappedCount ?? 0}/${tab.coreTotal ?? 0} • total ${tab.mappedCount}/${tab.totalFields}`}
-                    {tab.coreMissing?.length > 0 ? ` • Missing core: ${tab.coreMissing.join(', ')}` : ''}
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div className="card mb-16">
-        <div className="card-title">Email Event Import (Gmail)</div>
-        <div style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 10 }}>
-          Imports interview/calendar invite events from Gmail into the Events section.
-        </div>
-        {!gmailStatus?.configured && (
-          <div style={{ color: 'var(--text-muted)', fontSize: 12, marginBottom: 10 }}>
-            Gmail import is not configured on this deployment yet.
-          </div>
-        )}
-        {gmailStatus?.configured && (
-          <div style={{ fontSize: 13, marginBottom: 10 }}>
-            Connection: <strong>{gmailStatus.connected ? `Connected (${gmailStatus.email || 'Unknown account'})` : 'Not connected'}</strong>
-          </div>
-        )}
-        <div className="quick-actions">
-          <button
-            className="btn btn-primary"
-            onClick={connectGmail}
-            disabled={gmailConnecting || !gmailStatus?.configured}
-          >
-            {gmailConnecting ? 'Connecting…' : gmailStatus?.connected ? 'Reconnect Gmail' : 'Connect Gmail'}
-          </button>
-          <button
-            className="btn btn-ghost"
-            onClick={importFromGmail}
-            disabled={gmailImporting || !gmailStatus?.connected}
-          >
-            {gmailImporting ? 'Importing…' : 'Import Events from Gmail'}
-          </button>
-          <button
-            className="btn btn-ghost"
-            onClick={disconnectGmail}
-            disabled={!gmailStatus?.connected}
-          >
-            Disconnect
-          </button>
-        </div>
-      </div>
-
+      {/* ── Backup & Restore (admin only) ── */}
       <div className="card">
         <div className="card-title">Backup & Restore</div>
         <div style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 10 }}>
@@ -1079,31 +1126,6 @@ export default function Settings({ me, onProfileUpdated }) {
         <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>
           `.db` export works only in local SQLite mode (for example `DATABASE_URL=file:./data/app.db`).
         </div>
-      </div>
-
-      <div className="card" style={{ marginTop: 16 }}>
-        <div className="card-title">Recent Sync Runs</div>
-        {!runs.length && <div style={{ color: 'var(--text-muted)' }}>No sync runs yet.</div>}
-        {runs.slice(0, 20).map(run => (
-          <div
-            key={run.id}
-            className="contact-row"
-            style={{ padding: '10px 0', borderBottom: '1px solid var(--border)' }}
-          >
-            <div className="contact-info">
-              <div className="contact-name">{run.direction}</div>
-              <div className="contact-meta">{new Date(run.createdAt).toLocaleString()}</div>
-            </div>
-            <div style={{ textAlign: 'right' }}>
-              <span className={`badge ${run.status === 'ok' ? 'badge-green' : 'badge-red'}`}>{run.status}</span>
-              {run.errorText && (
-                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4, maxWidth: 360 }}>
-                  {run.errorText}
-                </div>
-              )}
-            </div>
-          </div>
-        ))}
       </div>
     </div>
   )
