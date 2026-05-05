@@ -240,42 +240,6 @@ export default function Dashboard({ onNavigate, me }) {
       <div className="morning-greeting">Good morning, {me?.displayName || 'there'}.</div>
       <div className="today-date">{todayDate}</div>
 
-      {syncStatus?.health && (
-        <div
-          className="card mb-16"
-          style={{ borderColor: syncStatus.health.status === 'needs_attention' ? 'var(--yellow)' : 'var(--green)' }}
-        >
-          <div className="card-title">
-            {syncStatus.health.status === 'needs_attention' ? '⚠️ Sync Needs Attention' : '✅ Sync Healthy'}
-          </div>
-          <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>
-            Last success: {syncStatus.health.lastSuccessAt ? new Date(syncStatus.health.lastSuccessAt).toLocaleString() : 'Never'}
-          </div>
-          <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>
-            Last local save: {syncStatus.freshness?.localLastSavedAt ? `${timeAgo(syncStatus.freshness.localLastSavedAt)}` : 'Never'}
-          </div>
-          <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>
-            Last Google sync: {syncStatus.freshness?.googleLastSyncedAt ? `${timeAgo(syncStatus.freshness.googleLastSyncedAt)}` : 'Never'}
-          </div>
-          {syncStatus.health.lastError?.details && (
-            <div style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 6 }}>
-              Last issue: {syncStatus.health.lastError.details}
-            </div>
-          )}
-          <div style={{ marginTop: 10, fontSize: 12, color: 'var(--text-muted)' }}>
-            <div>Pipeline: {summarizeSync(syncStatus.entities?.pipeline)}</div>
-            <div>Networking: {summarizeSync(syncStatus.entities?.contacts)}</div>
-            <div>Interviews: {summarizeSync(syncStatus.entities?.interviews)}</div>
-            <div>Events: {summarizeSync(syncStatus.entities?.events)}</div>
-          </div>
-          <div style={{ marginTop: 10 }}>
-            <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('settings')}>
-              Open sync settings →
-            </button>
-          </div>
-        </div>
-      )}
-
       <div className="card mb-16">
         <div className="card-title">Support Inbox</div>
         <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>
@@ -291,80 +255,79 @@ export default function Dashboard({ onNavigate, me }) {
         </div>
       </div>
 
-      <div className="card mb-16">
-        <div className="card-title">Yesterday's Top 3 — Today's Agenda</div>
-        {yesterdayTop3Lines.length > 0 ? (
-          <ul className="top3-list">
-            {yesterdayTop3Lines.map((line, i) => <li key={i}>{line}</li>)}
-          </ul>
-        ) : todayTop3Lines.length >= 3 ? (
-          <div style={{ color: 'var(--green)', fontSize: 13 }}>
-            Top 3 is set for tomorrow in today's check-in. You're good.
-          </div>
-        ) : (
-          <div>
-            <p style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 12 }}>No Top 3 logged yesterday.</p>
-            <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('checkin')}>
-              Log today's now →
-            </button>
-          </div>
-        )}
-      </div>
-
       <div className="card mb-16" style={{ borderColor: 'var(--accent)' }}>
-        <div className="card-title" style={{ color: 'var(--accent)' }}>Focus Now</div>
+        <div className="card-title" style={{ color: 'var(--accent)' }}>Briefing Priorities</div>
         <div className="contact-row" style={{ padding: '8px 0' }}>
           <div className="contact-info">
-            <div className="contact-name">📞 Interviews</div>
+            <div className="contact-name">Top 3 Plan</div>
+            <div className="contact-meta">
+              {yesterdayTop3Lines.length > 0
+                ? 'Using yesterday plan for today.'
+                : todayTop3Lines.length >= 3
+                  ? 'Top 3 already set for tomorrow.'
+                  : 'No Top 3 plan found.'}
+            </div>
+          </div>
+          <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('checkin')}>Open Check-in</button>
+        </div>
+        {yesterdayTop3Lines.length > 0 && (
+          <ul className="top3-list" style={{ marginTop: 8 }}>
+            {yesterdayTop3Lines.map((line, i) => <li key={i}>{line}</li>)}
+          </ul>
+        )}
+
+        <div className="contact-row" style={{ padding: '8px 0' }}>
+          <div className="contact-info">
+            <div className="contact-name">📞 Interviews first</div>
             <div className="contact-meta">{dueInterviewActions.length} due actions · {upcomingInterviews.length} upcoming</div>
           </div>
           <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('interviews')}>Open</button>
         </div>
         <div className="contact-row" style={{ padding: '8px 0' }}>
           <div className="contact-info">
-            <div className="contact-name">🔁 Follow-ups</div>
+            <div className="contact-name">🔁 Due follow-ups</div>
             <div className="contact-meta">{followUpsTotal} due ({duePipelineFollowUps.length} pipeline, {overdueContacts.length} contacts)</div>
           </div>
-          <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('pipeline', { mode: 'due_followups' })}>Open in Pipeline</button>
+          <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('pipeline', { mode: 'due_followups' })}>Open</button>
         </div>
         <div className="contact-row" style={{ padding: '8px 0' }}>
           <div className="contact-info">
-            <div className="contact-name">🧭 Queue</div>
-            <div className="contact-meta">{todayQueue.length} total items · {health?.staleTotal || 0} stalled</div>
+            <div className="contact-name">🧭 Stalled pipeline</div>
+            <div className="contact-meta">{health?.staleTotal || 0} stalled of {todayQueue.length} queue items</div>
           </div>
-          <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('pipeline', { mode: 'stale_actions' })}>Stale items</button>
+          <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('pipeline', { mode: 'stale_actions' })}>Open</button>
         </div>
+
+        {!!topQueue.length && (
+          <div style={{ marginTop: 10 }}>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>Next actions</div>
+            {topQueue.map(item => (
+              <div key={item.id} className="contact-row" style={{ padding: '8px 0' }}>
+                <div className="contact-info">
+                  <div className="contact-name">{queueIcon(item.type)} {item.title}</div>
+                  <div className="contact-meta">{item.reason}</div>
+                </div>
+                <button className="btn btn-ghost btn-sm" onClick={() => openItem(item)}>Open</button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {!!priorityFramework.length && (
+          <div style={{ marginTop: 10 }}>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>Priority buckets</div>
+            {priorityFramework.map(p => (
+              <div key={p.id} className="contact-row" style={{ padding: '8px 0' }}>
+                <div className="contact-info">
+                  <div className="contact-name">{p.label}</div>
+                  <div className="contact-meta">{p.count} item{p.count === 1 ? '' : 's'}</div>
+                </div>
+                <button className="btn btn-ghost btn-sm" onClick={() => openPriority(p.id, p.route)}>Open</button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
-
-      {!!topQueue.length && (
-        <div className="card mb-16">
-          <div className="card-title">Top 3 Actions</div>
-          {topQueue.map(item => (
-            <div key={item.id} className="contact-row" style={{ padding: '10px 0' }}>
-              <div className="contact-info">
-                <div className="contact-name">{queueIcon(item.type)} {item.title}</div>
-                <div className="contact-meta">{item.reason}</div>
-              </div>
-              <button className="btn btn-ghost btn-sm" onClick={() => openItem(item)}>Open</button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {!!priorityFramework.length && (
-        <div className="card mb-16">
-          <div className="card-title">6 Priorities</div>
-          {priorityFramework.map(p => (
-            <div key={p.id} className="contact-row" style={{ padding: '8px 0' }}>
-              <div className="contact-info">
-                <div className="contact-name">{p.label}</div>
-                <div className="contact-meta">{p.count} item{p.count === 1 ? '' : 's'}</div>
-              </div>
-              <button className="btn btn-ghost btn-sm" onClick={() => openPriority(p.id, p.route)}>Open</button>
-            </div>
-          ))}
-        </div>
-      )}
 
       <div className="mb-16">
         <div className="card-title" style={{ marginBottom: 10 }}>This Week's Numbers</div>
@@ -384,6 +347,36 @@ export default function Dashboard({ onNavigate, me }) {
           <button className="btn btn-ghost" onClick={() => onNavigate('pipeline')}>🎯 Pipeline</button>
         </div>
       </div>
+
+      {syncStatus?.health && (
+        <div
+          className="card"
+          style={{ marginTop: 16, borderColor: syncStatus.health.status === 'needs_attention' ? 'var(--yellow)' : 'var(--green)' }}
+        >
+          <div className="card-title">
+            {syncStatus.health.status === 'needs_attention' ? '⚠️ Sync Needs Attention' : '✅ Sync Healthy'}
+          </div>
+          <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>
+            Last success: {syncStatus.health.lastSuccessAt ? new Date(syncStatus.health.lastSuccessAt).toLocaleString() : 'Never'}
+          </div>
+          <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>
+            Last local save: {syncStatus.freshness?.localLastSavedAt ? `${timeAgo(syncStatus.freshness.localLastSavedAt)}` : 'Never'}
+          </div>
+          <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>
+            Last Google sync: {syncStatus.freshness?.googleLastSyncedAt ? `${timeAgo(syncStatus.freshness.googleLastSyncedAt)}` : 'Never'}
+          </div>
+          {syncStatus.health.lastError?.details && (
+            <div style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 6 }}>
+              Last issue: {syncStatus.health.lastError.details}
+            </div>
+          )}
+          <div style={{ marginTop: 10 }}>
+            <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('settings')}>
+              Open sync settings →
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
