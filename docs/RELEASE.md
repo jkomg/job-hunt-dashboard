@@ -1,29 +1,23 @@
-# Release Guide
+## Release Guide
 
 ## Goal
 
-Ship a stable release that non-technical users can run locally with Docker and local persistence.
+Ship a stable **hosted** release where end users sign in to a running service and do not perform local installation.
 
-## Release Target
+## Active Release Target
 
-- Version: `v1.0.0`
-- Primary install path: Docker local mode (`scripts/start-local-docker.sh`)
-- Optional paths: Cloud Run, legacy Notion import
+- Version: `v2.0.0`
+- Primary model: hosted server/client app
+- User onboarding: admin-created/invited accounts
+- Local Docker path: legacy/dev/recovery only
 
-## Next Release Track
+## v2 planning docs
 
-The next major release track is the Remote Rebellion hosted platform shift:
+- Hosted release plan: [HOSTED_V2_RELEASE_PLAN.md](./HOSTED_V2_RELEASE_PLAN.md)
+- Platform shift context: [RR_PLATFORM_RELEASE_PLAN.md](./RR_PLATFORM_RELEASE_PLAN.md)
+- DB platform decision (Turso vs Cloud SQL): [DB_PLATFORM_DECISION.md](./DB_PLATFORM_DECISION.md)
 
-- Multi-tenant data model with `Remote Rebellion` as the first organization
-- Job seeker, staff, and admin roles
-- RR staff workspace for adding jobs and flagging follow-ups
-- Database-first job intake
-- Google Sheets as import/export/backup, not the source of truth
-- Low-cost Cloud Run deployment by default
-
-See [RR_PLATFORM_RELEASE_PLAN.md](./RR_PLATFORM_RELEASE_PLAN.md).
-
-## Current Release State (Post Phase 2 Slices)
+## Current Product State
 
 Shipped and active:
 
@@ -38,39 +32,39 @@ Shipped and active:
 - Member Inbox view for candidate-visible staff support threads
 - Audit log coverage for staff/admin actions
 
-## Pre-Release Checklist
+## Pre-Release Checklist (v2)
 
-1. Validate local easy install from scratch:
-   - clone repo
-   - run `./scripts/start-local-docker.sh`
-   - confirm login and data persistence after restart
-2. Validate core API flows (pipeline, contacts, interviews, events, templates, watchlist, daily).
-3. Validate docs:
-   - README quick start
-   - scripts README
-   - `.env.example`
-4. Validate cloud path still deploys (if publishing hosted option).
-5. Confirm changelog is updated.
+1. Validate tenant isolation and role scoping in API + UI.
+2. Validate hosted account lifecycle:
+   - admin creates/invites user
+   - user logs in and changes password
+3. Validate core API flows (pipeline, contacts, interviews, events, templates, watchlist, daily).
+4. Validate hosted docs:
+   - README hosted onboarding
+   - staff/admin runbook
+   - security checklist
+5. Validate sync and backup operational paths.
+6. Confirm changelog is updated.
 
-## Cut Release
+## Cut Release (v2)
 
 ```bash
-git tag -a v1.0.0 -m "v1.0.0"
-git push origin v1.0.0
+git tag -a v2.0.0 -m "Hosted multi-tenant release"
+git push origin v2.0.0
 ```
 
 Create a GitHub Release with:
 
-- Title: `v1.0.0`
+- Title: `v2.0.0`
 - Notes summary:
-  - Docker local-first setup
-  - Turso-backed full app runtime
-  - Optional Google Sheets sync
-  - Optional Notion import tool
+  - hosted server/client onboarding model
+  - multi-tenant org/user role boundaries
+  - DB-first operations with optional Sheets integration
+  - Turso as v2 default DB platform
 
 ## Recommended User-Facing Release Notes
 
-- “No paid tools required for local use.”
-- “Install with Docker in one command path.”
-- “Data stays on your machine by default.”
-- “Google Sheets sync is optional.”
+- “Your org gets accounts and role-based access.”
+- “No local install required for end users.”
+- “Data is managed in-app as source of truth.”
+- “Google Sheets is optional integration/backup.”
