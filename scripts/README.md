@@ -133,6 +133,23 @@ End-to-end local smoke test for reliability checks.
 npm run smoke:test
 ```
 
+## release-gate-v2.sh
+
+Hosted v2 release baseline gate script.
+
+### What it validates
+
+- hosted v2 release docs are present
+- tenant schema/isolation markers exist
+- production build passes
+- local smoke test passes
+
+### Running
+
+```bash
+npm run release:gate:v2
+```
+
 ## import-legacy-jobs.js (legacy)
 
 Bulk-imports a legacy Notion page of job applications into the pipeline database.

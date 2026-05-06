@@ -9,6 +9,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "smoke:test": "node scripts/smoke-test-local.mjs",
+    "release:gate:v2": "bash scripts/release-gate-v2.sh",
     "migrate:notion": "node scripts/migrate-notion-to-turso.mjs",
     "start:docker-local": "./scripts/start-local-docker.sh"
   },
