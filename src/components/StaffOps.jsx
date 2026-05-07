@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
+const JOB_SOURCES = ['LinkedIn', 'Indeed', 'Company Website', 'Referral', 'Recruiter', 'Glassdoor', 'Wellfound', 'Hacker News', 'Remote.co', 'Remote Rebellion', 'Welcome to the Jungle', 'Other']
+
 async function api(path, options = {}) {
   const res = await fetch(path, { credentials: 'include', ...options })
   const data = await res.json().catch(() => ({}))
@@ -62,6 +64,7 @@ export default function StaffOps({ me, mode = 'operations' }) {
 
   // rec form
   const [recForm, setRecForm] = useState({ company: '', role: '', jobUrl: '', source: '', fitNote: '' })
+  const [customRecSourceMode, setCustomRecSourceMode] = useState(false)
   const [savingRec, setSavingRec] = useState(false)
   const [postingRecId, setPostingRecId] = useState('')
   const [notifyOnPost, setNotifyOnPost] = useState(true)
@@ -266,6 +269,7 @@ export default function StaffOps({ me, mode = 'operations' }) {
         body: JSON.stringify({ jobSeekerUserId: Number(selectedCandidateId), ...recForm })
       })
       setRecForm({ company: '', role: '', jobUrl: '', source: '', fitNote: '' })
+      setCustomRecSourceMode(false)
       setSuccess('Recommendation saved as draft.')
       await load()
     } catch (e) { setError(e.message) }
@@ -545,7 +549,34 @@ export default function StaffOps({ me, mode = 'operations' }) {
             <div className="field"><label>Company</label><input value={recForm.company} onChange={e => setRecForm({ ...recForm, company: e.target.value })} /></div>
             <div className="field"><label>Role</label><input value={recForm.role} onChange={e => setRecForm({ ...recForm, role: e.target.value })} /></div>
             <div className="field"><label>Job URL</label><input value={recForm.jobUrl} onChange={e => setRecForm({ ...recForm, jobUrl: e.target.value })} /></div>
-            <div className="field"><label>Source</label><input value={recForm.source} onChange={e => setRecForm({ ...recForm, source: e.target.value })} /></div>
+            <div className="field">
+              <label>Source</label>
+              <select
+                value={customRecSourceMode ? '__custom__' : recForm.source}
+                onChange={e => {
+                  const next = e.target.value
+                  if (next === '__custom__') {
+                    setCustomRecSourceMode(true)
+                    if (JOB_SOURCES.includes(recForm.source)) setRecForm({ ...recForm, source: '' })
+                    return
+                  }
+                  setCustomRecSourceMode(false)
+                  setRecForm({ ...recForm, source: next })
+                }}
+              >
+                <option value="">—</option>
+                {JOB_SOURCES.map(s => <option key={s} value={s}>{s}</option>)}
+                <option value="__custom__">Custom source…</option>
+              </select>
+              {customRecSourceMode && (
+                <input
+                  style={{ marginTop: 8 }}
+                  value={recForm.source}
+                  onChange={e => setRecForm({ ...recForm, source: e.target.value })}
+                  placeholder="Enter custom source"
+                />
+              )}
+            </div>
           </div>
           <div className="field"><label>Fit Note</label><textarea rows={2} value={recForm.fitNote} onChange={e => setRecForm({ ...recForm, fitNote: e.target.value })} /></div>
           <div className="quick-actions" style={{ marginBottom: 16 }}>
