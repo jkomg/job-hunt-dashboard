@@ -282,6 +282,8 @@ export default function Pipeline({ navIntent }) {
   const [showAdd, setShowAdd] = useState(false)
   const [filter, setFilter] = useState('active')
   const [sourceFilter, setSourceFilter] = useState('all')
+  const [savedViews, setSavedViews] = useState([])
+  const [viewName, setViewName] = useState('')
   const dragCard = useRef(null)
   const [dragOver, setDragOver] = useState(null)
 
@@ -293,6 +295,20 @@ export default function Pipeline({ navIntent }) {
   }
 
   useEffect(load, [])
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('pipeline_saved_views')
+      const parsed = raw ? JSON.parse(raw) : []
+      if (Array.isArray(parsed)) setSavedViews(parsed)
+    } catch {
+      setSavedViews([])
+    }
+  }, [])
+
+  useEffect(() => {
+    try { localStorage.setItem('pipeline_saved_views', JSON.stringify(savedViews)) } catch {}
+  }, [savedViews])
 
   useEffect(() => {
     if (!navIntent) return
@@ -308,6 +324,23 @@ export default function Pipeline({ navIntent }) {
 
   function handleUpdate(id, updatedFields) {
     setItems(prev => prev.map(item => item.id === id ? { ...item, ...updatedFields } : item))
+  }
+
+  function saveCurrentView() {
+    const name = viewName.trim()
+    if (!name) return
+    const view = { id: `view-${Date.now()}`, name, filter, sourceFilter }
+    setSavedViews(prev => [view, ...prev.filter(v => v.name.toLowerCase() !== name.toLowerCase())].slice(0, 12))
+    setViewName('')
+  }
+
+  function applyView(view) {
+    setFilter(view.filter || 'active')
+    setSourceFilter(view.sourceFilter || 'all')
+  }
+
+  function deleteView(id) {
+    setSavedViews(prev => prev.filter(v => v.id !== id))
   }
 
   // ─── Drag and drop ───────────────────────────────────
@@ -438,6 +471,22 @@ export default function Pipeline({ navIntent }) {
           <option value="all">All sources</option>
           {sourceOptions.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
+      </div>
+      <div className="quick-actions mb-16" style={{ alignItems: 'center', flexWrap: 'wrap' }}>
+        <label style={{ fontSize: 12, color: 'var(--text-muted)' }}>Saved views</label>
+        <input
+          value={viewName}
+          onChange={e => setViewName(e.target.value)}
+          placeholder="e.g. RR Due Follow-ups"
+          style={{ minWidth: 220 }}
+        />
+        <button className="btn btn-ghost btn-sm" onClick={saveCurrentView} disabled={!viewName.trim()}>Save View</button>
+        {!!savedViews.length && savedViews.map(v => (
+          <span key={v.id} className="badge badge-blue" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <button className="btn btn-ghost btn-sm" onClick={() => applyView(v)} style={{ padding: 0, border: 'none' }}>{v.name}</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => deleteView(v.id)} style={{ padding: 0, border: 'none' }}>×</button>
+          </span>
+        ))}
       </div>
 
       {items.length === 0 && (
