@@ -84,6 +84,7 @@ export default function StaffOps({ me, mode = 'operations' }) {
   const [creatingThread, setCreatingThread] = useState(false)
   const [sendingMessage, setSendingMessage] = useState(false)
   const [threadStatusFilter, setThreadStatusFilter] = useState('open')
+  const [threadActivityFilter, setThreadActivityFilter] = useState('all')
 
   // candidate support summary
   const [candidateSupportSummary, setCandidateSupportSummary] = useState(null)
@@ -215,9 +216,13 @@ export default function StaffOps({ me, mode = 'operations' }) {
     return threads.filter(t => {
       if (threadStatusFilter === 'open' && t.status === 'closed') return false
       if (threadStatusFilter !== 'open' && threadStatusFilter !== 'all' && t.status !== threadStatusFilter) return false
+      const updatedAt = Number(t.updatedAt || t.createdAt || 0)
+      const isStale = t.status === 'open' && updatedAt > 0 && (Date.now() - updatedAt) > staleMs
+      if (threadActivityFilter === 'stale' && !isStale) return false
+      if (threadActivityFilter === 'fresh' && isStale) return false
       return true
-    })
-  }, [threads, threadStatusFilter])
+    }).sort((a, b) => Number(b.updatedAt || b.createdAt || 0) - Number(a.updatedAt || a.createdAt || 0))
+  }, [threads, threadStatusFilter, threadActivityFilter])
 
   async function createCandidate() {
     setCreatingCandidate(true); setError(''); setSuccess('')
@@ -728,17 +733,42 @@ export default function StaffOps({ me, mode = 'operations' }) {
                 <option value="all">All</option>
                 <option value="closed">Closed</option>
               </select>
+              <select value={threadActivityFilter} onChange={e => setThreadActivityFilter(e.target.value)} style={{ fontSize: 12 }}>
+                <option value="all">Any Activity</option>
+                <option value="stale">Stale 48h+</option>
+                <option value="fresh">Fresh &lt; 48h</option>
+              </select>
             </div>
 
             {!filteredThreads.length && <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>No threads yet.</div>}
             {!!filteredThreads.length && (
-              <div className="tabs" style={{ marginBottom: 12 }}>
-                {filteredThreads.map(t => (
-                  <button key={t.id} className={`tab ${selectedThreadId === t.id ? 'active' : ''}`} onClick={() => setSelectedThreadId(t.id)}>
-                    {t.topic}{t.status === 'closed' ? ' · closed' : ''}
-                  </button>
-                ))}
-              </div>
+              <table className="data-table" style={{ marginBottom: 12 }}>
+                <thead><tr><th>Topic</th><th>Status</th><th>Updated</th><th /></tr></thead>
+                <tbody>
+                  {filteredThreads.map(t => {
+                    const updatedAt = Number(t.updatedAt || t.createdAt || 0)
+                    const isStale = t.status === 'open' && updatedAt > 0 && (Date.now() - updatedAt) > 48 * 60 * 60 * 1000
+                    const active = selectedThreadId === t.id
+                    return (
+                      <tr key={t.id} style={{ background: active ? 'var(--bg-alt)' : undefined }}>
+                        <td style={{ fontWeight: active ? 600 : 500 }}>{t.topic}</td>
+                        <td>
+                          <span className={`badge ${t.status === 'closed' ? 'badge-yellow' : 'badge-green'}`}>
+                            {t.status === 'closed' ? 'Closed' : 'Open'}
+                          </span>
+                          {isStale && <span className="badge badge-red" style={{ marginLeft: 6 }}>Stale</span>}
+                        </td>
+                        <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>{rel(updatedAt || t.createdAt)}</td>
+                        <td style={{ textAlign: 'right' }}>
+                          <button className="btn btn-ghost btn-sm" onClick={() => setSelectedThreadId(t.id)}>
+                            {active ? 'Viewing' : 'Open'}
+                          </button>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
             )}
 
             {!!selectedThreadId && (
