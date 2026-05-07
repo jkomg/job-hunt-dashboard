@@ -30,7 +30,9 @@ const JOB_SEEKER_NAV = [
 
 const STAFF_NAV = [
   { id: 'dashboard', label: 'Briefing', icon: '☀️' },
-  { id: 'staff_ops', label: 'Staff Ops', icon: '🧭' },
+  { id: 'operations', label: 'Operations', icon: '🧭' },
+  { id: 'staff_tasks', label: 'Tasks', icon: '🗂️' },
+  { id: 'staff_threads', label: 'Threads', icon: '💬' },
   { id: 'settings',  label: 'Settings', icon: '⚙️' }
 ]
 
@@ -39,6 +41,7 @@ export default function App() {
   const [me, setMe] = useState(null)
   const [view, setView] = useState('dashboard')
   const [navIntent, setNavIntent] = useState(null)
+  const [staffBadges, setStaffBadges] = useState({ tasksOpen: 0, threadsOpen: 0 })
   const [theme, setTheme] = useTheme()
 
   function navigate(nextView, intent = null) {
@@ -71,7 +74,34 @@ export default function App() {
   const navItems = isStaffLike ? STAFF_NAV : JOB_SEEKER_NAV
 
   useEffect(() => {
+    if (!authed || !isStaffLike) return
+    let active = true
+    async function loadBadges() {
+      try {
+        const r = await fetch('/api/staff/queue', { credentials: 'include' })
+        if (!r.ok) return
+        const data = await r.json()
+        const summary = data?.summary || {}
+        if (!active) return
+        setStaffBadges({
+          tasksOpen: Number(summary.tasksTodo || 0) + Number(summary.tasksInProgress || 0),
+          threadsOpen: Number(summary.threadsOpen || 0)
+        })
+      } catch {
+        // ignore badge refresh errors
+      }
+    }
+    loadBadges()
+    const id = setInterval(loadBadges, 60000)
+    return () => {
+      active = false
+      clearInterval(id)
+    }
+  }, [authed, isStaffLike])
+
+  useEffect(() => {
     if (authed !== true || !me?.onboardingComplete || me?.mustChangePassword) return
+    if (view === 'staff_ops') setView('operations')
     const navIds = new Set(navItems.map(n => n.id))
     if (!navIds.has(view)) {
       setView(isStaffLike ? 'settings' : 'dashboard')
@@ -106,7 +136,11 @@ export default function App() {
       <aside className="sidebar">
         <div className="sidebar-logo">Job Hunt<span>.</span></div>
         <nav>
-          {navItems.map(n => (
+          {navItems.map(n => {
+            const badge = isStaffLike
+              ? (n.id === 'staff_tasks' ? staffBadges.tasksOpen : n.id === 'staff_threads' ? staffBadges.threadsOpen : 0)
+              : 0
+            return (
             <button
               key={n.id}
               className={`nav-item${view === n.id ? ' active' : ''}`}
@@ -114,8 +148,10 @@ export default function App() {
             >
               <span className="nav-icon">{n.icon}</span>
               {n.label}
+              {!!badge && <span className="nav-badge">{badge}</span>}
             </button>
-          ))}
+            )
+          })}
         </nav>
         <div className="sidebar-footer">
           {/* Theme picker */}
@@ -154,7 +190,9 @@ export default function App() {
         </div>
 
         {view === 'dashboard'  && <Dashboard onNavigate={navigate} me={me} />}
-        {isStaffLike && view === 'staff_ops' && <StaffOps me={me} />}
+        {isStaffLike && view === 'operations' && <StaffOps me={me} mode="operations" />}
+        {isStaffLike && view === 'staff_tasks' && <StaffOps me={me} mode="tasks" />}
+        {isStaffLike && view === 'staff_threads' && <StaffOps me={me} mode="threads" />}
         {!isStaffLike && view === 'checkin'    && <DailyCheckin />}
         {!isStaffLike && view === 'pipeline'   && <Pipeline navIntent={navIntent} />}
         {!isStaffLike && view === 'contacts'   && <Contacts />}
@@ -168,7 +206,11 @@ export default function App() {
 
       {/* Mobile bottom nav */}
       <nav className="bottom-nav">
-        {navItems.map(n => (
+        {navItems.map(n => {
+          const badge = isStaffLike
+            ? (n.id === 'staff_tasks' ? staffBadges.tasksOpen : n.id === 'staff_threads' ? staffBadges.threadsOpen : 0)
+            : 0
+          return (
           <button
             key={n.id}
             className={`bottom-nav-item${view === n.id ? ' active' : ''}`}
@@ -176,9 +218,11 @@ export default function App() {
           >
             <span className="nav-icon">{n.icon}</span>
             {n.label}
+            {!!badge && <span className="nav-badge">{badge}</span>}
             {view === n.id && <div className="bnav-dot" />}
           </button>
-        ))}
+          )
+        })}
       </nav>
     </div>
   )

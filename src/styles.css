@@ -162,6 +162,20 @@ html, body, #root {
 .nav-item:hover { background: var(--surface2); color: var(--text); }
 .nav-item.active { background: var(--accent-dim); color: var(--accent); font-weight: 600; }
 .nav-icon { font-size: 18px; width: 22px; text-align: center; flex-shrink: 0; }
+.nav-item .nav-badge {
+  margin-left: auto;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  padding: 0 6px;
+  background: var(--red);
+  color: #fff;
+  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+}
 
 .sidebar-footer {
   padding: 16px 20px 0;
@@ -289,6 +303,20 @@ html, body, #root {
 .bottom-nav-item .nav-icon { font-size: 22px; width: auto; }
 .bottom-nav-item:hover { color: var(--text); }
 .bottom-nav-item.active { color: var(--accent); }
+.bottom-nav-item .nav-badge {
+  margin-top: 2px;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  padding: 0 5px;
+  background: var(--red);
+  color: #fff;
+  font-size: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+}
 .bottom-nav-item.active .bnav-dot {
   width: 4px; height: 4px;
   background: var(--accent);
