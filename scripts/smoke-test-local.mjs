@@ -16,6 +16,7 @@ const THIRD_TEMP_PASSWORD = 'smoke3-temp-password-2026!'
 const THIRD_NEXT_PASSWORD = 'smoke3-password-2026!'
 const FOURTH_USERNAME = 'smoke4'
 const FOURTH_TEMP_PASSWORD = 'smoke4-temp-password-2026!'
+const SMOKE_SUITE = String(process.env.SMOKE_SUITE || 'full').trim().toLowerCase()
 
 async function reserveAvailablePort() {
   return await new Promise((resolve, reject) => {
@@ -369,6 +370,12 @@ async function run() {
     throw new Error(`Second user changed first user's pipeline: ${JSON.stringify(ownerPipeline.body)}`)
   }
   note('Cross-user write isolation passed')
+
+  if (SMOKE_SUITE === 'tenant') {
+    await api('/api/logout', { method: 'POST', allowStatuses: [200] })
+    note('Tenant isolation suite passed')
+    return
+  }
 
   const reassign = await api('/api/admin/staff-assignments', {
     method: 'POST',
