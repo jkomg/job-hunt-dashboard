@@ -121,11 +121,13 @@ export default function Settings({ me, onProfileUpdated }) {
   const [reconcilingInterviews, setReconcilingInterviews] = useState(false)
   const [exportingBackup, setExportingBackup] = useState(false)
   const [exportingDbFile, setExportingDbFile] = useState(false)
+  const [runningCostSnapshot, setRunningCostSnapshot] = useState(false)
   const [restoringBackup, setRestoringBackup] = useState(false)
   const [gmailStatus, setGmailStatus] = useState(null)
   const [gmailConnecting, setGmailConnecting] = useState(false)
   const [gmailImporting, setGmailImporting] = useState(false)
   const [status, setStatus] = useState(null)
+  const [costSnapshots, setCostSnapshots] = useState([])
   const [schemaReport, setSchemaReport] = useState(null)
   const [runs, setRuns] = useState([])
   const [healthMeta, setHealthMeta] = useState(null)
@@ -227,18 +229,21 @@ export default function Settings({ me, onProfileUpdated }) {
       setEventsTabsText(tabsToText(cfg.eventsTabs || ['Events']))
 
       if (me?.isAdmin) {
-        const [usersRes, assignmentsRes, auditRes] = await Promise.all([
+        const [usersRes, assignmentsRes, auditRes, costRes] = await Promise.all([
           api('/api/admin/users'),
           api('/api/admin/staff-assignments'),
-          api('/api/admin/audit-log?limit=60')
+          api('/api/admin/audit-log?limit=60'),
+          api('/api/admin/cost-snapshots?limit=10')
         ])
         setAdminUsers(usersRes?.users || [])
         setStaffAssignments(assignmentsRes?.assignments || [])
         setAuditLogs(auditRes?.logs || [])
+        setCostSnapshots(costRes?.snapshots || [])
       } else {
         setAdminUsers([])
         setStaffAssignments([])
         setAuditLogs([])
+        setCostSnapshots([])
       }
 
       if (me?.isAdmin || me?.role === 'staff') {
@@ -556,6 +561,21 @@ export default function Settings({ me, onProfileUpdated }) {
       setError(e.payload || { error: e.message })
     } finally {
       setExportingBackup(false)
+    }
+  }
+
+  async function runCostSnapshotNow() {
+    setRunningCostSnapshot(true)
+    setError(null)
+    setSuccess('')
+    try {
+      await api('/api/admin/cost-snapshots/run', { method: 'POST' })
+      setSuccess('Cost snapshot collected.')
+      await load()
+    } catch (e) {
+      setError(e.payload || { error: e.message })
+    } finally {
+      setRunningCostSnapshot(false)
     }
   }
 
@@ -1090,6 +1110,33 @@ export default function Settings({ me, onProfileUpdated }) {
                 })}
               </tbody>
             </table>
+          )}
+        </div>
+      )}
+
+      {me?.isAdmin && (
+        <div className="card mb-16">
+          <div className="card-title">Cost Snapshot</div>
+          <div style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 10 }}>
+            Snapshot includes Cloud Run scaling, scheduler jobs, artifact image count, logging exclusions, and budgets (when permitted).
+          </div>
+          <div className="quick-actions" style={{ marginBottom: 12 }}>
+            <button className="btn btn-ghost" onClick={runCostSnapshotNow} disabled={runningCostSnapshot}>
+              {runningCostSnapshot ? 'Running…' : 'Run Snapshot Now'}
+            </button>
+          </div>
+          {!costSnapshots.length && (
+            <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>No snapshots yet.</div>
+          )}
+          {!!costSnapshots.length && (
+            <div>
+              <div style={{ color: 'var(--text-muted)', fontSize: 12, marginBottom: 6 }}>
+                Latest: {formatDateTime(new Date(costSnapshots[0].created_at).toISOString())}
+              </div>
+              <pre style={{ maxHeight: 320, overflow: 'auto', fontSize: 12, whiteSpace: 'pre-wrap' }}>
+                {costSnapshots[0].summary_text}
+              </pre>
+            </div>
           )}
         </div>
       )}

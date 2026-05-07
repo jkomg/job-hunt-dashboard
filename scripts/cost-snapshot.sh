@@ -7,6 +7,9 @@ SERVICE_NAME="${SERVICE_NAME:-job-hunt-dashboard}"
 REPO_NAME="${REPO_NAME:-jobhunt-repo}"
 OUTPUT_FILE="${OUTPUT_FILE:-}"
 BILLING_ACCOUNT="${BILLING_ACCOUNT:-}"
+PUSH_URL="${PUSH_URL:-}"
+PUSH_TOKEN="${PUSH_TOKEN:-}"
+SNAPSHOT_SOURCE="${SNAPSHOT_SOURCE:-scheduler}"
 
 tmp_file="$(mktemp)"
 trap 'rm -f "$tmp_file"' EXIT
@@ -98,4 +101,19 @@ if [[ -n "$OUTPUT_FILE" ]]; then
   echo "Wrote snapshot to $OUTPUT_FILE"
 else
   cat "$tmp_file"
+fi
+
+if [[ -n "$PUSH_URL" && -n "$PUSH_TOKEN" ]]; then
+  escaped_summary="$(python3 - <<'PY' "$tmp_file"
+import json, pathlib, sys
+p = pathlib.Path(sys.argv[1])
+print(json.dumps(p.read_text()))
+PY
+)"
+  payload="{\"source\":\"${SNAPSHOT_SOURCE}\",\"summaryText\":${escaped_summary}}"
+  curl -sS -X POST "${PUSH_URL}" \
+    -H "content-type: application/json" \
+    -H "x-cost-token: ${PUSH_TOKEN}" \
+    --data "$payload" >/dev/null
+  echo "Pushed snapshot to ${PUSH_URL}"
 fi

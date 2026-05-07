@@ -9,6 +9,8 @@ import { mkdtemp, rm } from 'fs/promises'
 import os from 'os'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import { execFile } from 'child_process'
+import { promisify } from 'util'
 import { Storage } from '@google-cloud/storage'
 
 import {
@@ -23,6 +25,7 @@ import {
   listCandidateThreadsForMember, listCandidateMessagesForMember,
   createSession, getSession, deleteSession, updatePassword, updateUsername, getRecentSheetSyncRuns, getLocalDataLastUpdatedAt,
   getAppSetting, getAppSettings, setAppSetting, exportBackupSnapshot, restoreBackupSnapshot, createLocalDatabaseSnapshot,
+  createCostSnapshot, getRecentCostSnapshots,
   getDashboardData,
   getContacts, markContacted, updateContactStatus, createContact, updateContact,
   getInterviews, createInterview, updateInterview,
@@ -50,6 +53,7 @@ const ADMIN_EMAILS = new Set(
 const PASSWORD_CHANGE_ALLOWED_PATHS = new Set(['/api/me', '/api/change-password', '/api/logout', '/api/csrf'])
 const SHEETS_SYNC_CRON_TOKEN = String(process.env.SHEETS_SYNC_CRON_TOKEN || '').trim()
 const BACKUP_EXPORT_CRON_TOKEN = String(process.env.BACKUP_EXPORT_CRON_TOKEN || '').trim()
+const COST_SNAPSHOT_CRON_TOKEN = String(process.env.COST_SNAPSHOT_CRON_TOKEN || '').trim()
 const BACKUP_GCS_BUCKET = String(process.env.BACKUP_GCS_BUCKET || '').trim()
 const BACKUP_GCS_PREFIX = String(process.env.BACKUP_GCS_PREFIX || 'job-hunt').trim()
 const SHEET_SETTINGS_KEYS = {
@@ -81,8 +85,10 @@ const CSRF_EXEMPT_PATHS = new Set([
   '/api/login',
   '/api/health',
   '/api/internal/sheets/sync',
-  '/api/internal/backup/export'
+  '/api/internal/backup/export',
+  '/api/internal/cost/snapshot'
 ])
+const execFileAsync = promisify(execFile)
 
 function parseBool(value, fallback = false) {
   if (value == null) return fallback
@@ -1751,6 +1757,57 @@ app.post('/api/internal/backup/export', async (req, res) => {
   } catch (e) {
     console.error('internal.backup.export failed', e)
     res.status(500).json({ error: 'Could not export backup to Cloud Storage' })
+  }
+})
+
+app.post('/api/internal/cost/snapshot', async (req, res) => {
+  if (!isValidInternalToken(req, 'x-cost-token', COST_SNAPSHOT_CRON_TOKEN)) {
+    return res.status(401).json({ error: 'Invalid cost snapshot token' })
+  }
+  try {
+    const source = String(req.body?.source || 'scheduler')
+    const summaryText = String(req.body?.summaryText || '').trim()
+    if (!summaryText) return res.status(400).json({ error: 'summaryText is required' })
+    await createCostSnapshot({ source, summaryText })
+    res.json({ ok: true })
+  } catch (e) {
+    console.error('internal.cost.snapshot failed', e)
+    res.status(500).json({ error: 'Could not store cost snapshot' })
+  }
+})
+
+app.get('/api/admin/cost-snapshots', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const limit = Math.max(1, Math.min(50, Number(req.query.limit) || 20))
+    const snapshots = await getRecentCostSnapshots(limit)
+    res.json({ snapshots })
+  } catch (e) {
+    console.error('admin.cost-snapshots failed', e)
+    res.status(500).json({ error: 'Could not load cost snapshots' })
+  }
+})
+
+app.post('/api/admin/cost-snapshots/run', requireAuth, requireAdmin, async (_req, res) => {
+  try {
+    const scriptPath = path.join(__dirname, '../scripts/cost-snapshot.sh')
+    const { stdout } = await execFileAsync('bash', [scriptPath], {
+      env: {
+        ...process.env,
+        PROJECT_ID: process.env.GOOGLE_CLOUD_PROJECT || process.env.GCLOUD_PROJECT || process.env.PROJECT_ID || ''
+      },
+      maxBuffer: 1024 * 1024
+    })
+    const summaryText = String(stdout || '').trim()
+    if (!summaryText) {
+      return res.status(500).json({ error: 'Cost snapshot script returned no output' })
+    }
+    await createCostSnapshot({ source: 'manual-admin', summaryText })
+    res.json({ ok: true })
+  } catch (e) {
+    console.error('admin.cost-snapshots.run failed', e)
+    res.status(500).json({
+      error: 'Could not run cost snapshot here. Run `npm run ops:cost:snapshot` in an environment with gcloud and post to internal endpoint.'
+    })
   }
 })
 

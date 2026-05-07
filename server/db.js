@@ -66,7 +66,8 @@ const BACKUP_TABLES = [
   'watchlist',
   'sheet_sync_links',
   'entity_sheet_sync_links',
-  'sheet_sync_runs'
+  'sheet_sync_runs',
+  'cost_snapshots'
 ]
 
 function normalizeEmail(email) {
@@ -1249,6 +1250,14 @@ export async function initDb() {
       )
     `,
     `
+      CREATE TABLE IF NOT EXISTS cost_snapshots (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        source TEXT NOT NULL,
+        summary_text TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      )
+    `,
+    `
       CREATE TABLE IF NOT EXISTS entity_sheet_sync_links (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         sheet_id TEXT NOT NULL,
@@ -1892,6 +1901,31 @@ export async function getRecentSheetSyncRuns(limit = 20) {
     args: [safeLimit]
   })
 
+  return toPlainRows(res)
+}
+
+export async function createCostSnapshot({ source = 'unknown', summaryText = '' } = {}) {
+  const text = String(summaryText || '').trim()
+  if (!text) throw new Error('summaryText is required')
+  await db.execute({
+    sql: `
+      INSERT INTO cost_snapshots (source, summary_text, created_at)
+      VALUES (?, ?, ?)
+    `,
+    args: [String(source || 'unknown'), text, now()]
+  })
+}
+
+export async function getRecentCostSnapshots(limit = 20) {
+  const safeLimit = Math.max(1, Math.min(200, Number(limit) || 20))
+  const res = await db.execute({
+    sql: `
+      SELECT * FROM cost_snapshots
+      ORDER BY created_at DESC
+      LIMIT ?
+    `,
+    args: [safeLimit]
+  })
   return toPlainRows(res)
 }
 
