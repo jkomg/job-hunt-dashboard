@@ -36,6 +36,19 @@ Operational guide for staff and admins using hosted Job Hunt Dashboard environme
    - stale tasks
    - stale threads (48h+)
 
+## Weekly Cost Review (Admin/Platform)
+1. Run:
+   - `npm run ops:cost:snapshot`
+2. Confirm:
+   - Cloud Run min/max instances are still in expected range
+   - Scheduler job count matches intended automation set
+   - Artifact Registry image count is not growing unexpectedly
+   - Logging exclusions are still present
+3. If cost spikes:
+   - run `scripts/setup-cloud-cost-controls.sh` again
+   - verify release/deploy frequency and image cleanup policy
+   - review recent automation additions and Cloud Run scaling settings
+
 ## User + Access Management
 
 ### Admin path (Settings)

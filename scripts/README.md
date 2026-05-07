@@ -247,6 +247,31 @@ chmod +x ./scripts/setup-cloud-cost-controls.sh
 BUDGET_AMOUNT=15USD ./scripts/setup-cloud-cost-controls.sh
 ```
 
+## cost-snapshot.sh
+
+Generates a quick cost-driver snapshot for hosted environments.
+
+### What it reports
+
+- Cloud Run service limits/scaling settings
+- Cloud Scheduler job count/list
+- Artifact Registry image package count
+- Logging exclusions on `_Default` sink
+- Billing budgets (if caller has billing permissions)
+
+### Running
+
+```bash
+npm run ops:cost:snapshot
+```
+
+Optional overrides:
+- `PROJECT_ID`
+- `REGION`
+- `SERVICE_NAME`
+- `REPO_NAME`
+- `OUTPUT_FILE` (write markdown output to file)
+
 ## setup-daily-backup-export.sh
 
 Creates/updates a Cloud Scheduler HTTP job that exports a JSON backup to Cloud Storage once per day.
