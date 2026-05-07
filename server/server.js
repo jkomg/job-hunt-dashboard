@@ -650,11 +650,11 @@ app.get('/api/staff/queue', requireAuth, requireStaffOrAdmin, async (req, res) =
       (req.isAdmin && scope === 'all')
         ? listCandidateThreadsByScope({ organizationId: req.organizationId, limit: 500 })
         : listCandidateThreadsByScope({ organizationId: req.organizationId, staffUserId: req.userId, limit: 500 }),
-      req.isAdmin ? listOrganizationUsers(req.organizationId) : Promise.resolve([])
+      (req.isAdmin && scope === 'assigned') ? listOrganizationUsers(req.organizationId) : Promise.resolve([])
     ])
     const candidates = (orgUsers || []).filter(u => u.role === 'job_seeker')
     const staffUsers = req.isAdmin
-      ? (allOrgUsers || []).filter(u => u.role === 'staff' || u.role === 'admin')
+      ? ((scope === 'all' ? orgUsers : allOrgUsers) || []).filter(u => u.role === 'staff' || u.role === 'admin')
       : []
 
     const summary = {
