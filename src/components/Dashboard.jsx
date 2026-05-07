@@ -159,6 +159,7 @@ export default function Dashboard({ onNavigate, me }) {
     const overdueTasks = tasks.filter(t => t.status !== 'done' && Number(t.dueAt || 0) > 0 && Number(t.dueAt) < startToday.getTime())
     const dueTodayTasks = tasks.filter(t => t.status !== 'done' && Number(t.dueAt || 0) >= startToday.getTime() && Number(t.dueAt || 0) < endToday.getTime())
     const scopeLabel = summary.scope === 'all' ? 'All Candidates' : 'My Assigned Candidates'
+    const candidateCountLabel = summary.scope === 'all' ? 'candidates in the organization queue' : 'candidates in your queue'
 
     return (
       <div>
@@ -194,8 +195,8 @@ export default function Dashboard({ onNavigate, me }) {
           <div className="card-title" style={{ color: 'var(--accent)' }}>Daily Ops Checklist</div>
           <div className="contact-row" style={{ padding: '8px 0' }}>
             <div className="contact-info">
-              <div className="contact-name">1. Review assigned candidates</div>
-              <div className="contact-meta">{candidates.length} candidate{candidates.length === 1 ? '' : 's'} in your queue</div>
+              <div className="contact-name">1. Review candidate queue</div>
+              <div className="contact-meta">{candidates.length} candidate{candidates.length === 1 ? '' : 's'} {candidateCountLabel}</div>
             </div>
             <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('operations')}>Open Operations</button>
           </div>
