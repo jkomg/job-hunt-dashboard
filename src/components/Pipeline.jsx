@@ -284,6 +284,10 @@ export default function Pipeline({ navIntent }) {
   const [sourceFilter, setSourceFilter] = useState('all')
   const [savedViews, setSavedViews] = useState([])
   const [viewName, setViewName] = useState('')
+  const [selectedIds, setSelectedIds] = useState([])
+  const [bulkFollowUpDate, setBulkFollowUpDate] = useState('')
+  const [bulkNextActionDate, setBulkNextActionDate] = useState('')
+  const [bulkSaving, setBulkSaving] = useState(false)
   const dragCard = useRef(null)
   const [dragOver, setDragOver] = useState(null)
 
@@ -341,6 +345,40 @@ export default function Pipeline({ navIntent }) {
 
   function deleteView(id) {
     setSavedViews(prev => prev.filter(v => v.id !== id))
+  }
+
+  function toggleSelected(id) {
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+  }
+
+  function clearSelection() {
+    setSelectedIds([])
+    setBulkFollowUpDate('')
+    setBulkNextActionDate('')
+  }
+
+  async function applyBulkDates() {
+    if (!selectedIds.length) return
+    const payload = {}
+    if (bulkFollowUpDate) payload['Follow-Up Date'] = bulkFollowUpDate
+    if (bulkNextActionDate) payload['Next Action Date'] = bulkNextActionDate
+    if (!Object.keys(payload).length) return
+    setBulkSaving(true)
+    try {
+      await Promise.all(selectedIds.map(async (id) => {
+        const r = await fetch(`/api/pipeline/${id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(payload)
+        })
+        if (!r.ok) throw new Error((await r.json()).error || 'Bulk update failed')
+      }))
+      setItems(prev => prev.map(item => selectedIds.includes(item.id) ? { ...item, ...payload } : item))
+      clearSelection()
+    } finally {
+      setBulkSaving(false)
+    }
   }
 
   // ─── Drag and drop ───────────────────────────────────
@@ -488,6 +526,27 @@ export default function Pipeline({ navIntent }) {
           </span>
         ))}
       </div>
+      {!!selectedIds.length && (
+        <div className="card mb-16" style={{ borderColor: 'var(--accent)' }}>
+          <div className="card-title">Bulk Actions ({selectedIds.length} selected)</div>
+          <div className="checkin-grid">
+            <div className="field">
+              <label>Set Follow-Up Date</label>
+              <input type="date" value={bulkFollowUpDate} onChange={e => setBulkFollowUpDate(e.target.value)} />
+            </div>
+            <div className="field">
+              <label>Set Next Action Date</label>
+              <input type="date" value={bulkNextActionDate} onChange={e => setBulkNextActionDate(e.target.value)} />
+            </div>
+          </div>
+          <div className="quick-actions">
+            <button className="btn btn-primary btn-sm" onClick={applyBulkDates} disabled={bulkSaving || (!bulkFollowUpDate && !bulkNextActionDate)}>
+              {bulkSaving ? 'Applying…' : 'Apply to Selected'}
+            </button>
+            <button className="btn btn-ghost btn-sm" onClick={clearSelection} disabled={bulkSaving}>Clear Selection</button>
+          </div>
+        </div>
+      )}
 
       {items.length === 0 && (
         <div className="card mb-16">
@@ -531,6 +590,16 @@ export default function Pipeline({ navIntent }) {
                     onClick={() => setSelected(card)}
                     style={{ cursor: 'grab' }}
                   >
+                    <div style={{ marginBottom: 6 }} onClick={e => e.stopPropagation()}>
+                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-muted)' }}>
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.includes(card.id)}
+                          onChange={() => toggleSelected(card.id)}
+                        />
+                        Select
+                      </label>
+                    </div>
                     <div className="kanban-card-company">{card.Company}</div>
                     {card.Role && <div className="kanban-card-role">{card.Role}</div>}
                     {card['Next Action'] && (
