@@ -270,6 +270,7 @@ Optional overrides:
 - `REGION`
 - `SERVICE_NAME`
 - `REPO_NAME`
+- `BILLING_ACCOUNT` (recommended for budget visibility)
 - `OUTPUT_FILE` (write markdown output to file)
 
 ## setup-daily-backup-export.sh

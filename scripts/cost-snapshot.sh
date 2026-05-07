@@ -6,6 +6,7 @@ REGION="${REGION:-us-central1}"
 SERVICE_NAME="${SERVICE_NAME:-job-hunt-dashboard}"
 REPO_NAME="${REPO_NAME:-jobhunt-repo}"
 OUTPUT_FILE="${OUTPUT_FILE:-}"
+BILLING_ACCOUNT="${BILLING_ACCOUNT:-}"
 
 tmp_file="$(mktemp)"
 trap 'rm -f "$tmp_file"' EXIT
@@ -75,10 +76,20 @@ fi
 echo >>"$tmp_file"
 
 echo "## Billing Budgets (if permissions allow)" >>"$tmp_file"
-if gcloud beta billing budgets list --format='table(displayName,amount.specifiedAmount.currencyCode,amount.specifiedAmount.units)' >/dev/null 2>&1; then
-  gcloud beta billing budgets list --format='table(displayName,amount.specifiedAmount.currencyCode,amount.specifiedAmount.units)' | sed 's/^/  /' >>"$tmp_file" || true
+resolved_billing_account="$BILLING_ACCOUNT"
+if [[ -z "$resolved_billing_account" ]]; then
+  resolved_billing_account="$(gcloud beta billing projects describe "$PROJECT_ID" --format='value(billingAccountName)' 2>/dev/null | sed 's#.*/##' || true)"
+fi
+if [[ -n "$resolved_billing_account" ]] && gcloud beta billing budgets list --billing-account "$resolved_billing_account" --format='table(displayName,amount.specifiedAmount.currencyCode,amount.specifiedAmount.units)' >/dev/null 2>&1; then
+  echo "- billing_account: $resolved_billing_account" >>"$tmp_file"
+  gcloud beta billing budgets list --billing-account "$resolved_billing_account" --format='table(displayName,amount.specifiedAmount.currencyCode,amount.specifiedAmount.units)' | sed 's/^/  /' >>"$tmp_file" || true
 else
-  echo "- status: budget list unavailable (missing billing permissions is common)" >>"$tmp_file"
+  if [[ -n "$resolved_billing_account" ]]; then
+    echo "- billing_account: $resolved_billing_account" >>"$tmp_file"
+    echo "- status: budget list unavailable (missing billing permissions is common)" >>"$tmp_file"
+  else
+    echo "- status: no billing account provided or discovered; set BILLING_ACCOUNT to enable budget snapshot" >>"$tmp_file"
+  fi
 fi
 echo >>"$tmp_file"
 
