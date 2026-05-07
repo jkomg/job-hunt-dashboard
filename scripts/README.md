@@ -272,6 +272,17 @@ Optional overrides:
 - `REPO_NAME`
 - `BILLING_ACCOUNT` (recommended for budget visibility)
 - `OUTPUT_FILE` (write markdown output to file)
+- `PUSH_URL` (optional internal endpoint, e.g. `https://<service>/api/internal/cost/snapshot`)
+- `PUSH_TOKEN` (must match `COST_SNAPSHOT_CRON_TOKEN` in app env)
+- `SNAPSHOT_SOURCE` (optional label, default `scheduler`)
+
+### Scheduled push mode
+
+To collect on an interval and surface in Settings:
+
+1. Set `COST_SNAPSHOT_CRON_TOKEN` in app secrets/env.
+2. Run this script from a trusted environment with `gcloud` auth (for example Cloud Shell or a secured runner) on a schedule.
+3. Pass `PUSH_URL` + `PUSH_TOKEN` so snapshots are persisted in-app.
 
 ## setup-daily-backup-export.sh
 
