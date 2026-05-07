@@ -636,8 +636,8 @@ app.get('/api/staff/assigned-users', requireAuth, requireStaffOrAdmin, async (re
 app.get('/api/staff/queue', requireAuth, requireStaffOrAdmin, async (req, res) => {
   try {
     const requestedScope = String(req.query?.scope || '').toLowerCase()
-    const scope = req.isAdmin && requestedScope === 'assigned' ? 'assigned' : 'all'
-    const [orgUsers, recommendations, tasks, threads] = await Promise.all([
+    const scope = req.isAdmin ? (requestedScope === 'assigned' ? 'assigned' : 'all') : 'assigned'
+    const [orgUsers, recommendations, tasks, threads, allOrgUsers] = await Promise.all([
       (req.isAdmin && scope === 'all')
         ? listOrganizationUsers(req.organizationId)
         : listAssignedUsersForStaff(req.userId, req.organizationId),
@@ -649,11 +649,12 @@ app.get('/api/staff/queue', requireAuth, requireStaffOrAdmin, async (req, res) =
         : listStaffTasks({ organizationId: req.organizationId, assigneeUserId: req.userId, limit: 300 }),
       (req.isAdmin && scope === 'all')
         ? listCandidateThreadsByScope({ organizationId: req.organizationId, limit: 500 })
-        : listCandidateThreadsByScope({ organizationId: req.organizationId, staffUserId: req.userId, limit: 500 })
+        : listCandidateThreadsByScope({ organizationId: req.organizationId, staffUserId: req.userId, limit: 500 }),
+      req.isAdmin ? listOrganizationUsers(req.organizationId) : Promise.resolve([])
     ])
     const candidates = (orgUsers || []).filter(u => u.role === 'job_seeker')
     const staffUsers = req.isAdmin
-      ? (orgUsers || []).filter(u => u.role === 'staff' || u.role === 'admin')
+      ? (allOrgUsers || []).filter(u => u.role === 'staff' || u.role === 'admin')
       : []
 
     const summary = {
