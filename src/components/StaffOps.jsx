@@ -45,6 +45,9 @@ export default function StaffOps({ me, mode = 'operations' }) {
   const [unassigned, setUnassigned] = useState([])
   const [selectedCandidateId, setSelectedCandidateId] = useState('')
   const [candidateSignalFilter, setCandidateSignalFilter] = useState('all')
+  const [staffScope, setStaffScope] = useState(() => {
+    try { return localStorage.getItem('staff_scope') || 'assigned' } catch { return 'assigned' }
+  })
 
   // new candidate form
   const [showNewCandidate, setShowNewCandidate] = useState(false)
@@ -90,8 +93,9 @@ export default function StaffOps({ me, mode = 'operations' }) {
     setLoading(true)
     setError('')
     try {
+      const staffQuery = (me?.isAdmin && staffScope === 'assigned') ? '?scope=assigned' : ''
       const [data, unassignedData] = await Promise.all([
-        api('/api/staff/queue'),
+        api(`/api/staff/queue${staffQuery}`),
         api('/api/staff/unassigned-candidates')
       ])
       setQueue(data)
@@ -110,7 +114,10 @@ export default function StaffOps({ me, mode = 'operations' }) {
     }
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load() }, [me?.isAdmin, staffScope])
+  useEffect(() => {
+    try { localStorage.setItem('staff_scope', staffScope) } catch {}
+  }, [staffScope])
 
   useEffect(() => {
     if (!selectedCandidateId) { setThreads([]); setSelectedThreadId(''); setThreadMessages([]); return }
@@ -162,6 +169,15 @@ export default function StaffOps({ me, mode = 'operations' }) {
     [queue.candidates, selectedCandidateId]
   )
   const selectedCandidateSignals = useMemo(() => candidateSignals[Number(selectedCandidateId)] || null, [candidateSignals, selectedCandidateId])
+  const signalSummary = useMemo(() => {
+    const values = Object.values(candidateSignals || {})
+    return {
+      interviewActive: values.filter(s => s?.interviewActive).length,
+      staleFollowUps: values.filter(s => s?.staleFollowUps).length,
+      inactive7d: values.filter(s => s?.noRecentActivity).length,
+      rrPosted72h: values.filter(s => s?.rrPostedRecently).length
+    }
+  }, [candidateSignals])
 
   const candidateRecommendations = useMemo(() => {
     const id = Number(selectedCandidateId)
@@ -362,6 +378,15 @@ export default function StaffOps({ me, mode = 'operations' }) {
           <div className="subtle">Assigned-candidate workspace for recommendations, tasks, and conversations.</div>
         </div>
       </div>
+      {me?.isAdmin && (
+        <div className="quick-actions mb-16">
+          <button className={`btn btn-sm ${staffScope === 'assigned' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setStaffScope('assigned')}>My Queue</button>
+          <button className={`btn btn-sm ${staffScope === 'all' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setStaffScope('all')}>All Candidates</button>
+        </div>
+      )}
+      <div style={{ color: 'var(--text-muted)', fontSize: 12, marginBottom: 12 }}>
+        Viewing: {queue.summary?.scope === 'all' ? 'All Candidates' : 'My Assigned Candidates'}
+      </div>
 
       {error && <div className="error-msg mb-16">{error}</div>}
       {success && <div className="success-msg mb-16">{success}</div>}
@@ -376,6 +401,12 @@ export default function StaffOps({ me, mode = 'operations' }) {
           <div className="stat-card"><div className="stat-label">Tasks Open</div><div className="stat-value">{(queue.summary?.tasksTodo || 0) + (queue.summary?.tasksInProgress || 0)}</div></div>
           <div className="stat-card"><div className="stat-label">Open Threads</div><div className="stat-value">{queue.summary?.threadsOpen || 0}</div></div>
           <div className="stat-card"><div className="stat-label">Stale Threads</div><div className="stat-value">{queue.summary?.threadsStale48h || 0}</div></div>
+        </div>
+        <div className="stats-grid" style={{ marginTop: 10 }}>
+          <div className="stat-card"><div className="stat-label">Interview Active</div><div className="stat-value">{signalSummary.interviewActive}</div></div>
+          <div className="stat-card"><div className="stat-label">Stale Follow-Ups</div><div className="stat-value">{signalSummary.staleFollowUps}</div></div>
+          <div className="stat-card"><div className="stat-label">Inactive 7d</div><div className="stat-value">{signalSummary.inactive7d}</div></div>
+          <div className="stat-card"><div className="stat-label">RR Posted 72h</div><div className="stat-value">{signalSummary.rrPosted72h}</div></div>
         </div>
       </div>}
 
