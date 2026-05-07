@@ -97,3 +97,6 @@ gcloud run deploy "$SERVICE_NAME" \
   "${SECRET_ARGS[@]}"
 
 gcloud run services describe "$SERVICE_NAME" --region "$REGION" --format='value(status.url)'
+
+echo
+echo "Post-deploy: run the user test checklist in docs/POST_DEPLOY_UAT_CHECKLIST.md"
