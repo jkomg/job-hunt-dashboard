@@ -62,6 +62,9 @@ function StatCard({ label, value, target, color }) {
 export default function Dashboard({ onNavigate, me }) {
   const [data, setData] = useState(null)
   const [staffQueue, setStaffQueue] = useState(null)
+  const [staffScope, setStaffScope] = useState(() => {
+    try { return localStorage.getItem('staff_scope') || 'assigned' } catch { return 'assigned' }
+  })
   const [memberThreads, setMemberThreads] = useState([])
   const [syncStatus, setSyncStatus] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -70,8 +73,9 @@ export default function Dashboard({ onNavigate, me }) {
 
   useEffect(() => {
     const dashboardFetch = fetch('/api/dashboard', { credentials: 'include' }).then(r => r.json())
+    const staffQuery = (isStaffLike && me?.isAdmin && staffScope === 'assigned') ? '?scope=assigned' : ''
     const staffQueueFetch = isStaffLike
-      ? fetch('/api/staff/queue', { credentials: 'include' }).then(r => r.ok ? r.json() : null)
+      ? fetch(`/api/staff/queue${staffQuery}`, { credentials: 'include' }).then(r => r.ok ? r.json() : null)
       : Promise.resolve(null)
 
     Promise.all([dashboardFetch, staffQueueFetch])
@@ -95,7 +99,11 @@ export default function Dashboard({ onNavigate, me }) {
     } else {
       setMemberThreads([])
     }
-  }, [isStaffLike])
+  }, [isStaffLike, me?.isAdmin, staffScope])
+
+  useEffect(() => {
+    try { localStorage.setItem('staff_scope', staffScope) } catch {}
+  }, [staffScope])
 
   if (loading) return <div className="loading"><div className="spin" />Loading your briefing…</div>
   if (error) return <div className="error-msg">{error}</div>
@@ -150,6 +158,7 @@ export default function Dashboard({ onNavigate, me }) {
     endToday.setDate(endToday.getDate() + 1)
     const overdueTasks = tasks.filter(t => t.status !== 'done' && Number(t.dueAt || 0) > 0 && Number(t.dueAt) < startToday.getTime())
     const dueTodayTasks = tasks.filter(t => t.status !== 'done' && Number(t.dueAt || 0) >= startToday.getTime() && Number(t.dueAt || 0) < endToday.getTime())
+    const scopeLabel = summary.scope === 'all' ? 'All Candidates' : 'My Assigned Candidates'
 
     return (
       <div>
@@ -158,11 +167,26 @@ export default function Dashboard({ onNavigate, me }) {
 
         <div className="card mb-16">
           <div className="card-title">Staff Briefing</div>
+          {me?.isAdmin && (
+            <div style={{ marginBottom: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button className={`btn btn-sm ${staffScope === 'assigned' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setStaffScope('assigned')}>My Queue</button>
+              <button className={`btn btn-sm ${staffScope === 'all' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setStaffScope('all')}>All Candidates</button>
+            </div>
+          )}
+          <div style={{ color: 'var(--text-muted)', fontSize: 12, marginBottom: 10 }}>
+            Viewing: {scopeLabel}
+          </div>
           <div className="stats-grid">
-            <div className="stat-card"><div className="stat-value">{summary.candidates || candidates.length}</div><div className="stat-label">Assigned Candidates</div></div>
+            <div className="stat-card"><div className="stat-value">{summary.candidates || candidates.length}</div><div className="stat-label">{summary.scope === 'all' ? 'Total Candidates' : 'Assigned Candidates'}</div></div>
             <div className="stat-card"><div className="stat-value">{summary.recommendationsDraft || draftRecommendations.length}</div><div className="stat-label">Draft Jobs</div></div>
             <div className="stat-card"><div className="stat-value">{summary.recommendationsPosted || postedRecommendations.length}</div><div className="stat-label">Posted Jobs</div></div>
             <div className="stat-card"><div className="stat-value">{(summary.tasksTodo || todoTasks.length) + (summary.tasksInProgress || inProgressTasks.length)}</div><div className="stat-label">Open Tasks</div></div>
+          </div>
+          <div className="stats-grid" style={{ marginTop: 10 }}>
+            <div className="stat-card"><div className="stat-value">{Number(summary.candidatesInterviewActive || 0)}</div><div className="stat-label">Interview Active</div></div>
+            <div className="stat-card"><div className="stat-value">{Number(summary.candidatesStaleFollowUps || 0)}</div><div className="stat-label">Stale Follow-Ups</div></div>
+            <div className="stat-card"><div className="stat-value">{Number(summary.candidatesInactive7d || 0)}</div><div className="stat-label">Inactive 7d</div></div>
+            <div className="stat-card"><div className="stat-value">{Number(summary.candidatesRrPosted72h || 0)}</div><div className="stat-label">RR Posted 72h</div></div>
           </div>
         </div>
 
