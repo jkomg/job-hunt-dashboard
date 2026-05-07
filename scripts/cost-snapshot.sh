@@ -111,7 +111,7 @@ print(json.dumps(p.read_text()))
 PY
 )"
   payload="{\"source\":\"${SNAPSHOT_SOURCE}\",\"summaryText\":${escaped_summary}}"
-  curl -sS -X POST "${PUSH_URL}" \
+  curl --fail-with-body -sS -X POST "${PUSH_URL}" \
     -H "content-type: application/json" \
     -H "x-cost-token: ${PUSH_TOKEN}" \
     --data "$payload" >/dev/null
