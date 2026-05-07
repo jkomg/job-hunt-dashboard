@@ -635,17 +635,19 @@ app.get('/api/staff/assigned-users', requireAuth, requireStaffOrAdmin, async (re
 
 app.get('/api/staff/queue', requireAuth, requireStaffOrAdmin, async (req, res) => {
   try {
+    const requestedScope = String(req.query?.scope || '').toLowerCase()
+    const scope = req.isAdmin && requestedScope === 'assigned' ? 'assigned' : 'all'
     const [orgUsers, recommendations, tasks, threads] = await Promise.all([
-      req.isAdmin
+      (req.isAdmin && scope === 'all')
         ? listOrganizationUsers(req.organizationId)
         : listAssignedUsersForStaff(req.userId, req.organizationId),
-      req.isAdmin
+      (req.isAdmin && scope === 'all')
         ? listJobRecommendations({ organizationId: req.organizationId, limit: 300 })
         : listJobRecommendations({ organizationId: req.organizationId, staffUserId: req.userId, limit: 300 }),
-      req.isAdmin
+      (req.isAdmin && scope === 'all')
         ? listStaffTasks({ organizationId: req.organizationId, limit: 300 })
         : listStaffTasks({ organizationId: req.organizationId, assigneeUserId: req.userId, limit: 300 }),
-      req.isAdmin
+      (req.isAdmin && scope === 'all')
         ? listCandidateThreadsByScope({ organizationId: req.organizationId, limit: 500 })
         : listCandidateThreadsByScope({ organizationId: req.organizationId, staffUserId: req.userId, limit: 500 })
     ])
@@ -661,7 +663,8 @@ app.get('/api/staff/queue', requireAuth, requireStaffOrAdmin, async (req, res) =
       tasksTodo: tasks.filter(t => t.status === 'todo').length,
       tasksInProgress: tasks.filter(t => t.status === 'in_progress').length,
       threadsOpen: threads.filter(t => t.status === 'open').length,
-      threadsStale48h: threads.filter(t => t.status === 'open' && (Date.now() - Number(t.updatedAt || 0)) > 48 * 60 * 60 * 1000).length
+      threadsStale48h: threads.filter(t => t.status === 'open' && (Date.now() - Number(t.updatedAt || 0)) > 48 * 60 * 60 * 1000).length,
+      scope
     }
 
     const postedSinceByUser = new Map()
@@ -696,6 +699,11 @@ app.get('/api/staff/queue', requireAuth, requireStaffOrAdmin, async (req, res) =
         lastCheckInAt: lastDaily || null
       }
     }))
+    const signalValues = Object.values(candidateSignals)
+    summary.candidatesInterviewActive = signalValues.filter(s => s.interviewActive).length
+    summary.candidatesStaleFollowUps = signalValues.filter(s => s.staleFollowUps).length
+    summary.candidatesInactive7d = signalValues.filter(s => s.noRecentActivity).length
+    summary.candidatesRrPosted72h = signalValues.filter(s => s.rrPostedRecently).length
 
     res.json({ ok: true, summary, candidates, staffUsers, recommendations, tasks, threads, candidateSignals })
   } catch (e) {
