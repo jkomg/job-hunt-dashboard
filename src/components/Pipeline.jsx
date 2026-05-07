@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { JOB_SOURCES } from '../constants/jobSources'
 
 const STAGES = [
   '🔍 Researching',
@@ -15,7 +16,6 @@ const OUTCOMES = ['Rejected — No Interview', 'Rejected — After Interview', '
 
 const PRIORITIES = ['🔥 Top Target', '⭐ Strong Fit', '📌 Worth a Shot']
 const SECTORS = ['Healthcare Tech', 'Climate / Clean Energy', 'AI/ML Platform', 'EdTech', 'Social Impact', 'Other']
-const JOB_SOURCES = ['LinkedIn', 'Indeed', 'Company Website', 'Referral', 'Recruiter', 'Glassdoor', 'Wellfound', 'Hacker News', 'Remote.co', 'Remote Rebellion', 'Welcome to the Jungle', 'Other']
 const OUTREACH_METHODS = ['LinkedIn DM', 'Email', 'Referral', 'Cold Application', 'Recruiter']
 const RESUME_VERSIONS = ['CS General', 'Tailored']
 const WORK_LOCATIONS = ['In-Office', 'Hybrid', 'Remote (State)', 'Remote (Country)', 'Remote-First']
