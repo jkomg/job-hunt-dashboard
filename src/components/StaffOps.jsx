@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-
-const JOB_SOURCES = ['LinkedIn', 'Indeed', 'Company Website', 'Referral', 'Recruiter', 'Glassdoor', 'Wellfound', 'Hacker News', 'Remote.co', 'Remote Rebellion', 'Welcome to the Jungle', 'Other']
+import { JOB_SOURCES } from '../constants/jobSources'
 
 async function api(path, options = {}) {
   const res = await fetch(path, { credentials: 'include', ...options })
