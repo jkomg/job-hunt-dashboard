@@ -37,7 +37,7 @@ function SignalBadges({ signals }) {
   )
 }
 
-export default function StaffOps({ me }) {
+export default function StaffOps({ me, mode = 'operations' }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -348,12 +348,18 @@ export default function StaffOps({ me }) {
 
   if (loading) return <div className="loading"><div className="spin" />Loading staff workspace…</div>
 
+  const showQueueSummary = mode === 'operations'
+  const showRecommendations = mode === 'operations'
+  const showTasks = mode === 'operations' || mode === 'tasks'
+  const showThreads = mode === 'operations' || mode === 'threads'
+  const title = mode === 'tasks' ? 'Tasks' : mode === 'threads' ? 'Threads' : 'Operations'
+
   return (
     <div>
       <div className="page-header">
         <div>
-          <h1>Staff Ops</h1>
-          <div className="subtle">Research jobs, distribute opportunities, and track candidate support.</div>
+          <h1>{title}</h1>
+          <div className="subtle">Assigned-candidate workspace for recommendations, tasks, and conversations.</div>
         </div>
       </div>
 
@@ -361,17 +367,17 @@ export default function StaffOps({ me }) {
       {success && <div className="success-msg mb-16">{success}</div>}
 
       {/* Queue Summary */}
-      <div className="card mb-16">
+      {showQueueSummary && <div className="card mb-16">
         <div className="card-title">Queue Summary</div>
         <div className="stats-grid">
-          <div className="stat-card"><div className="stat-label">Candidates</div><div className="stat-value">{queue.summary?.candidates || 0}</div></div>
-          <div className="stat-card"><div className="stat-label">Draft Recs</div><div className="stat-value">{queue.summary?.recommendationsDraft || 0}</div></div>
-          <div className="stat-card"><div className="stat-label">Posted Recs</div><div className="stat-value">{queue.summary?.recommendationsPosted || 0}</div></div>
-          <div className="stat-card"><div className="stat-label">Tasks Open</div><div className="stat-value">{queue.summary?.tasksTodo || 0}</div></div>
+          <div className="stat-card"><div className="stat-label">Assigned Candidates</div><div className="stat-value">{queue.summary?.candidates || 0}</div></div>
+          <div className="stat-card"><div className="stat-label">Unposted Recs</div><div className="stat-value">{queue.summary?.recommendationsDraft || 0}</div></div>
+          <div className="stat-card"><div className="stat-label">Posted to Pipelines</div><div className="stat-value">{queue.summary?.recommendationsPosted || 0}</div></div>
+          <div className="stat-card"><div className="stat-label">Tasks Open</div><div className="stat-value">{(queue.summary?.tasksTodo || 0) + (queue.summary?.tasksInProgress || 0)}</div></div>
           <div className="stat-card"><div className="stat-label">Open Threads</div><div className="stat-value">{queue.summary?.threadsOpen || 0}</div></div>
           <div className="stat-card"><div className="stat-label">Stale Threads</div><div className="stat-value">{queue.summary?.threadsStale48h || 0}</div></div>
         </div>
-      </div>
+      </div>}
 
       {/* Candidates */}
       <div className="card mb-16">
@@ -495,7 +501,7 @@ export default function StaffOps({ me }) {
       )}
 
       {/* Research & Recommend */}
-      {!!selectedCandidateId && (
+      {showRecommendations && !!selectedCandidateId && (
         <div className="card mb-16">
           <div className="card-title">Research &amp; Recommend</div>
           <div className="settings-grid">
@@ -547,7 +553,7 @@ export default function StaffOps({ me }) {
       )}
 
       {/* Tasks */}
-      {!!selectedCandidateId && (
+      {showTasks && !!selectedCandidateId && (
         <>
           <div className="card mb-16">
             <div className="card-title">New Task</div>
@@ -662,7 +668,7 @@ export default function StaffOps({ me }) {
       )}
 
       {/* Threads */}
-      {!!selectedCandidateId && (
+      {showThreads && !!selectedCandidateId && (
         <>
           <div className="card mb-16">
             <div className="card-title">New Thread</div>

@@ -173,14 +173,14 @@ export default function Dashboard({ onNavigate, me }) {
               <div className="contact-name">1. Review assigned candidates</div>
               <div className="contact-meta">{candidates.length} candidate{candidates.length === 1 ? '' : 's'} in your queue</div>
             </div>
-            <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('staff_ops')}>Open Staff Ops</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('operations')}>Open Operations</button>
           </div>
           <div className="contact-row" style={{ padding: '8px 0' }}>
             <div className="contact-info">
               <div className="contact-name">2. Post researched jobs</div>
               <div className="contact-meta">{draftRecommendations.length} draft recommendation{draftRecommendations.length === 1 ? '' : 's'} pending</div>
             </div>
-            <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('staff_ops')}>Post Jobs</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('operations')}>Post Jobs</button>
           </div>
           <div className="contact-row" style={{ padding: '8px 0' }}>
             <div className="contact-info">
@@ -189,7 +189,7 @@ export default function Dashboard({ onNavigate, me }) {
                 {todoTasks.length} todo · {inProgressTasks.length} in progress · {overdueTasks.length} overdue · {dueTodayTasks.length} due today
               </div>
             </div>
-            <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('staff_ops')}>Open Tasks</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('staff_tasks')}>Open Tasks</button>
           </div>
           <div className="contact-row" style={{ padding: '8px 0' }}>
             <div className="contact-info">
@@ -203,7 +203,7 @@ export default function Dashboard({ onNavigate, me }) {
               <div className="contact-name">5. Clear thread inbox</div>
               <div className="contact-meta">{openThreads} open · {staleThreads} stale 48h+</div>
             </div>
-            <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('staff_ops')}>Open Threads</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('staff_threads')}>Open Threads</button>
           </div>
         </div>
 
@@ -213,7 +213,7 @@ export default function Dashboard({ onNavigate, me }) {
             Monday: rebalance assignments · Midweek: pipeline quality checks · Friday: outcomes review.
           </div>
           <div className="quick-actions">
-            <button className="btn btn-primary" onClick={() => onNavigate('staff_ops')}>🧭 Staff Ops</button>
+            <button className="btn btn-primary" onClick={() => onNavigate('operations')}>🧭 Operations</button>
             <button className="btn btn-ghost" onClick={() => onNavigate('settings')}>⚙️ Admin Settings</button>
           </div>
         </div>
