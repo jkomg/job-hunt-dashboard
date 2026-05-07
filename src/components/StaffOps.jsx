@@ -374,6 +374,7 @@ export default function StaffOps({ me, mode = 'operations' }) {
   const showTasks = mode === 'operations' || mode === 'tasks'
   const showThreads = mode === 'operations' || mode === 'threads'
   const title = mode === 'tasks' ? 'Tasks' : mode === 'threads' ? 'Threads' : 'Operations'
+  const isAllScope = queue.summary?.scope === 'all'
 
   return (
     <div>
@@ -400,7 +401,7 @@ export default function StaffOps({ me, mode = 'operations' }) {
       {showQueueSummary && <div className="card mb-16">
         <div className="card-title">Queue Summary</div>
         <div className="stats-grid">
-          <div className="stat-card"><div className="stat-label">Assigned Candidates</div><div className="stat-value">{queue.summary?.candidates || 0}</div></div>
+          <div className="stat-card"><div className="stat-label">{isAllScope ? 'Total Candidates' : 'Assigned Candidates'}</div><div className="stat-value">{queue.summary?.candidates || 0}</div></div>
           <div className="stat-card"><div className="stat-label">Unposted Recs</div><div className="stat-value">{queue.summary?.recommendationsDraft || 0}</div></div>
           <div className="stat-card"><div className="stat-label">Posted to Pipelines</div><div className="stat-value">{queue.summary?.recommendationsPosted || 0}</div></div>
           <div className="stat-card"><div className="stat-label">Tasks Open</div><div className="stat-value">{(queue.summary?.tasksTodo || 0) + (queue.summary?.tasksInProgress || 0)}</div></div>
