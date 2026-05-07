@@ -7,6 +7,23 @@ on:
     branches: [main]
 
 jobs:
+  tenant-isolation:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tenant-isolation smoke suite
+        run: npm run smoke:test:tenant
+
   release-gate-v2:
     runs-on: ubuntu-latest
 
