@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { JOB_SOURCES } from '../constants/jobSources'
 
 const STAGES = [
@@ -281,6 +281,7 @@ export default function Pipeline({ navIntent }) {
   const [selected, setSelected] = useState(null)
   const [showAdd, setShowAdd] = useState(false)
   const [filter, setFilter] = useState('active')
+  const [sourceFilter, setSourceFilter] = useState('all')
   const dragCard = useRef(null)
   const [dragOver, setDragOver] = useState(null)
 
@@ -384,12 +385,19 @@ export default function Pipeline({ navIntent }) {
     return !(hasDateApplied && hasNextAction && hasNextActionDate && hasJobUrl && hasContact)
   }
 
-  const visible = filter === 'all' ? items
+  const baseVisible = filter === 'all' ? items
     : filter === 'active' ? items.filter(i => !i.Stage?.includes('Closed'))
     : filter === 'due_followups' ? items.filter(isDueFollowup)
     : filter === 'incomplete' ? items.filter(isIncompleteApplication)
     : filter === 'stale_actions' ? items.filter(isStaleAction)
     : items.filter(i => i.Stage === filter)
+  const visible = sourceFilter === 'all'
+    ? baseVisible
+    : baseVisible.filter(i => String(i['Job Source'] || '').trim() === sourceFilter)
+
+  const sourceOptions = useMemo(() => Array.from(new Set(
+    [...JOB_SOURCES, ...items.map(i => String(i['Job Source'] || '').trim()).filter(Boolean)]
+  )), [items])
 
   const byStage = STAGES.reduce((acc, s) => {
     acc[s] = visible.filter(i => i.Stage === s)
@@ -423,6 +431,13 @@ export default function Pipeline({ navIntent }) {
         {['💬 In Conversation', '📞 Interview Scheduled', '🎯 Interviewing'].map(s => (
           <button key={s} className={`tab${filter === s ? ' active' : ''}`} onClick={() => setFilter(s)}>{s}</button>
         ))}
+      </div>
+      <div className="quick-actions mb-16" style={{ alignItems: 'center' }}>
+        <label style={{ fontSize: 12, color: 'var(--text-muted)' }}>Source</label>
+        <select value={sourceFilter} onChange={e => setSourceFilter(e.target.value)} style={{ minWidth: 220 }}>
+          <option value="all">All sources</option>
+          {sourceOptions.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
       </div>
 
       {items.length === 0 && (
