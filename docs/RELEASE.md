@@ -43,6 +43,7 @@ Shipped and active:
    - README hosted onboarding
    - staff/admin runbook
    - security checklist
+   - README badge row (status/release values)
 5. Validate sync and backup operational paths.
 6. Confirm changelog is updated.
 

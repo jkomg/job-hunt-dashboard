@@ -2,6 +2,11 @@
 
 A hosted, multi-role job search command center for job seekers, staff, and admins.
 
+![spec](https://img.shields.io/badge/spec-v0.1-4c4c4c)
+![license](https://img.shields.io/badge/license-Apache%202.0-84b819)
+![status](https://img.shields.io/badge/status-v2.0%20live-2dbd18)
+![release](https://img.shields.io/badge/release-v2.0.0-e57235)
+
 [![spec](https://img.shields.io/badge/spec-v0.1-4c4c4c)](#)
 [![license](https://img.shields.io/badge/license-Apache%202.0-84b819)](LICENSE)
 [![status](https://img.shields.io/badge/status-v1.0%20live-2dbd18)](#)
