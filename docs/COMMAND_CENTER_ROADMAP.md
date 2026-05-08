@@ -13,6 +13,18 @@ Work order:
 5. Distribution for non-technical users
 6. Product polish
 
+## Open Issue Tracker (Phase Alignment)
+
+| Issue | Title | Phase | Status | Notes |
+| --- | --- | --- | --- | --- |
+| #83 | Phase 0: Hosted v2 platform baseline (DB + tenancy guardrails) | Phase 0 | In Progress | Tenant guards + role boundaries shipped; continue baseline closure items. |
+| #42 | Phase 2: Remote Rebellion staff workspace | Phase 2 | In Progress | Staff briefing/operations/tasks/threads and assignment flow shipped; continue UX refinements. |
+| #43 | Phase 3: DB-first RR integration and Sheets backup | Phase 3 | In Progress | DB-first sync, conflict safety, source observability and cleanup flow shipped. |
+| #44 | Phase 4: Hosted production hardening | Phase 4 | In Progress | Cost controls + ops visibility started; continue production controls. |
+| #45 | Phase 5: Command center product polish | Phase 5 | In Progress | Saved views, source filters, bulk actions, and briefing improvements underway. |
+| #90 | Production readiness: dev/prod split and controlled deployment model | Cross-phase | Open | Not started in this cycle; planned after current usability/ops slices. |
+| #91 | Admin Ops Dashboard: run/schedule/monitor platform jobs from UI | Cross-phase | Open | Next major ops feature (UI scheduling/monitoring). |
+
 ## 1) Reliability First (must-have)
 
 - [x] Automated local backup export (JSON)
@@ -69,6 +81,26 @@ Work order:
 - [x] Interview readiness ranked above follow-ups
 - [x] Next Action + Next Action Date across pipeline/contacts/interviews
 - [x] Daily check-in auto-fill from Today Queue
+- [x] Source sync warnings now deep-link to Pipeline cleanup views (job-seeker context)
+
+## Recently Shipped (Latest Merges)
+
+- `#101` Pipeline source filter.
+- `#102` Saved Pipeline views.
+- `#103` Pipeline bulk date actions.
+- `#104` Source performance metrics in Briefing.
+- `#105` Source-level sync observability/warnings.
+- `#106` One-click source warning cleanup flow from Settings to Pipeline.
+
+## Screenshot Checklist (Usability Docs)
+
+| Screenshot | Path | Owner | Status | Notes |
+| --- | --- | --- | --- | --- |
+| Settings source warnings + action buttons | `docs/images/settings-source-warnings.png` | Jason | Pending | Show mismatch/blank counts and both cleanup actions. |
+| Pipeline filtered: missing source | `docs/images/pipeline-filter-missing-source.png` | Jason | Pending | Show `Source = Missing source` state. |
+| Pipeline filtered: custom source values | `docs/images/pipeline-filter-custom-source.png` | Jason | Pending | Show `Source = Custom source values` state. |
+| Pipeline saved views + source filter | `docs/images/pipeline-saved-views-and-source-filter.png` | Jason | Pending | Highlight saved view chips and source selector. |
+| Pipeline bulk action panel | `docs/images/pipeline-bulk-actions.png` | Jason | Pending | Show multi-select + bulk date apply. |
 - [x] Pipeline source filter (`all`, missing source, custom source, specific source)
 - [x] Saved pipeline views for filter state (stage/source)
 - [x] Bulk date actions for selected pipeline cards
