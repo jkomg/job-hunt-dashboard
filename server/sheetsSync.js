@@ -1173,8 +1173,8 @@ async function runInterviewsSync({ sheets, spreadsheetId, tabs, scope }) {
     if (tab === tabs[0]) {
       const unlinked = latestInterviews.filter(item => !linkedIds.has(String(item.id)))
       for (const item of unlinked) {
-        const base = new Array(headers.length).fill('')
-        const patched = patchOutboundInterviewValues(headers, base, item)
+        const fallbackBase = new Array(headers.length).fill('')
+        let patched = patchOutboundInterviewValues(headers, fallbackBase, item)
         let rowNumber = null
 
         for (let i = 0; i < rows.length; i++) {
@@ -1182,6 +1182,7 @@ async function runInterviewsSync({ sheets, spreadsheetId, tabs, scope }) {
           if (linkedRowNumbers.has(candidateRowNumber)) continue
           const rowObj = toRowObject(headers, rows[i] || [])
           if (!isPlaceholderInterviewRow(rowObj)) continue
+          patched = patchOutboundInterviewValues(headers, rows[i] || [], item)
           await withSheetsWriteRetry(() => sheets.spreadsheets.values.batchUpdate({
             spreadsheetId,
             requestBody: {
