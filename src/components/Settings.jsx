@@ -628,6 +628,7 @@ export default function Settings({ me, onProfileUpdated, onNavigate }) {
       a.remove()
       URL.revokeObjectURL(url)
       setSuccess('Backup exported.')
+      await load()
     } catch (e) {
       setError(e.payload || { error: e.message })
     } finally {
@@ -1213,6 +1214,17 @@ export default function Settings({ me, onProfileUpdated, onNavigate }) {
           <div className="card-title">Admin Ops Status</div>
           <div style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 8 }}>
             Quick view of background/operational job health from recent run history.
+          </div>
+          <div className="quick-actions" style={{ marginBottom: 10 }}>
+            <button className="btn btn-ghost btn-sm" onClick={syncNow} disabled={syncing}>
+              {syncing ? 'Syncing…' : 'Run Sheets Sync Now'}
+            </button>
+            <button className="btn btn-ghost btn-sm" onClick={exportBackup} disabled={exportingBackup}>
+              {exportingBackup ? 'Exporting…' : 'Export Backup Now'}
+            </button>
+            <button className="btn btn-ghost btn-sm" onClick={runCostSnapshotNow} disabled={runningCostSnapshot}>
+              {runningCostSnapshot ? 'Running…' : 'Run Cost Snapshot'}
+            </button>
           </div>
           <table className="data-table" style={{ marginBottom: 10 }}>
             <thead>
