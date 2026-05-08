@@ -722,6 +722,51 @@ app.get('/api/staff/assigned-users', requireAuth, requireStaffOrAdmin, async (re
   }
 })
 
+app.post('/api/staff/users/:id/reset-password', requireAuth, requireStaffOrAdmin, async (req, res) => {
+  try {
+    const targetUserId = Number(req.params.id)
+    const password = String(req.body?.password || '').trim()
+    if (!Number.isFinite(targetUserId) || targetUserId <= 0) {
+      return res.status(400).json({ error: 'Invalid target user' })
+    }
+    if (password.length < 10) {
+      return res.status(400).json({ error: 'Temporary password must be at least 10 characters' })
+    }
+
+    const targetUser = await getUserById(targetUserId)
+    if (!targetUser) return res.status(404).json({ error: 'User not found' })
+
+    const orgUsers = await listOrganizationUsers(req.organizationId)
+    const membership = orgUsers.find(u => Number(u.id) === targetUserId)
+    if (!membership || membership.role !== 'job_seeker') {
+      return res.status(403).json({ error: 'Staff can only reset passwords for job seeker users' })
+    }
+    if (!req.isAdmin) {
+      const hasAccess = await hasStaffAssignment({
+        organizationId: req.organizationId,
+        staffUserId: req.userId,
+        jobSeekerUserId: targetUserId
+      })
+      if (!hasAccess) return res.status(403).json({ error: 'User is not assigned to you' })
+    }
+
+    await adminSetUserPassword(targetUserId, password, { forceReset: true })
+    await createAuditLog({
+      organizationId: req.organizationId,
+      actorUserId: req.userId,
+      targetUserId,
+      action: 'staff.user.password.reset',
+      entityType: 'user',
+      entityId: String(targetUserId),
+      metadata: { username: targetUser.username, forced: true }
+    })
+    res.json({ ok: true })
+  } catch (e) {
+    console.error('staff.users.resetPassword failed', e)
+    res.status(500).json({ error: 'Could not reset password' })
+  }
+})
+
 app.get('/api/staff/queue', requireAuth, requireStaffOrAdmin, async (req, res) => {
   try {
     const requestedScope = String(req.query?.scope || '').toLowerCase()

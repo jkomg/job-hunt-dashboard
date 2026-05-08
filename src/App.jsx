@@ -36,6 +36,11 @@ const STAFF_NAV = [
   { id: 'settings',  label: 'Settings', icon: '⚙️' }
 ]
 
+const ADMIN_NAV = [
+  { id: 'dashboard', label: 'Briefing', icon: '☀️' },
+  { id: 'settings',  label: 'Settings', icon: '⚙️' }
+]
+
 export default function App() {
   const [authed, setAuthed] = useState(null)
   const [me, setMe] = useState(null)
@@ -70,8 +75,10 @@ export default function App() {
     refreshMe()
   }, [])
 
-  const isStaffLike = me?.role === 'staff' || me?.isAdmin
-  const navItems = isStaffLike ? STAFF_NAV : JOB_SEEKER_NAV
+  const isAdminOnly = me?.isAdmin && me?.role === 'admin'
+  const isStaff = me?.role === 'staff'
+  const isStaffLike = isStaff || isAdminOnly
+  const navItems = isAdminOnly ? ADMIN_NAV : (isStaff ? STAFF_NAV : JOB_SEEKER_NAV)
 
   useEffect(() => {
     if (!authed || !isStaffLike) return
@@ -190,9 +197,9 @@ export default function App() {
         </div>
 
         {view === 'dashboard'  && <Dashboard onNavigate={navigate} me={me} />}
-        {isStaffLike && view === 'operations' && <StaffOps me={me} mode="operations" />}
-        {isStaffLike && view === 'staff_tasks' && <StaffOps me={me} mode="tasks" />}
-        {isStaffLike && view === 'staff_threads' && <StaffOps me={me} mode="threads" />}
+        {isStaff && view === 'operations' && <StaffOps me={me} mode="operations" />}
+        {isStaff && view === 'staff_tasks' && <StaffOps me={me} mode="tasks" />}
+        {isStaff && view === 'staff_threads' && <StaffOps me={me} mode="threads" />}
         {!isStaffLike && view === 'checkin'    && <DailyCheckin />}
         {!isStaffLike && view === 'pipeline'   && <Pipeline navIntent={navIntent} />}
         {!isStaffLike && view === 'contacts'   && <Contacts />}

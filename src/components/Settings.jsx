@@ -222,6 +222,7 @@ export default function Settings({ me, onProfileUpdated, onNavigate }) {
   const [updatingRoleUserId, setUpdatingRoleUserId] = useState('')
   const [resettingPasswordUserId, setResettingPasswordUserId] = useState('')
   const [togglingMustResetUserId, setTogglingMustResetUserId] = useState('')
+  const [staffResettingPasswordUserId, setStaffResettingPasswordUserId] = useState('')
   const [assignStaffUserId, setAssignStaffUserId] = useState('')
   const [assignJobSeekerUserId, setAssignJobSeekerUserId] = useState('')
   const [savingAssignment, setSavingAssignment] = useState(false)
@@ -547,6 +548,27 @@ export default function Settings({ me, onProfileUpdated, onNavigate }) {
       setError(e.payload || { error: e.message })
     } finally {
       setTogglingMustResetUserId('')
+    }
+  }
+
+  async function staffResetAssignedUserPassword(user) {
+    const password = window.prompt(`Set temporary password for ${user.username} (min 10 chars):`)
+    if (!password) return
+    setStaffResettingPasswordUserId(String(user.id))
+    setError(null)
+    setSuccess('')
+    try {
+      await api(`/api/staff/users/${user.id}/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password })
+      })
+      setSuccess(`Password reset for ${user.username}. They will be forced to change it on login.`)
+      await load()
+    } catch (e) {
+      setError(e.payload || { error: e.message })
+    } finally {
+      setStaffResettingPasswordUserId('')
     }
   }
 
@@ -1191,6 +1213,7 @@ export default function Settings({ me, onProfileUpdated, onNavigate }) {
                   <th>Email</th>
                   <th>Role</th>
                   <th>Password Reset</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -1200,6 +1223,17 @@ export default function Settings({ me, onProfileUpdated, onNavigate }) {
                     <td>{user.email || '—'}</td>
                     <td>{user.role}</td>
                     <td>{user.mustChangePassword ? 'Required' : 'No'}</td>
+                    <td>
+                      {me?.role === 'staff' && user.role === 'job_seeker' && (
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => staffResetAssignedUserPassword(user)}
+                          disabled={staffResettingPasswordUserId === String(user.id)}
+                        >
+                          {staffResettingPasswordUserId === String(user.id) ? 'Resetting…' : 'Reset Password'}
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
