@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "smoke:test": "node scripts/smoke-test-local.mjs",
     "smoke:test:tenant": "SMOKE_SUITE=tenant node scripts/smoke-test-local.mjs",
+    "qa:seed": "node scripts/seed-qa-data.mjs",
     "release:gate:v2": "bash scripts/release-gate-v2.sh",
     "ops:cost:snapshot": "bash scripts/cost-snapshot.sh",
     "migrate:notion": "node scripts/migrate-notion-to-turso.mjs",

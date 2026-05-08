@@ -133,6 +133,34 @@ End-to-end local smoke test for reliability checks.
 npm run smoke:test
 ```
 
+## seed-qa-data.mjs
+
+Creates a realistic QA dataset for hosted workflow testing (admin, staff, job seekers, pipeline, threads, tasks, sync-facing source states).
+
+### What it creates
+
+- 1 admin, 1 staff, 2 job seekers in the default org
+- staff assignments for both job seekers
+- mixed pipeline cards across stages (`Researching`, `Applied`, `In Conversation`, `Interviewing`, `Closed`)
+- daily check-in, contacts, interview, and event entries
+- staff recommendations (`draft` + `posted`)
+- staff tasks (`todo` + `in_progress`)
+- candidate thread with shared + internal messages
+
+### Running
+
+```bash
+npm run qa:seed
+```
+
+Optional environment variables:
+- `QA_PASSWORD` (default `qa-password-2026!`)
+- `QA_SUFFIX` (defaults to timestamp for unique usernames)
+- `QA_ORG_ID` (default `remote-rebellion`)
+- `QA_FORCE_PASSWORD_CHANGE=1` (forces first-login password reset for seeded users)
+
+After running, the script prints created usernames and the shared password.
+
 ## release-gate-v2.sh
 
 Hosted v2 release baseline gate script.
