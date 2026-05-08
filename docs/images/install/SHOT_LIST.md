@@ -53,12 +53,13 @@ Capture these in order and save with the exact filenames below.
 - Show:
   - message visibility options (`shared_with_candidate`, `internal_staff`)
 
-## 9) Admin team access
+## 9) Admin user management
 
-- Filename: `admin-team-access.png`
+- Filename: `admin-user-management.png`
 - Show:
   - create user form
   - role selection
+  - existing-user actions (`Reset Password`, `Force Reset`, role change)
 
 ## 10) Admin staff assignments
 
@@ -79,6 +80,26 @@ Capture these in order and save with the exact filenames below.
 - Show:
   - export backup
   - restore backup
+
+## 13) Admin ops deployment controls
+
+- Filename: `admin-ops-scheduler-coverage.png`
+- Show:
+  - scheduler job table
+  - scheduler coverage status
+
+- Filename: `admin-deployment-profile.png`
+- Show:
+  - deploy version
+  - auth mode
+  - profile status and risk list
+
+## 14) Staff assigned-user password reset
+
+- Filename: `staff-assigned-users-reset-password.png`
+- Show:
+  - Assigned Users table in staff account
+  - Reset Password action for assigned job-seeker
 
 ## Optional fallback (local reinstall only)
 

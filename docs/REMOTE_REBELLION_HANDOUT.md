@@ -16,15 +16,16 @@ Local install is now fallback/recovery only.
 
 - `job_seeker`: manages own job search workflow
 - `staff`: supports assigned candidates in Staff Ops
-- `admin`: staff actions + user/assignment/audit/sync/backup controls
+- `admin`: admin workspace for user/access/integration/ops controls
 
 ## First-Time Admin Setup
 
 1. Sign in as admin at hosted URL.
-2. Open `Settings` -> `Team Access` and create users.
+2. Open `Settings` -> `User Management` and create users.
 3. Assign roles (`job_seeker`, `staff`, `admin`).
-4. Open `Settings` -> `Staff Assignments` and map job seekers to staff owners.
-5. Confirm staff can see assigned candidates in `Staff Ops`.
+4. Set/reset temporary passwords as needed and force reset where appropriate.
+5. Open `Settings` -> `Staff Assignments` and map job seekers to staff owners.
+6. Confirm staff can see assigned candidates in `Staff Ops`.
 
 ## First-Time User Setup (Job Seeker)
 
@@ -40,6 +41,7 @@ Local install is now fallback/recovery only.
 2. Sign in with temporary credentials.
 3. Change password when prompted.
 4. Open `Staff Ops` and verify candidate list.
+5. In `Settings` -> `Assigned Users`, verify you can reset password for assigned job-seekers.
 
 ## Daily Job Seeker Workflow
 
@@ -108,3 +110,4 @@ App URL: `http://localhost:8080`
 ## Screenshot Checklist
 
 Use `docs/images/install/SHOT_LIST.md` for required captures.
+Use `docs/WORKFLOW_GUIDES_AND_SCREENSHOTS.md` for role-based workflow capture order.

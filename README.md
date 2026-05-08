@@ -44,10 +44,10 @@ This project is now documented as a **server/client app** first:
 
 ### Admin
 
-- Can do all staff actions
-- Creates users and role assignments
+- Uses an admin-focused workspace (settings/operations controls)
+- Creates users, updates roles, resets passwords, and enforces force-reset policy
 - Manages staff assignments
-- Reviews audit logs, sync health, and backups
+- Reviews audit logs, sync health, scheduler coverage, deployment profile, and backups
 
 ## Hosted Onboarding
 
@@ -103,10 +103,11 @@ Pipeline sync writes: Company, Role, Job URL, Job Source, Found By, Stage, Follo
 
 From `Settings`:
 
-- Team access (create users/roles)
+- User Management (create users, role changes, password reset, force-reset toggle)
 - Staff assignments
 - Audit log
 - Google Sheets Sync (health, details, config, recent runs — all one card)
+- Admin Ops Status (scheduler coverage + deployment profile)
 - Backup export/restore
 
 ## Docs Index
@@ -145,6 +146,7 @@ Configure OAuth env vars and use `Settings`:
 
 ## Screenshots
 
-Screenshot capture checklist is in:
+Workflow + screenshot capture checklist is in:
 
 - `docs/images/install/SHOT_LIST.md`
+- `docs/WORKFLOW_GUIDES_AND_SCREENSHOTS.md`

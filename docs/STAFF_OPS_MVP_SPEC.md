@@ -29,10 +29,11 @@ Define a clear staff/admin operating model that is distinct from the job-seeker 
 
 ### Admin
 - All staff capabilities plus:
-  - Team Access
+  - User Management
   - Staff Assignments
   - Audit Log
   - Integrations/Sync Health
+  - Scheduler Coverage + Deployment Profile
 
 ## Staff MVP Jobs-To-Be-Done
 1. Research jobs for candidates.

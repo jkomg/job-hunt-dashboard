@@ -6,7 +6,7 @@ Operational guide for staff and admins using hosted Job Hunt Dashboard environme
 ## Roles
 - `job_seeker`: personal dashboard and pipeline workflows.
 - `staff`: assigned-candidate support workflows.
-- `admin`: all staff workflows plus user/assignment/audit administration.
+- `admin`: admin workspace focused on user/access/integration/ops controls.
 
 ## Daily Staff Workflow
 1. Open `Briefing` and review:
@@ -25,10 +25,11 @@ Operational guide for staff and admins using hosted Job Hunt Dashboard environme
 
 ## Daily Admin Workflow
 1. Check `Settings`:
-   - Team Access
+   - User Management
    - Staff Assignments
    - Audit Log
    - Google Sheets Sync (health + entity status in one card)
+   - Admin Ops Status (scheduler coverage + deployment profile)
 2. Rebalance caseload:
    - use Staff Ops task reassignment
    - verify assignment coverage for all active candidates
@@ -52,13 +53,18 @@ Operational guide for staff and admins using hosted Job Hunt Dashboard environme
 ## User + Access Management
 
 ### Admin path (Settings)
-1. `Settings` -> `Team Access`: create users with role (`job_seeker`, `staff`, `admin`) and set temporary password
-2. `Settings` -> `Staff Assignments`: assign each job seeker to a staff/admin owner
-3. Verify with `Assigned Users` view under staff accounts.
+1. `Settings` -> `User Management`: create users with role (`job_seeker`, `staff`, `admin`) and set temporary password
+2. In `Manage Existing Users`:
+   - change roles
+   - reset password
+   - toggle force-reset policy
+3. `Settings` -> `Staff Assignments`: assign each job seeker to a staff/admin owner
+4. Verify with `Assigned Users` view under staff accounts.
 
 ### Staff path (Staff Ops)
 - Staff can create new `job_seeker` accounts directly from Staff Ops; the account is auto-assigned to them.
 - Staff can self-assign to existing unassigned candidates via the Staff Ops unassigned picker.
+- Staff can reset password for assigned job-seekers from `Settings` -> `Assigned Users`.
 
 ## Staff Ops: Thread Rules
 - `shared_with_candidate`: content safe for candidate visibility.
