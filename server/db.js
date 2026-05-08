@@ -2999,6 +2999,31 @@ export async function getDashboardData(scope = {}) {
     return !String(c['Next Action'] || '').trim() || !String(c['Next Action Date'] || '').trim()
   })
   const stalledInterviews = interviews.filter(i => i.Outcome === 'Pending' && (!String(i['Next Action'] || '').trim() || !String(i['Next Action Date'] || '').trim()))
+  const sourceStats = new Map()
+  for (const item of pipeline) {
+    const source = String(item['Job Source'] || '').trim() || 'Unknown'
+    const row = sourceStats.get(source) || { source, total: 0, interviewing: 0, offers: 0, closed: 0, inConversation: 0 }
+    row.total += 1
+    const stage = String(item.Stage || '')
+    if (stage === '🎯 Interviewing' || stage === '📞 Interview Scheduled') row.interviewing += 1
+    if (stage === '📋 Offer') row.offers += 1
+    if (stage === '💬 In Conversation') row.inConversation += 1
+    if (stage.includes('Closed')) row.closed += 1
+    sourceStats.set(source, row)
+  }
+  const sourcePerformance = Array.from(sourceStats.values())
+    .map(row => ({
+      ...row,
+      active: Math.max(0, row.total - row.closed),
+      responseRate: row.total ? Math.round(((row.inConversation + row.interviewing + row.offers) / row.total) * 100) : 0,
+      interviewRate: row.total ? Math.round((row.interviewing / row.total) * 100) : 0
+    }))
+    .sort((a, b) => {
+      if (b.active !== a.active) return b.active - a.active
+      if (b.responseRate !== a.responseRate) return b.responseRate - a.responseRate
+      return b.total - a.total
+    })
+    .slice(0, 8)
 
   const weekStats = recentLogs.slice(0, 7).reduce((acc, log) => {
     acc.outreach += log['Outreach Sent'] || 0
@@ -3190,6 +3215,7 @@ export async function getDashboardData(scope = {}) {
     todayQueue,
     suggestedTop3,
     priorityFramework: PRIORITY_FRAMEWORK.map(p => ({ ...p, count: queueByPillar[p.id] || 0 })),
+    sourcePerformance,
     health: {
       queueSize: todayQueue.length,
       stale: {
