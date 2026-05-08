@@ -5,6 +5,12 @@ Use this after any deploy that changes user-visible behavior.
 ## Goal
 Catch regressions quickly in the live environment before users report them.
 
+QA seed dataset (recommended before checklist run):
+
+```bash
+npm run qa:seed
+```
+
 ## When to run
 - Any UI change
 - Any auth/session/settings change
