@@ -2,6 +2,12 @@
 
 A hosted, multi-role job search command center for job seekers, staff, and admins.
 
+[![spec](https://img.shields.io/badge/spec-v0.1-4c4c4c)](#)
+[![license](https://img.shields.io/badge/license-Apache%202.0-84b819)](LICENSE)
+[![status](https://img.shields.io/badge/status-v1.0%20live-2dbd18)](#)
+[![pypi](https://img.shields.io/badge/pypi-v0.1.0-e57235)](https://pypi.org/)
+
+
 ## Primary Usage Model (Hosted)
 
 This project is now documented as a **server/client app** first:
