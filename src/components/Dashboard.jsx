@@ -117,6 +117,7 @@ export default function Dashboard({ onNavigate, me }) {
     weekStats = { outreach: 0, responses: 0, applications: 0, linkedInPosts: 0 },
     todayQueue = [],
     priorityFramework = [],
+    sourcePerformance = [],
     health
   } = data
 
@@ -242,6 +243,26 @@ export default function Dashboard({ onNavigate, me }) {
             <button className="btn btn-ghost" onClick={() => onNavigate('settings')}>⚙️ Admin Settings</button>
           </div>
         </div>
+        <div className="card" style={{ marginTop: 16 }}>
+          <div className="card-title">Source Performance</div>
+          {!sourcePerformance.length && <div style={{ color: 'var(--text-muted)' }}>No source data yet.</div>}
+          {!!sourcePerformance.length && (
+            <table className="data-table">
+              <thead><tr><th>Source</th><th>Active</th><th>Response %</th><th>Interview %</th><th>Offers</th></tr></thead>
+              <tbody>
+                {sourcePerformance.slice(0, 6).map(s => (
+                  <tr key={`staff-source-${s.source}`}>
+                    <td>{s.source}</td>
+                    <td>{s.active}</td>
+                    <td>{s.responseRate}%</td>
+                    <td>{s.interviewRate}%</td>
+                    <td>{s.offers}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
       </div>
     )
   }
@@ -278,6 +299,26 @@ export default function Dashboard({ onNavigate, me }) {
             Open Inbox
           </button>
         </div>
+      </div>
+      <div className="card mb-16">
+        <div className="card-title">Source Performance</div>
+        {!sourcePerformance.length && <div style={{ color: 'var(--text-muted)' }}>No source data yet.</div>}
+        {!!sourcePerformance.length && (
+          <table className="data-table">
+            <thead><tr><th>Source</th><th>Active</th><th>Response %</th><th>Interview %</th><th>Offers</th></tr></thead>
+            <tbody>
+              {sourcePerformance.slice(0, 6).map(s => (
+                <tr key={`member-source-${s.source}`}>
+                  <td>{s.source}</td>
+                  <td>{s.active}</td>
+                  <td>{s.responseRate}%</td>
+                  <td>{s.interviewRate}%</td>
+                  <td>{s.offers}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
 
       <div className="card mb-16" style={{ borderColor: 'var(--accent)' }}>
