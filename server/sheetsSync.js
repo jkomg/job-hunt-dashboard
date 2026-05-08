@@ -737,6 +737,12 @@ async function runOutboundSync({ sheets, spreadsheetId, tabs, scope }) {
     skippedUnchanged: 0,
     conflicts: 0,
     missingLinkedRecords: 0,
+    source: {
+      updatedRows: 0,
+      mismatchedRows: 0,
+      blankLocalRows: 0,
+      blankSheetRows: 0
+    },
     tabs: {}
   }
 
@@ -766,6 +772,14 @@ async function runOutboundSync({ sheets, spreadsheetId, tabs, scope }) {
       const rowIdx = link.row_number - 2
       const currentRow = rows[rowIdx] || []
       const patched = patchOutboundValues(headers, currentRow, item)
+      const currentRowObj = toRowObject(headers, currentRow)
+      const sheetSource = String(currentRowObj['job source'] || '').trim()
+      const localSource = String(item['Job Source'] || '').trim()
+      if (!localSource) summary.source.blankLocalRows++
+      if (!sheetSource) summary.source.blankSheetRows++
+      if (sheetSource && localSource && normalizeText(sheetSource) !== normalizeText(localSource)) {
+        summary.source.mismatchedRows++
+      }
 
       const outboundFingerprint = {
         company: item.Company || null,
@@ -783,7 +797,6 @@ async function runOutboundSync({ sheets, spreadsheetId, tabs, scope }) {
       }
       const outboundHash = hashObject(outboundFingerprint)
 
-      const currentRowObj = toRowObject(headers, currentRow)
       const currentInboundPayload = pickInboundFields(tab, currentRowObj)
       const currentInboundHash = currentInboundPayload
         ? hashObject({ payload: currentInboundPayload, tab, rowNumber: link.row_number })
@@ -824,6 +837,7 @@ async function runOutboundSync({ sheets, spreadsheetId, tabs, scope }) {
         await updateSheetSyncOutboundHash(u.id, u.outboundHash)
         summary.updatedRows++
         summary.tabs[tab].updated++
+        summary.source.updatedRows++
       }
     }
 
@@ -831,6 +845,8 @@ async function runOutboundSync({ sheets, spreadsheetId, tabs, scope }) {
     if (tab === tabs[0]) {
       const unlinked = pipeline.filter(item => !linkedIds.has(String(item.id)) && item.Stage !== '❌ Closed')
       for (const item of unlinked) {
+        const localSource = String(item['Job Source'] || '').trim()
+        if (!localSource) summary.source.blankLocalRows++
         const base = new Array(headers.length).fill('')
         const patched = patchOutboundValues(headers, base, item, { foundBy: 'Me' })
         const appendRes = await withSheetsWriteRetry(() => sheets.spreadsheets.values.append({
@@ -871,6 +887,7 @@ async function runOutboundSync({ sheets, spreadsheetId, tabs, scope }) {
           linkedIds.add(String(item.id))
           summary.appendedRows++
           summary.tabs[tab].appended++
+          if (localSource) summary.source.updatedRows++
         }
       }
     }
