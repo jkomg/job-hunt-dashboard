@@ -52,6 +52,13 @@ function describeRun(run) {
   if (Number.isFinite(Number(merged.missingLinkedRecords)) && Number(merged.missingLinkedRecords) > 0) {
     parts.push(`${merged.missingLinkedRecords} missing`)
   }
+  const source = summary?.source || merged?.source
+  if (source && Number.isFinite(Number(source.updatedRows))) {
+    parts.push(`${Number(source.updatedRows)} source updates`)
+  }
+  if (source && Number.isFinite(Number(source.mismatchedRows)) && Number(source.mismatchedRows) > 0) {
+    parts.push(`${Number(source.mismatchedRows)} source mismatches`)
+  }
   return parts.length ? parts.join(' • ') : 'No summary details.'
 }
 
@@ -419,10 +426,17 @@ export default function Settings({ me, onProfileUpdated }) {
         + Number(result?.contacts?.conflicts || 0)
         + Number(result?.interviews?.conflicts || 0)
         + Number(result?.events?.conflicts || 0)
+      const sourceSummary = result?.pipeline?.outbound?.source || {}
+      const sourceWarnings = Number(sourceSummary.mismatchedRows || 0)
+        + Number(sourceSummary.blankLocalRows || 0)
+        + Number(sourceSummary.blankSheetRows || 0)
+      const sourceMessage = Number(sourceSummary.updatedRows || 0) > 0 || sourceWarnings > 0
+        ? ` Source: ${Number(sourceSummary.updatedRows || 0)} updated${sourceWarnings > 0 ? `, ${sourceWarnings} warning${sourceWarnings === 1 ? '' : 's'}` : ''}.`
+        : ''
       setSuccess(
         conflicts > 0
-          ? `Sync completed with ${conflicts} conflict${conflicts === 1 ? '' : 's'} (skipped to avoid overwrites).`
-          : 'Sync completed successfully.'
+          ? `Sync completed with ${conflicts} conflict${conflicts === 1 ? '' : 's'} (skipped to avoid overwrites).${sourceMessage}`
+          : `Sync completed successfully.${sourceMessage}`
       )
       await load()
     } catch (e) {
@@ -754,6 +768,15 @@ export default function Settings({ me, onProfileUpdated }) {
                   {run?.status || 'unknown'}
                 </span>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{describeRun(run)}</div>
+                {!!run?.summary?.source && (Number(run.summary.source.mismatchedRows || 0) > 0 || Number(run.summary.source.blankLocalRows || 0) > 0 || Number(run.summary.source.blankSheetRows || 0) > 0) && (
+                  <div style={{ fontSize: 12, color: 'var(--yellow)', marginTop: 2 }}>
+                    Source warnings:
+                    {' '}mismatch {Number(run.summary.source.mismatchedRows || 0)}
+                    {' · '}blank local {Number(run.summary.source.blankLocalRows || 0)}
+                    {' · '}blank sheet {Number(run.summary.source.blankSheetRows || 0)}
+                    {' '}· Review Job Source values in Pipeline and re-run sync.
+                  </div>
+                )}
               </div>
             </div>
           ))}
