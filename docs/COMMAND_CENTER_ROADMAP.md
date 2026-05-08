@@ -36,6 +36,8 @@ Work order:
 - [x] Add per-entity sync results summary card in dashboard
 - [x] Add conflict-safe sync behavior before overwrite (local + sheet changed rows are skipped)
 - [x] Add downloadable sync logs for support and troubleshooting
+- [x] Add source-level sync observability (updated/mismatch/blank counters)
+- [x] Add one-click cleanup workflow from Settings warnings to Pipeline source filters
 
 ## 4) Security + Safety (must-have if public)
 
@@ -67,3 +69,27 @@ Work order:
 - [x] Interview readiness ranked above follow-ups
 - [x] Next Action + Next Action Date across pipeline/contacts/interviews
 - [x] Daily check-in auto-fill from Today Queue
+- [x] Pipeline source filter (`all`, missing source, custom source, specific source)
+- [x] Saved pipeline views for filter state (stage/source)
+- [x] Bulk date actions for selected pipeline cards
+- [x] Source performance briefing metrics (active/response/interview/offers by source)
+
+## Usability Workflow Notes (May 2026)
+
+- Source sync warnings now include direct fix actions in Settings:
+  - `Fix Missing Sources` opens Pipeline with `Source = Missing source`
+  - `Review Custom Sources` opens Pipeline with `Source = Custom source values`
+- Recommended post-merge UAT checks:
+  1. Trigger a sync run with at least one blank source and one custom source.
+  2. Verify warning counts appear in Settings > Sync Status.
+  3. Use both quick actions and confirm Pipeline filters load correctly.
+  4. Update/fix affected cards, rerun sync, confirm warning reduction.
+
+### Screenshot Placeholders
+
+- `docs/images/settings-source-warnings.png`
+  - Capture: Settings sync status warning block with action buttons.
+- `docs/images/pipeline-filter-missing-source.png`
+  - Capture: Pipeline filtered to missing sources.
+- `docs/images/pipeline-filter-custom-source.png`
+  - Capture: Pipeline filtered to custom source values.

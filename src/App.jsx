@@ -201,7 +201,7 @@ export default function App() {
         {!isStaffLike && view === 'events'     && <Events />}
         {!isStaffLike && view === 'templates'  && <Templates />}
         {!isStaffLike && view === 'watchlist'  && <Watchlist />}
-        {view === 'settings'   && <Settings me={me} onProfileUpdated={refreshMe} />}
+        {view === 'settings'   && <Settings me={me} onProfileUpdated={refreshMe} onNavigate={navigate} />}
       </main>
 
       {/* Mobile bottom nav */}

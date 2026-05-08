@@ -318,6 +318,14 @@ export default function Pipeline({ navIntent }) {
     if (!navIntent) return
     if (navIntent.mode === 'due_followups') setFilter('due_followups')
     if (navIntent.mode === 'stale_actions') setFilter('stale_actions')
+    if (navIntent.mode === 'source_missing') {
+      setFilter('all')
+      setSourceFilter('__missing__')
+    }
+    if (navIntent.mode === 'source_custom') {
+      setFilter('all')
+      setSourceFilter('__custom__')
+    }
   }, [navIntent])
 
   useEffect(() => {
@@ -464,7 +472,14 @@ export default function Pipeline({ navIntent }) {
     : items.filter(i => i.Stage === filter)
   const visible = sourceFilter === 'all'
     ? baseVisible
-    : baseVisible.filter(i => String(i['Job Source'] || '').trim() === sourceFilter)
+    : sourceFilter === '__missing__'
+      ? baseVisible.filter(i => !String(i['Job Source'] || '').trim())
+      : sourceFilter === '__custom__'
+        ? baseVisible.filter(i => {
+          const src = String(i['Job Source'] || '').trim()
+          return !!src && !JOB_SOURCES.includes(src)
+        })
+        : baseVisible.filter(i => String(i['Job Source'] || '').trim() === sourceFilter)
 
   const sourceOptions = useMemo(() => Array.from(new Set(
     [...JOB_SOURCES, ...items.map(i => String(i['Job Source'] || '').trim()).filter(Boolean)]
@@ -507,6 +522,8 @@ export default function Pipeline({ navIntent }) {
         <label style={{ fontSize: 12, color: 'var(--text-muted)' }}>Source</label>
         <select value={sourceFilter} onChange={e => setSourceFilter(e.target.value)} style={{ minWidth: 220 }}>
           <option value="all">All sources</option>
+          <option value="__missing__">Missing source</option>
+          <option value="__custom__">Custom source values</option>
           {sourceOptions.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
       </div>
