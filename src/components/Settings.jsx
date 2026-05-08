@@ -212,6 +212,62 @@ export default function Settings({ me, onProfileUpdated, onNavigate }) {
     for (const user of adminUsers) map.set(Number(user.id), user)
     return map
   }, [adminUsers])
+  const opsStatusRows = useMemo(() => {
+    const lastByDirection = {}
+    for (const run of runs || []) {
+      if (!run?.direction) continue
+      if (!lastByDirection[run.direction]) lastByDirection[run.direction] = run
+    }
+    const rows = [
+      {
+        key: 'sheets-outbound',
+        label: 'Sheets Sync (Outbound)',
+        status: lastByDirection.outbound?.status || 'unknown',
+        when: lastByDirection.outbound?.createdAt || null,
+        detail: describeRun(lastByDirection.outbound)
+      },
+      {
+        key: 'sheets-inbound',
+        label: 'Sheets Sync (Inbound)',
+        status: lastByDirection.inbound?.status || 'unknown',
+        when: lastByDirection.inbound?.createdAt || null,
+        detail: describeRun(lastByDirection.inbound)
+      },
+      {
+        key: 'contacts-sync',
+        label: 'Networking Sync',
+        status: lastByDirection.contacts?.status || 'unknown',
+        when: lastByDirection.contacts?.createdAt || null,
+        detail: describeRun(lastByDirection.contacts)
+      },
+      {
+        key: 'interviews-sync',
+        label: 'Interviews Sync',
+        status: lastByDirection.interviews?.status || 'unknown',
+        when: lastByDirection.interviews?.createdAt || null,
+        detail: describeRun(lastByDirection.interviews)
+      },
+      {
+        key: 'events-sync',
+        label: 'Events Sync',
+        status: lastByDirection.events?.status || 'unknown',
+        when: lastByDirection.events?.createdAt || null,
+        detail: describeRun(lastByDirection.events)
+      },
+      {
+        key: 'cost-snapshot',
+        label: 'Cost Snapshot',
+        status: costSnapshots?.length ? 'ok' : 'unknown',
+        when: costSnapshots?.[0]?.created_at ? new Date(costSnapshots[0].created_at).toISOString() : null,
+        detail: costSnapshots?.length ? 'Latest snapshot available.' : 'No snapshot yet.'
+      }
+    ]
+    return rows
+  }, [runs, costSnapshots])
+  const opsFailures = useMemo(
+    () => (runs || []).filter(run => run?.status === 'error').slice(0, 5),
+    [runs]
+  )
 
   async function load() {
     setLoading(true)
@@ -1148,6 +1204,51 @@ export default function Settings({ me, onProfileUpdated, onNavigate }) {
                 })}
               </tbody>
             </table>
+          )}
+        </div>
+      )}
+
+      {me?.isAdmin && (
+        <div className="card mb-16">
+          <div className="card-title">Admin Ops Status</div>
+          <div style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 8 }}>
+            Quick view of background/operational job health from recent run history.
+          </div>
+          <table className="data-table" style={{ marginBottom: 10 }}>
+            <thead>
+              <tr>
+                <th>Job</th>
+                <th>Status</th>
+                <th>Last Run</th>
+                <th>Summary</th>
+              </tr>
+            </thead>
+            <tbody>
+              {opsStatusRows.map(row => (
+                <tr key={row.key}>
+                  <td>{row.label}</td>
+                  <td>
+                    <span className={`badge ${row.status === 'ok' ? 'badge-green' : row.status === 'error' ? 'badge-red' : ''}`}>
+                      {row.status}
+                    </span>
+                  </td>
+                  <td>{formatDateTime(row.when)}</td>
+                  <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>{row.detail}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 6 }}>Recent Failures</div>
+          {!opsFailures.length && <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>No recent failed runs.</div>}
+          {!!opsFailures.length && (
+            <div>
+              {opsFailures.map(run => (
+                <div key={`ops-fail-${run.id}`} style={{ padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
+                  <strong>{run.direction}</strong> · {formatDateTime(run.createdAt)}
+                  {run.errorText ? <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{run.errorText}</div> : null}
+                </div>
+              ))}
+            </div>
           )}
         </div>
       )}
