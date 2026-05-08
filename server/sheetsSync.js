@@ -403,11 +403,15 @@ function buildInterviewsIndex(items) {
   const bySignature = new Map()
 
   for (const item of items) {
-    const key = `${normalizeText(item.Company)}::${normalizeText(item['Job Title'])}::${item.Date || ''}::${normalizeText(item.Round)}`
+    const key = interviewSignature(item)
     if (normalizeText(item.Company)) bySignature.set(key, item)
   }
 
   return { byId, bySignature }
+}
+
+function interviewSignature(item = {}) {
+  return `${normalizeText(item.Company)}::${normalizeText(item['Job Title'])}::${item.Date || ''}::${normalizeText(item.Round)}`
 }
 
 function buildEventsIndex(items) {
@@ -524,6 +528,19 @@ function patchOutboundInterviewValues(headers, rowValues, item) {
   patch(['follow-up sent', 'follow up sent', 'thank you sent', 'follow-up sent?'], item['Follow-Up Sent'] ? 'TRUE' : 'FALSE')
   patch(['notes'], item.Notes || '')
   return out
+}
+
+function isPlaceholderInterviewRow(rowObj = {}) {
+  const company = normalizeText(rowObj.company || rowObj['company name'])
+  const role = normalizeText(rowObj['job title'] || rowObj.role || rowObj.title || rowObj.position)
+  const stage = normalizeText(rowObj.stage || rowObj.round)
+  const date = normalizeText(rowObj.date || rowObj['interview date'] || rowObj['date of interview'])
+
+  const companyIsPlaceholder = !company || company === normalizeText('Company Name')
+  const roleIsPlaceholder = !role || role === normalizeText('Job Title')
+  const stageLooksEmpty = !stage
+  const dateLooksEmpty = !date
+  return companyIsPlaceholder && roleIsPlaceholder && stageLooksEmpty && dateLooksEmpty
 }
 
 function patchOutboundEventValues(headers, rowValues, item) {
@@ -1059,7 +1076,7 @@ async function runInterviewsSync({ sheets, spreadsheetId, tabs, scope }) {
         inbound.linkedExisting++; inbound.tabs[tab].linked++; continue
       }
 
-      const key = `${normalizeText(payload.Company)}::${normalizeText(payload['Job Title'])}::${payload.Date || ''}::${normalizeText(payload.Round)}`
+      const key = interviewSignature(payload)
       const matched = index.bySignature.get(key) || null
 
       let entityId
@@ -1085,14 +1102,15 @@ async function runInterviewsSync({ sheets, spreadsheetId, tabs, scope }) {
   const latestInterviews = await getInterviews(scope)
   const byId = new Map(latestInterviews.map(item => [item.id, item]))
   const latestLinks = await getEntitySheetSyncLinks(spreadsheetId, 'interviews')
-  const outbound = { updatedRows: 0, skippedUnchanged: 0, conflicts: 0, missingLinkedRecords: 0, tabs: {} }
+  const linkedIds = new Set(latestLinks.map(link => String(link.entity_id)))
+  const outbound = { updatedRows: 0, appendedRows: 0, skippedUnchanged: 0, conflicts: 0, missingLinkedRecords: 0, tabs: {} }
 
   for (const tab of tabs) {
     const tabLinks = latestLinks.filter(link => link.tab_name === tab)
-    outbound.tabs[tab] = { updated: 0, skipped: 0, conflicts: 0, missing: 0 }
-    if (!tabLinks.length) continue
+    outbound.tabs[tab] = { updated: 0, appended: 0, skipped: 0, conflicts: 0, missing: 0 }
 
     const { headers, rows } = await readTabRows(sheets, spreadsheetId, tab)
+    const linkedRowNumbers = new Set(tabLinks.map(link => Number(link.row_number)).filter(Boolean))
     const updates = []
     const updateLinks = []
     for (const link of tabLinks) {
@@ -1148,6 +1166,75 @@ async function runInterviewsSync({ sheets, spreadsheetId, tabs, scope }) {
       for (const u of updateLinks) {
         await updateEntitySheetSyncOutboundHash(u.id, u.outboundHash)
         outbound.updatedRows++; outbound.tabs[tab].updated++
+      }
+    }
+
+    // Append local interviews that are not linked to any sheet row yet.
+    if (tab === tabs[0]) {
+      const unlinked = latestInterviews.filter(item => !linkedIds.has(String(item.id)))
+      for (const item of unlinked) {
+        const base = new Array(headers.length).fill('')
+        const patched = patchOutboundInterviewValues(headers, base, item)
+        let rowNumber = null
+
+        for (let i = 0; i < rows.length; i++) {
+          const candidateRowNumber = i + 2
+          if (linkedRowNumbers.has(candidateRowNumber)) continue
+          const rowObj = toRowObject(headers, rows[i] || [])
+          if (!isPlaceholderInterviewRow(rowObj)) continue
+          await withSheetsWriteRetry(() => sheets.spreadsheets.values.batchUpdate({
+            spreadsheetId,
+            requestBody: {
+              valueInputOption: 'USER_ENTERED',
+              data: [{ range: rowUpdateRange(tab, candidateRowNumber, headers, patched), values: [patched] }]
+            }
+          }))
+          rowNumber = candidateRowNumber
+          break
+        }
+
+        if (!rowNumber) {
+          const appendRes = await withSheetsWriteRetry(() => sheets.spreadsheets.values.append({
+            spreadsheetId,
+            range: `${tab}!A:ZZ`,
+            valueInputOption: 'USER_ENTERED',
+            insertDataOption: 'INSERT_ROWS',
+            requestBody: { values: [patched] }
+          }))
+          const updatedRange = appendRes?.data?.updates?.updatedRange || ''
+          rowNumber = parseRowNumberFromRange(updatedRange)
+        }
+        if (!rowNumber) continue
+
+        const rowObj = toRowObject(headers, patched)
+        const inboundPayload = pickInboundInterviewFields(rowObj)
+        const inboundHash = inboundPayload
+          ? hashObject({ payload: inboundPayload, tab, rowNumber, entity: 'interviews' })
+          : null
+        const outboundHash = hashObject({
+          company: item.Company || null,
+          role: item['Job Title'] || null,
+          date: item.Date || null,
+          round: item.Round || null,
+          format: item.Format || null,
+          outcome: item.Outcome || null,
+          followUpSent: !!item['Follow-Up Sent'],
+          notes: item.Notes || null
+        })
+
+        await upsertEntitySheetSyncLink({
+          sheetId: spreadsheetId,
+          tabName: tab,
+          rowNumber,
+          entityType: 'interviews',
+          entityId: item.id,
+          lastInboundHash: inboundHash,
+          lastOutboundHash: outboundHash
+        })
+        linkedIds.add(String(item.id))
+        linkedRowNumbers.add(Number(rowNumber))
+        outbound.appendedRows++
+        outbound.tabs[tab].appended++
       }
     }
   }

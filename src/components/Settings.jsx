@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 const BUNDLE_VERSION = String(import.meta.env.VITE_DEPLOY_VERSION || 'dev')
+const EXPECTED_SCHEDULER_JOBS = [
+  { name: 'job-hunt-daily-sheets-sync', cadence: 'daily', purpose: 'Google Sheets sync' },
+  { name: 'job-hunt-daily-backup-export', cadence: 'daily', purpose: 'Backup export to GCS' }
+]
 
 function tabsToText(tabs) {
   return (tabs || []).join(', ')
@@ -122,6 +126,19 @@ function parseSchedulerFromSnapshot(summaryText) {
     }
   }
   return { jobCount: Number.isFinite(jobCount) ? jobCount : null, jobs, status: statusLine ? statusLine.replace(/^- status:\s*/i, '') : null }
+}
+
+function schedulerCoverageSummary(schedulerInfo) {
+  const names = new Set((schedulerInfo?.jobs || []).map(j => String(j.name || '').trim()).filter(Boolean))
+  const checks = EXPECTED_SCHEDULER_JOBS.map(job => ({
+    ...job,
+    configured: names.has(job.name)
+  }))
+  return {
+    checks,
+    configured: checks.filter(c => c.configured).length,
+    total: checks.length
+  }
 }
 
 async function api(path, options = {}) {
@@ -314,6 +331,19 @@ export default function Settings({ me, onProfileUpdated, onNavigate }) {
     () => parseSchedulerFromSnapshot(costSnapshots?.[0]?.summary_text || ''),
     [costSnapshots]
   )
+  const schedulerCoverage = useMemo(
+    () => schedulerCoverageSummary(schedulerInfo),
+    [schedulerInfo]
+  )
+  const deploymentProfile = useMemo(() => {
+    const authMode = String(healthMeta?.authMode || 'unknown')
+    const deployVersion = String(healthMeta?.deployVersion || 'unknown')
+    const isProductionLike = deployVersion !== 'dev' && deployVersion !== 'unknown'
+    const riskFlags = []
+    if (!isProductionLike) riskFlags.push('Server deploy version is not pinned (dev/unknown).')
+    if (authMode === 'none') riskFlags.push('Auth mode is disabled.')
+    return { authMode, deployVersion, isProductionLike, riskFlags }
+  }, [healthMeta])
 
   async function load() {
     setLoading(true)
@@ -1348,6 +1378,75 @@ export default function Settings({ me, onProfileUpdated, onNavigate }) {
                 ))}
               </tbody>
             </table>
+          )}
+          <div style={{ fontWeight: 600, fontSize: 13, marginTop: 12, marginBottom: 6 }}>
+            Scheduler Coverage ({schedulerCoverage.configured}/{schedulerCoverage.total})
+          </div>
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Expected Job</th>
+                <th>Purpose</th>
+                <th>Cadence</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {schedulerCoverage.checks.map(job => (
+                <tr key={`scheduler-check-${job.name}`}>
+                  <td>{job.name}</td>
+                  <td>{job.purpose}</td>
+                  <td>{job.cadence}</td>
+                  <td>
+                    <span className={`badge ${job.configured ? 'badge-green' : ''}`}>
+                      {job.configured ? 'configured' : 'missing'}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {me?.isAdmin && (
+        <div className="card mb-16">
+          <div className="card-title">Deployment Profile</div>
+          <div style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 8 }}>
+            Lightweight production guardrails check (dev/prod split readiness).
+          </div>
+          <table className="data-table" style={{ marginBottom: 10 }}>
+            <tbody>
+              <tr>
+                <th style={{ width: 220 }}>Server Deploy Version</th>
+                <td>{deploymentProfile.deployVersion}</td>
+              </tr>
+              <tr>
+                <th>Auth Mode</th>
+                <td>{deploymentProfile.authMode}</td>
+              </tr>
+              <tr>
+                <th>Profile Status</th>
+                <td>
+                  <span className={`badge ${deploymentProfile.riskFlags.length ? '' : 'badge-green'}`}>
+                    {deploymentProfile.riskFlags.length ? 'needs attention' : 'ready'}
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          {!deploymentProfile.riskFlags.length && (
+            <div style={{ color: 'var(--green)', fontSize: 12 }}>No immediate deployment profile risks detected.</div>
+          )}
+          {!!deploymentProfile.riskFlags.length && (
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 6 }}>Risks to address:</div>
+              <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--text-muted)', fontSize: 12 }}>
+                {deploymentProfile.riskFlags.map(flag => (
+                  <li key={`deploy-risk-${flag}`}>{flag}</li>
+                ))}
+              </ul>
+            </div>
           )}
         </div>
       )}
