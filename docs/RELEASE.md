@@ -32,6 +32,15 @@ Shipped and active:
 - Member Inbox view for candidate-visible staff support threads
 - Audit log coverage for staff/admin actions
 
+Recently shipped (May 2026):
+
+- Pipeline source filtering (including missing/custom source cleanup modes)
+- Saved Pipeline views
+- Bulk Pipeline date updates
+- Briefing source performance metrics
+- Source-level Sheets sync observability + warning counters
+- Settings quick-actions to jump directly into Pipeline source cleanup
+
 ## Pre-Release Checklist (v2)
 
 1. Validate tenant isolation and role scoping in API + UI.
@@ -45,6 +54,9 @@ Shipped and active:
    - security checklist
 5. Validate sync and backup operational paths.
 6. Confirm changelog is updated.
+7. Confirm roadmap issue tracker is updated:
+   - `docs/COMMAND_CENTER_ROADMAP.md` open issue table
+   - screenshot checklist status
 
 ## Cut Release (v2)
 
