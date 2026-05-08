@@ -92,16 +92,33 @@ function parseSchedulerFromSnapshot(summaryText) {
   const jobCountLine = slice.find(line => line.trim().startsWith('- job_count:'))
   const statusLine = slice.find(line => line.trim().startsWith('- status:'))
   const jobCount = jobCountLine ? Number(String(jobCountLine.split(':').slice(1).join(':')).trim()) : null
-  const tableLines = slice
+  const jobs = []
+
+  // Support markdown-style pipe tables if present.
+  const pipeTableLines = slice
     .filter(line => line.trim().startsWith('|') && line.includes('|'))
     .map(line => line.trim())
-  const jobs = []
-  for (const line of tableLines) {
-    if (line.toLowerCase().includes('name') && line.toLowerCase().includes('schedule')) continue
-    if (/^\|\s*-+\s*\|/.test(line)) continue
-    const cols = line.split('|').map(v => v.trim()).filter(Boolean)
-    if (cols.length >= 3) {
-      jobs.push({ name: cols[0], schedule: cols[1], state: cols[2] })
+  if (pipeTableLines.length) {
+    for (const line of pipeTableLines) {
+      if (line.toLowerCase().includes('name') && line.toLowerCase().includes('schedule')) continue
+      if (/^\|\s*-+\s*\|/.test(line)) continue
+      const cols = line.split('|').map(v => v.trim()).filter(Boolean)
+      if (cols.length >= 3) {
+        jobs.push({ name: cols[0], schedule: cols[1], state: cols[2] })
+      }
+    }
+  } else {
+    // Parse gcloud table output: whitespace-delimited columns (name, schedule, state).
+    for (const raw of slice) {
+      const line = String(raw || '').trim()
+      if (!line || line.startsWith('- ')) continue
+      const lower = line.toLowerCase()
+      if (lower.startsWith('name') && lower.includes('schedule') && lower.includes('state')) continue
+      if (/^[-\s|]+$/.test(line)) continue
+      const cols = line.split(/\s{2,}/).map(v => v.trim()).filter(Boolean)
+      if (cols.length >= 3) {
+        jobs.push({ name: cols[0], schedule: cols[1], state: cols[2] })
+      }
     }
   }
   return { jobCount: Number.isFinite(jobCount) ? jobCount : null, jobs, status: statusLine ? statusLine.replace(/^- status:\s*/i, '') : null }
