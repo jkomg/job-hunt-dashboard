@@ -118,7 +118,7 @@ function ErrorCallout({ error }) {
   )
 }
 
-export default function Settings({ me, onProfileUpdated }) {
+export default function Settings({ me, onProfileUpdated, onNavigate }) {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [savingProfile, setSavingProfile] = useState(false)
@@ -775,6 +775,14 @@ export default function Settings({ me, onProfileUpdated }) {
                     {' · '}blank local {Number(run.summary.source.blankLocalRows || 0)}
                     {' · '}blank sheet {Number(run.summary.source.blankSheetRows || 0)}
                     {' '}· Review Job Source values in Pipeline and re-run sync.
+                    <div style={{ marginTop: 4, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <button className="btn btn-ghost btn-sm" onClick={() => onNavigate?.('pipeline', { mode: 'source_missing' })}>
+                        Fix Missing Sources
+                      </button>
+                      <button className="btn btn-ghost btn-sm" onClick={() => onNavigate?.('pipeline', { mode: 'source_custom' })}>
+                        Review Custom Sources
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
