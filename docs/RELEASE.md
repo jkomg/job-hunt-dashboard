@@ -52,6 +52,7 @@ Recently shipped (May 2026):
    - README hosted onboarding
    - staff/admin runbook
    - security checklist
+   - README badge row (status/release values)
 5. Validate sync and backup operational paths.
 6. Confirm changelog is updated.
 7. Confirm roadmap issue tracker is updated:
