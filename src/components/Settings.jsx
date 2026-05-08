@@ -82,6 +82,48 @@ function describeAuditAction(log) {
   return log?.action || 'unknown'
 }
 
+function parseSchedulerFromSnapshot(summaryText) {
+  const text = String(summaryText || '')
+  if (!text) return { jobCount: null, jobs: [], status: null }
+  const lines = text.split('\n')
+  const sectionIdx = lines.findIndex(line => line.trim().toLowerCase() === '## cloud scheduler jobs')
+  if (sectionIdx < 0) return { jobCount: null, jobs: [], status: 'not_found' }
+  const slice = lines.slice(sectionIdx + 1, sectionIdx + 80)
+  const jobCountLine = slice.find(line => line.trim().startsWith('- job_count:'))
+  const statusLine = slice.find(line => line.trim().startsWith('- status:'))
+  const jobCount = jobCountLine ? Number(String(jobCountLine.split(':').slice(1).join(':')).trim()) : null
+  const jobs = []
+
+  // Support markdown-style pipe tables if present.
+  const pipeTableLines = slice
+    .filter(line => line.trim().startsWith('|') && line.includes('|'))
+    .map(line => line.trim())
+  if (pipeTableLines.length) {
+    for (const line of pipeTableLines) {
+      if (line.toLowerCase().includes('name') && line.toLowerCase().includes('schedule')) continue
+      if (/^\|\s*-+\s*\|/.test(line)) continue
+      const cols = line.split('|').map(v => v.trim()).filter(Boolean)
+      if (cols.length >= 3) {
+        jobs.push({ name: cols[0], schedule: cols[1], state: cols[2] })
+      }
+    }
+  } else {
+    // Parse gcloud table output: whitespace-delimited columns (name, schedule, state).
+    for (const raw of slice) {
+      const line = String(raw || '').trim()
+      if (!line || line.startsWith('- ')) continue
+      const lower = line.toLowerCase()
+      if (lower.startsWith('name') && lower.includes('schedule') && lower.includes('state')) continue
+      if (/^[-\s|]+$/.test(line)) continue
+      const cols = line.split(/\s{2,}/).map(v => v.trim()).filter(Boolean)
+      if (cols.length >= 3) {
+        jobs.push({ name: cols[0], schedule: cols[1], state: cols[2] })
+      }
+    }
+  }
+  return { jobCount: Number.isFinite(jobCount) ? jobCount : null, jobs, status: statusLine ? statusLine.replace(/^- status:\s*/i, '') : null }
+}
+
 async function api(path, options = {}) {
   const res = await fetch(path, { credentials: 'include', ...options })
   let data = null
@@ -267,6 +309,10 @@ export default function Settings({ me, onProfileUpdated, onNavigate }) {
   const opsFailures = useMemo(
     () => (runs || []).filter(run => run?.status === 'error').slice(0, 5),
     [runs]
+  )
+  const schedulerInfo = useMemo(
+    () => parseSchedulerFromSnapshot(costSnapshots?.[0]?.summary_text || ''),
+    [costSnapshots]
   )
 
   async function load() {
@@ -1261,6 +1307,47 @@ export default function Settings({ me, onProfileUpdated, onNavigate }) {
                 </div>
               ))}
             </div>
+          )}
+          <div style={{ fontWeight: 600, fontSize: 13, marginTop: 12, marginBottom: 6 }}>Scheduler Jobs (from latest cost snapshot)</div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>
+            Use this to verify scheduled sync/backup cadence; refresh via “Run Cost Snapshot”.
+          </div>
+          {schedulerInfo.status && schedulerInfo.status !== 'not_found' && (
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>Status: {schedulerInfo.status}</div>
+          )}
+          {Number.isFinite(Number(schedulerInfo.jobCount)) && (
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>
+              Job count: {schedulerInfo.jobCount}
+            </div>
+          )}
+          {!schedulerInfo.jobs.length && (
+            <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>
+              No scheduler job details found in the latest snapshot yet.
+            </div>
+          )}
+          {!!schedulerInfo.jobs.length && (
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Job</th>
+                  <th>Schedule</th>
+                  <th>State</th>
+                </tr>
+              </thead>
+              <tbody>
+                {schedulerInfo.jobs.map(job => (
+                  <tr key={`scheduler-${job.name}-${job.schedule}`}>
+                    <td>{job.name}</td>
+                    <td>{job.schedule}</td>
+                    <td>
+                      <span className={`badge ${String(job.state).toUpperCase() === 'ENABLED' ? 'badge-green' : ''}`}>
+                        {job.state}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           )}
         </div>
       )}

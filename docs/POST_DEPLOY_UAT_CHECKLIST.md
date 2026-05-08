@@ -55,3 +55,18 @@ npm run qa:seed
 - Data save failures
 - Cross-user data leakage
 - Major sync failure with no recovery path
+
+## Testing Cadence (start now)
+
+- Per PR (before merge):
+  1. `npm run build`
+  2. `npm run smoke:test:tenant`
+- Per merge to `main`:
+  1. Deploy
+  2. Run this checklist in hosted environment once
+- Daily (while active development):
+  1. One full admin pass
+  2. One full job-seeker pass
+- Weekly:
+  1. Restore drill from latest backup JSON
+  2. Validate scheduler jobs in Admin Ops Status
