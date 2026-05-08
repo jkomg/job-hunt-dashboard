@@ -219,6 +219,9 @@ export default function Settings({ me, onProfileUpdated, onNavigate }) {
   const [newUserRole, setNewUserRole] = useState('job_seeker')
   const [newUserPassword, setNewUserPassword] = useState('')
   const [creatingUser, setCreatingUser] = useState(false)
+  const [updatingRoleUserId, setUpdatingRoleUserId] = useState('')
+  const [resettingPasswordUserId, setResettingPasswordUserId] = useState('')
+  const [togglingMustResetUserId, setTogglingMustResetUserId] = useState('')
   const [assignStaffUserId, setAssignStaffUserId] = useState('')
   const [assignJobSeekerUserId, setAssignJobSeekerUserId] = useState('')
   const [savingAssignment, setSavingAssignment] = useState(false)
@@ -485,6 +488,65 @@ export default function Settings({ me, onProfileUpdated, onNavigate }) {
       setError(e.payload || { error: e.message })
     } finally {
       setCreatingUser(false)
+    }
+  }
+
+  async function changeUserRole(userId, role) {
+    setUpdatingRoleUserId(String(userId))
+    setError(null)
+    setSuccess('')
+    try {
+      await api(`/api/admin/users/${userId}/role`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role })
+      })
+      setSuccess('User role updated.')
+      await load()
+    } catch (e) {
+      setError(e.payload || { error: e.message })
+    } finally {
+      setUpdatingRoleUserId('')
+    }
+  }
+
+  async function resetUserPassword(user) {
+    const password = window.prompt(`Set temporary password for ${user.username} (min 10 chars):`)
+    if (!password) return
+    setResettingPasswordUserId(String(user.id))
+    setError(null)
+    setSuccess('')
+    try {
+      await api(`/api/admin/users/${user.id}/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password })
+      })
+      setSuccess(`Password reset for ${user.username}. They will be forced to change it on login.`)
+      await load()
+    } catch (e) {
+      setError(e.payload || { error: e.message })
+    } finally {
+      setResettingPasswordUserId('')
+    }
+  }
+
+  async function toggleForceReset(user) {
+    setTogglingMustResetUserId(String(user.id))
+    setError(null)
+    setSuccess('')
+    try {
+      await api(`/api/admin/users/${user.id}/password-policy`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mustChangePassword: !user.mustChangePassword })
+      })
+      setSuccess(`Password reset policy updated for ${user.username}.`)
+      await load()
+    } catch (e) {
+      setError(e.payload || { error: e.message })
+    } finally {
+      setTogglingMustResetUserId('')
     }
   }
 
@@ -803,12 +865,22 @@ export default function Settings({ me, onProfileUpdated, onNavigate }) {
         <h1>Settings</h1>
         <div className="subtitle">Profile, integrations, and administration</div>
       </div>
+      {me?.isAdmin && (
+        <div className="quick-actions" style={{ marginBottom: 10 }}>
+          <a className="btn btn-ghost btn-sm" href="#settings-profile">Profile</a>
+          <a className="btn btn-ghost btn-sm" href="#settings-integrations">Integrations</a>
+          <a className="btn btn-ghost btn-sm" href="#settings-users">User Management</a>
+          <a className="btn btn-ghost btn-sm" href="#settings-assignments">Assignments</a>
+          <a className="btn btn-ghost btn-sm" href="#settings-ops">Operations</a>
+          <a className="btn btn-ghost btn-sm" href="#settings-backups">Backups</a>
+        </div>
+      )}
 
       {success && <div className="success-msg">{success}</div>}
       <ErrorCallout error={error} />
 
       {/* ── Build Info ── */}
-      <div className="card mb-16">
+      <div className="card mb-16" id="settings-profile">
         <div className="card-title">Build Info</div>
         <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Frontend bundle: <code>{BUNDLE_VERSION}</code></div>
         <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Server deploy: <code>{serverDeployVersion || 'unknown'}</code></div>
@@ -833,7 +905,7 @@ export default function Settings({ me, onProfileUpdated, onNavigate }) {
       </div>
 
       {/* ── Profile ── */}
-      <div className="card mb-16">
+      <div className="card mb-16" id="settings-integrations">
         <div className="card-title">Profile</div>
         <div className="field">
           <label>Display Name</label>
@@ -1104,7 +1176,7 @@ export default function Settings({ me, onProfileUpdated, onNavigate }) {
 
       {/* ── Assigned Users (staff/admin) ── */}
       {(me?.isAdmin || me?.role === 'staff') && (
-        <div className="card mb-16">
+        <div className="card mb-16" id="settings-assignments">
           <div className="card-title">Assigned Users</div>
           {!assignedUsers.length && (
             <div style={{ color: 'var(--text-muted)' }}>
@@ -1138,8 +1210,12 @@ export default function Settings({ me, onProfileUpdated, onNavigate }) {
 
       {/* ── Admin: Team Access ── */}
       {me?.isAdmin && (
-        <div className="card mb-16">
-          <div className="card-title">Team Access</div>
+        <div className="card mb-16" id="settings-users">
+          <div className="card-title">User Management</div>
+          <div style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 10 }}>
+            Create users, change roles, reset passwords, and control force-reset policy.
+          </div>
+          <div style={{ fontWeight: 600, marginBottom: 8 }}>Create User</div>
           <div className="field">
             <label>Username</label>
             <input value={newUsername} onChange={e => setNewUsername(e.target.value)} placeholder="new user username" />
@@ -1165,6 +1241,7 @@ export default function Settings({ me, onProfileUpdated, onNavigate }) {
               {creatingUser ? 'Creating…' : 'Create User'}
             </button>
           </div>
+          <div style={{ fontWeight: 600, marginBottom: 8 }}>Manage Existing Users</div>
           <table className="data-table">
             <thead>
               <tr>
@@ -1172,6 +1249,7 @@ export default function Settings({ me, onProfileUpdated, onNavigate }) {
                 <th>Email</th>
                 <th>Role</th>
                 <th>Password Reset</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -1179,8 +1257,37 @@ export default function Settings({ me, onProfileUpdated, onNavigate }) {
                 <tr key={`org-user-${user.id}`}>
                   <td>{user.username}</td>
                   <td>{user.email || '—'}</td>
-                  <td>{user.role}</td>
+                  <td>
+                    <select
+                      value={user.role}
+                      disabled={updatingRoleUserId === String(user.id) || user.username === me?.username}
+                      onChange={(e) => changeUserRole(user.id, e.target.value)}
+                    >
+                      <option value="job_seeker">job_seeker</option>
+                      <option value="staff">staff</option>
+                      <option value="admin">admin</option>
+                    </select>
+                  </td>
                   <td>{user.mustChangePassword ? 'Required' : 'No'}</td>
+                  <td style={{ whiteSpace: 'nowrap' }}>
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => resetUserPassword(user)}
+                      disabled={resettingPasswordUserId === String(user.id)}
+                    >
+                      {resettingPasswordUserId === String(user.id) ? 'Resetting…' : 'Reset Password'}
+                    </button>
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      style={{ marginLeft: 8 }}
+                      onClick={() => toggleForceReset(user)}
+                      disabled={togglingMustResetUserId === String(user.id)}
+                    >
+                      {togglingMustResetUserId === String(user.id)
+                        ? 'Saving…'
+                        : (user.mustChangePassword ? 'Clear Force Reset' : 'Force Reset')}
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -1190,7 +1297,7 @@ export default function Settings({ me, onProfileUpdated, onNavigate }) {
 
       {/* ── Admin: Staff Assignments ── */}
       {me?.isAdmin && (
-        <div className="card mb-16">
+        <div className="card mb-16" id="settings-ops">
           <div className="card-title">Staff Assignments</div>
           <div className="settings-grid">
             <div className="field">
@@ -1479,7 +1586,7 @@ export default function Settings({ me, onProfileUpdated, onNavigate }) {
       )}
 
       {/* ── Backup & Restore (admin only) ── */}
-      <div className="card">
+      <div className="card" id="settings-backups">
         <div className="card-title">Backup & Restore</div>
         <div style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 10 }}>
           Export your current app data to a JSON file and restore it later.

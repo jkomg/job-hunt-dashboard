@@ -24,6 +24,7 @@ import {
   listCandidateThreadsByScope, updateCandidateThreadStatus,
   listCandidateThreadsForMember, listCandidateMessagesForMember,
   createSession, getSession, deleteSession, updatePassword, updateUsername, getRecentSheetSyncRuns, getLocalDataLastUpdatedAt,
+  updateOrganizationUserRole, adminSetUserPassword, adminSetMustChangePassword,
   getAppSetting, getAppSettings, setAppSetting, exportBackupSnapshot, restoreBackupSnapshot, createLocalDatabaseSnapshot,
   createCostSnapshot, getRecentCostSnapshots,
   getDashboardData,
@@ -527,6 +528,94 @@ app.post('/api/admin/users', requireAuth, requireAdmin, async (req, res) => {
       return res.status(409).json({ error: 'That username or email is already taken' })
     }
     res.status(500).json({ error: 'Could not create user' })
+  }
+})
+
+app.patch('/api/admin/users/:id/role', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const targetUserId = Number(req.params.id)
+    const role = String(req.body?.role || '').trim()
+    if (!Number.isFinite(targetUserId) || targetUserId <= 0) {
+      return res.status(400).json({ error: 'Invalid target user' })
+    }
+    if (!['admin', 'staff', 'job_seeker'].includes(role)) {
+      return res.status(400).json({ error: 'Invalid role' })
+    }
+    if (targetUserId === Number(req.userId) && role !== 'admin') {
+      return res.status(400).json({ error: 'You cannot remove your own admin role' })
+    }
+    const targetUser = await getUserById(targetUserId)
+    if (!targetUser) return res.status(404).json({ error: 'User not found' })
+
+    await updateOrganizationUserRole(targetUserId, req.organizationId, role)
+    await createAuditLog({
+      organizationId: req.organizationId,
+      actorUserId: req.userId,
+      targetUserId,
+      action: 'admin.user.role.updated',
+      entityType: 'user',
+      entityId: String(targetUserId),
+      metadata: { username: targetUser.username, role }
+    })
+    res.json({ ok: true })
+  } catch (e) {
+    console.error('admin.users.role failed', e)
+    res.status(500).json({ error: 'Could not update user role' })
+  }
+})
+
+app.post('/api/admin/users/:id/reset-password', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const targetUserId = Number(req.params.id)
+    const password = String(req.body?.password || '').trim()
+    if (!Number.isFinite(targetUserId) || targetUserId <= 0) {
+      return res.status(400).json({ error: 'Invalid target user' })
+    }
+    if (password.length < 10) {
+      return res.status(400).json({ error: 'Temporary password must be at least 10 characters' })
+    }
+    const targetUser = await getUserById(targetUserId)
+    if (!targetUser) return res.status(404).json({ error: 'User not found' })
+
+    await adminSetUserPassword(targetUserId, password, { forceReset: true })
+    await createAuditLog({
+      organizationId: req.organizationId,
+      actorUserId: req.userId,
+      targetUserId,
+      action: 'admin.user.password.reset',
+      entityType: 'user',
+      entityId: String(targetUserId),
+      metadata: { username: targetUser.username, forced: true }
+    })
+    res.json({ ok: true })
+  } catch (e) {
+    console.error('admin.users.resetPassword failed', e)
+    res.status(500).json({ error: 'Could not reset password' })
+  }
+})
+
+app.patch('/api/admin/users/:id/password-policy', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const targetUserId = Number(req.params.id)
+    const mustChangePassword = !!req.body?.mustChangePassword
+    if (!Number.isFinite(targetUserId) || targetUserId <= 0) {
+      return res.status(400).json({ error: 'Invalid target user' })
+    }
+    await adminSetMustChangePassword(targetUserId, mustChangePassword)
+    const targetUser = await getUserById(targetUserId)
+    await createAuditLog({
+      organizationId: req.organizationId,
+      actorUserId: req.userId,
+      targetUserId,
+      action: 'admin.user.password_policy.updated',
+      entityType: 'user',
+      entityId: String(targetUserId),
+      metadata: { username: targetUser?.username || null, mustChangePassword }
+    })
+    res.json({ ok: true })
+  } catch (e) {
+    console.error('admin.users.passwordPolicy failed', e)
+    res.status(500).json({ error: 'Could not update password policy' })
   }
 })
 

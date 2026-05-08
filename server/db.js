@@ -1689,6 +1689,39 @@ export async function createUserAccount({
   return user
 }
 
+export async function updateOrganizationUserRole(userId, organizationId = DEFAULT_ORG_ID, role = 'job_seeker') {
+  const safeRole = ['admin', 'staff', 'job_seeker'].includes(String(role)) ? String(role) : 'job_seeker'
+  const user = await getUserById(Number(userId))
+  if (!user) throw new Error('User not found')
+
+  await ensureUserMembership(Number(userId), { organizationId, role: safeRole })
+  await db.execute({
+    sql: 'UPDATE users SET is_admin = ? WHERE id = ?',
+    args: [safeRole === 'admin' ? 1 : 0, Number(userId)]
+  })
+
+  return getUserById(Number(userId))
+}
+
+export async function adminSetUserPassword(userId, password, { forceReset = true } = {}) {
+  const raw = String(password || '')
+  if (raw.length < 10) throw new Error('Temporary password must be at least 10 characters')
+  const hash = bcrypt.hashSync(raw, 10)
+  await db.execute({
+    sql: 'UPDATE users SET password_hash = ?, must_change_password = ? WHERE id = ?',
+    args: [hash, forceReset ? 1 : 0, Number(userId)]
+  })
+  return getUserById(Number(userId))
+}
+
+export async function adminSetMustChangePassword(userId, mustChangePassword = true) {
+  await db.execute({
+    sql: 'UPDATE users SET must_change_password = ? WHERE id = ?',
+    args: [mustChangePassword ? 1 : 0, Number(userId)]
+  })
+  return getUserById(Number(userId))
+}
+
 export async function createSession(token, userId) {
   await db.execute({
     sql: 'INSERT INTO sessions (token, user_id, created_at) VALUES (?, ?, ?)',
