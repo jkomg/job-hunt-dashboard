@@ -177,7 +177,7 @@ function ErrorCallout({ error }) {
   )
 }
 
-export default function Settings({ me, onProfileUpdated, onNavigate }) {
+export default function Settings({ me, onProfileUpdated, onNavigate, focusSection = null }) {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [savingProfile, setSavingProfile] = useState(false)
@@ -229,6 +229,7 @@ export default function Settings({ me, onProfileUpdated, onNavigate }) {
   const [removingAssignmentId, setRemovingAssignmentId] = useState('')
   const [showRuns, setShowRuns] = useState(false)
   const canOpenPipelineCleanup = !(me?.role === 'staff' || me?.isAdmin)
+  const focusSectionRef = useRef('')
 
   const healthState = status?.health?.status || 'unknown'
   const healthColor = useMemo(() => {
@@ -410,6 +411,14 @@ export default function Settings({ me, onProfileUpdated, onNavigate }) {
   useEffect(() => {
     setDisplayName(me?.displayName || '')
   }, [me?.displayName])
+
+  useEffect(() => {
+    if (!focusSection || focusSectionRef.current === focusSection) return
+    const el = document.getElementById(focusSection)
+    if (!el) return
+    focusSectionRef.current = focusSection
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [focusSection])
 
   async function saveSettings() {
     setSaving(true)
@@ -949,7 +958,7 @@ export default function Settings({ me, onProfileUpdated, onNavigate }) {
       </div>
 
       {/* ── Google Sheets Sync (merged: health + details + config + runs) ── */}
-      <div className="card mb-16">
+      <div className="card mb-16" id="settings-ops">
         <div className="card-title">Google Sheets Sync</div>
 
         {/* Health summary */}
@@ -1198,7 +1207,7 @@ export default function Settings({ me, onProfileUpdated, onNavigate }) {
 
       {/* ── Assigned Users (staff/admin) ── */}
       {(me?.isAdmin || me?.role === 'staff') && (
-        <div className="card mb-16" id="settings-assignments">
+        <div className="card mb-16" id="settings-assigned-users">
           <div className="card-title">Assigned Users</div>
           {!assignedUsers.length && (
             <div style={{ color: 'var(--text-muted)' }}>
@@ -1331,7 +1340,7 @@ export default function Settings({ me, onProfileUpdated, onNavigate }) {
 
       {/* ── Admin: Staff Assignments ── */}
       {me?.isAdmin && (
-        <div className="card mb-16" id="settings-ops">
+        <div className="card mb-16" id="settings-assignments">
           <div className="card-title">Staff Assignments</div>
           <div className="settings-grid">
             <div className="field">
