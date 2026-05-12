@@ -74,6 +74,15 @@ function normalizeEmail(email) {
   return (email || '').trim().toLowerCase()
 }
 
+function slugifyOrganizationName(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 64)
+}
+
 const DEFAULT_ORG_ID = 'remote-rebellion'
 const DEFAULT_ORG_NAME = 'Remote Rebellion'
 const USER_OWNED_TABLES = [
@@ -557,6 +566,44 @@ export async function ensureUserMembership(userId, { organizationId = DEFAULT_OR
   return toMembership(firstRow(res))
 }
 
+export async function listOrganizations() {
+  const res = await db.execute({
+    sql: 'SELECT * FROM organizations ORDER BY created_at ASC'
+  })
+  return toPlainRows(res).map(row => ({
+    id: String(row.id),
+    name: String(row.name),
+    slug: String(row.slug),
+    createdAt: isoFromTs(row.created_at),
+    updatedAt: isoFromTs(row.updated_at)
+  }))
+}
+
+export async function createOrganization({ id = null, name }) {
+  const orgName = String(name || '').trim()
+  if (!orgName) throw new Error('Organization name is required')
+  const slug = slugifyOrganizationName(orgName)
+  if (!slug) throw new Error('Organization name must contain letters or numbers')
+  const orgId = String(id || slug)
+  const ts = now()
+  await db.execute({
+    sql: `
+      INSERT INTO organizations (id, name, slug, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?)
+    `,
+    args: [orgId, orgName, slug, ts, ts]
+  })
+  const res = await db.execute({ sql: 'SELECT * FROM organizations WHERE id = ? LIMIT 1', args: [orgId] })
+  const row = firstRow(res)
+  return row ? {
+    id: String(row.id),
+    name: String(row.name),
+    slug: String(row.slug),
+    createdAt: isoFromTs(row.created_at),
+    updatedAt: isoFromTs(row.updated_at)
+  } : null
+}
+
 export async function getPrimaryMembershipForUser(userId) {
   if (!userId) return null
   const res = await db.execute({
@@ -571,6 +618,33 @@ export async function getPrimaryMembershipForUser(userId) {
     args: [Number(userId)]
   })
   return toMembership(firstRow(res))
+}
+
+export async function listMembershipsForUser(userId) {
+  const id = Number(userId)
+  if (!Number.isFinite(id) || id <= 0) return []
+  const res = await db.execute({
+    sql: `
+      SELECT m.*, o.name AS organization_name, o.slug AS organization_slug
+      FROM memberships m
+      JOIN organizations o ON o.id = m.organization_id
+      WHERE m.user_id = ?
+      ORDER BY
+        CASE m.role WHEN 'admin' THEN 0 WHEN 'staff' THEN 1 ELSE 2 END,
+        m.created_at ASC
+    `,
+    args: [id]
+  })
+  return toPlainRows(res).map(row => ({
+    id: String(row.id),
+    organizationId: String(row.organization_id),
+    organizationName: String(row.organization_name || ''),
+    organizationSlug: String(row.organization_slug || ''),
+    userId: Number(row.user_id),
+    role: String(row.role || 'job_seeker'),
+    createdAt: isoFromTs(row.created_at),
+    updatedAt: isoFromTs(row.updated_at)
+  }))
 }
 
 export async function listOrganizationUsers(organizationId = DEFAULT_ORG_ID) {

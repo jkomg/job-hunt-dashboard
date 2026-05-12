@@ -211,6 +211,7 @@ export default function Settings({ me, onProfileUpdated, onNavigate, mode = 'set
   const [eventsTabsText, setEventsTabsText] = useState('Events')
   const [downloadingLogs, setDownloadingLogs] = useState(false)
   const [adminUsers, setAdminUsers] = useState([])
+  const [organizations, setOrganizations] = useState([])
   const [assignedUsers, setAssignedUsers] = useState([])
   const [staffAssignments, setStaffAssignments] = useState([])
   const [auditLogs, setAuditLogs] = useState([])
@@ -228,6 +229,13 @@ export default function Settings({ me, onProfileUpdated, onNavigate, mode = 'set
   const [savingAssignment, setSavingAssignment] = useState(false)
   const [removingAssignmentId, setRemovingAssignmentId] = useState('')
   const [showRuns, setShowRuns] = useState(false)
+  const [newOrgName, setNewOrgName] = useState('')
+  const [newOrgId, setNewOrgId] = useState('')
+  const [creatingOrg, setCreatingOrg] = useState(false)
+  const [membershipUserId, setMembershipUserId] = useState('')
+  const [membershipOrgId, setMembershipOrgId] = useState('')
+  const [membershipRole, setMembershipRole] = useState('job_seeker')
+  const [savingMembership, setSavingMembership] = useState(false)
   const canOpenPipelineCleanup = !(me?.role === 'staff' || me?.isAdmin)
   const isAdminOperationsMode = mode === 'admin_operations'
   const isAdminUsersMode = mode === 'admin_users'
@@ -381,18 +389,21 @@ export default function Settings({ me, onProfileUpdated, onNavigate, mode = 'set
       setEventsTabsText(tabsToText(cfg.eventsTabs || ['Events']))
 
       if (me?.isAdmin) {
-        const [usersRes, assignmentsRes, auditRes, costRes] = await Promise.all([
+        const [usersRes, assignmentsRes, auditRes, costRes, orgRes] = await Promise.all([
           api('/api/admin/users'),
           api('/api/admin/staff-assignments'),
           api('/api/admin/audit-log?limit=60'),
-          api('/api/admin/cost-snapshots?limit=10')
+          api('/api/admin/cost-snapshots?limit=10'),
+          api('/api/admin/organizations')
         ])
         setAdminUsers(usersRes?.users || [])
+        setOrganizations(orgRes?.organizations || [])
         setStaffAssignments(assignmentsRes?.assignments || [])
         setAuditLogs(auditRes?.logs || [])
         setCostSnapshots(costRes?.snapshots || [])
       } else {
         setAdminUsers([])
+        setOrganizations([])
         setStaffAssignments([])
         setAuditLogs([])
         setCostSnapshots([])
@@ -497,6 +508,50 @@ export default function Settings({ me, onProfileUpdated, onNavigate, mode = 'set
       setError(e.payload || { error: e.message })
     } finally {
       setCreatingUser(false)
+    }
+  }
+
+  async function createOrg() {
+    setCreatingOrg(true)
+    setError(null)
+    setSuccess('')
+    try {
+      if (!newOrgName.trim()) throw new Error('Organization name is required')
+      await api('/api/admin/organizations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newOrgName.trim(), id: newOrgId.trim() || null })
+      })
+      setNewOrgName('')
+      setNewOrgId('')
+      setSuccess('Organization created.')
+      await load()
+    } catch (e) {
+      setError(e.payload || { error: e.message })
+    } finally {
+      setCreatingOrg(false)
+    }
+  }
+
+  async function saveMembership() {
+    setSavingMembership(true)
+    setError(null)
+    setSuccess('')
+    try {
+      const userId = Number(membershipUserId)
+      if (!Number.isFinite(userId) || userId <= 0) throw new Error('Select a user')
+      if (!membershipOrgId) throw new Error('Select an organization')
+      await api(`/api/admin/users/${userId}/memberships`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ organizationId: membershipOrgId, role: membershipRole })
+      })
+      setSuccess('Membership saved.')
+      await load()
+    } catch (e) {
+      setError(e.payload || { error: e.message })
+    } finally {
+      setSavingMembership(false)
     }
   }
 
@@ -1270,6 +1325,57 @@ export default function Settings({ me, onProfileUpdated, onNavigate, mode = 'set
           <div className="card-title">User Management</div>
           <div style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 10 }}>
             Create users, change roles, reset passwords, and control force-reset policy.
+          </div>
+          <div style={{ fontWeight: 600, marginBottom: 8 }}>Organizations</div>
+          <div className="settings-grid">
+            <div className="field">
+              <label>Name</label>
+              <input value={newOrgName} onChange={e => setNewOrgName(e.target.value)} placeholder="Remote Rebellion Pilot" />
+            </div>
+            <div className="field">
+              <label>ID (optional)</label>
+              <input value={newOrgId} onChange={e => setNewOrgId(e.target.value)} placeholder="remote-rebellion-pilot" />
+            </div>
+          </div>
+          <div className="quick-actions" style={{ marginBottom: 10 }}>
+            <button className="btn btn-primary" onClick={createOrg} disabled={creatingOrg}>
+              {creatingOrg ? 'Creating…' : 'Create Organization'}
+            </button>
+          </div>
+          {!!organizations.length && (
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
+              {organizations.map(org => `${org.name} (${org.id})`).join(' • ')}
+            </div>
+          )}
+          <div style={{ fontWeight: 600, marginBottom: 8 }}>Assign User Membership</div>
+          <div className="settings-grid">
+            <div className="field">
+              <label>User</label>
+              <select value={membershipUserId} onChange={e => setMembershipUserId(e.target.value)}>
+                <option value="">Select user</option>
+                {adminUsers.map(user => <option key={`membership-user-${user.id}`} value={user.id}>{user.username}</option>)}
+              </select>
+            </div>
+            <div className="field">
+              <label>Organization</label>
+              <select value={membershipOrgId} onChange={e => setMembershipOrgId(e.target.value)}>
+                <option value="">Select organization</option>
+                {organizations.map(org => <option key={`membership-org-${org.id}`} value={org.id}>{org.name} ({org.id})</option>)}
+              </select>
+            </div>
+            <div className="field">
+              <label>Role</label>
+              <select value={membershipRole} onChange={e => setMembershipRole(e.target.value)}>
+                <option value="job_seeker">job_seeker</option>
+                <option value="staff">staff</option>
+                <option value="admin">admin</option>
+              </select>
+            </div>
+          </div>
+          <div className="quick-actions" style={{ marginBottom: 14 }}>
+            <button className="btn btn-ghost" onClick={saveMembership} disabled={savingMembership}>
+              {savingMembership ? 'Saving…' : 'Save Membership'}
+            </button>
           </div>
           <div style={{ fontWeight: 600, marginBottom: 8 }}>Create User</div>
           <div className="field">
