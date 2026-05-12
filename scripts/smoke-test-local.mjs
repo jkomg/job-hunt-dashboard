@@ -267,6 +267,27 @@ async function run() {
   })
   if (!createFourthUser.body?.ok || !createFourthUser.body?.id) throw new Error('Admin fourth-user create failed')
 
+  const orgListBefore = await api('/api/admin/organizations', { allowStatuses: [200] })
+  if (!Array.isArray(orgListBefore.body?.organizations) || !orgListBefore.body.organizations.length) {
+    throw new Error(`Expected at least one organization, got ${JSON.stringify(orgListBefore.body)}`)
+  }
+  const createOrg = await api('/api/admin/organizations', {
+    method: 'POST',
+    body: { id: 'smoke-org', name: 'Smoke Org' },
+    allowStatuses: [200]
+  })
+  if (!createOrg.body?.ok || createOrg.body?.organization?.id !== 'smoke-org') {
+    throw new Error(`Organization create failed: ${JSON.stringify(createOrg.body)}`)
+  }
+  const assignMembership = await api(`/api/admin/users/${createFourthUser.body.id}/memberships`, {
+    method: 'POST',
+    body: { organizationId: 'smoke-org', role: 'staff' },
+    allowStatuses: [200]
+  })
+  if (!assignMembership.body?.ok || !(assignMembership.body?.memberships || []).some(m => m.organizationId === 'smoke-org')) {
+    throw new Error(`Membership assignment failed: ${JSON.stringify(assignMembership.body)}`)
+  }
+
   const sql = createClient({ url: `file:${dbPath}` })
   await sql.execute({
     sql: 'INSERT INTO users (username, password_hash, is_admin, must_change_password) VALUES (?, ?, ?, ?)',

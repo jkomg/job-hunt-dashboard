@@ -17,6 +17,7 @@ import {
   initDb,
   getUserByUsername, getUserByEmail, getUserById,
   getPrimaryMembershipForUser, createUserAccount, listOrganizationUsers, listAssignedUsersForStaff,
+  listOrganizations, createOrganization, listMembershipsForUser, ensureUserMembership,
   listStaffAssignments, createStaffAssignment, deleteStaffAssignment, createAuditLog, getAuditLogs,
   hasStaffAssignment, listJobRecommendations, createJobRecommendation, getJobRecommendationById, markRecommendationPosted, listStaffTasks,
   getStaffTaskById, createStaffTask, updateStaffTask,
@@ -596,6 +597,40 @@ app.get('/api/admin/users', requireAuth, requireAdmin, async (req, res) => {
   }
 })
 
+app.get('/api/admin/organizations', requireAuth, requireAdmin, async (_req, res) => {
+  try {
+    const organizations = await listOrganizations()
+    res.json({ ok: true, organizations })
+  } catch (e) {
+    console.error('admin.organizations.list failed', e)
+    res.status(500).json({ error: 'Could not list organizations' })
+  }
+})
+
+app.post('/api/admin/organizations', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const name = String(req.body?.name || '').trim()
+    const id = req.body?.id == null ? null : String(req.body.id).trim()
+    if (!name) return res.status(400).json({ error: 'Organization name is required' })
+    const organization = await createOrganization({ id, name })
+    await createAuditLog({
+      organizationId: req.organizationId,
+      actorUserId: req.userId,
+      action: 'admin.organization.created',
+      entityType: 'organization',
+      entityId: organization?.id || null,
+      metadata: { createdOrganizationId: organization?.id || null, name: organization?.name || null }
+    })
+    res.json({ ok: true, organization })
+  } catch (e) {
+    console.error('admin.organizations.create failed', e)
+    if (String(e?.message || '').includes('UNIQUE constraint failed')) {
+      return res.status(409).json({ error: 'Organization id or slug already exists' })
+    }
+    res.status(500).json({ error: 'Could not create organization' })
+  }
+})
+
 app.post('/api/admin/users', requireAuth, requireAdmin, async (req, res) => {
   try {
     const username = String(req.body?.username || '').trim().toLowerCase()
@@ -634,6 +669,56 @@ app.post('/api/admin/users', requireAuth, requireAdmin, async (req, res) => {
       return res.status(409).json({ error: 'That username or email is already taken' })
     }
     res.status(500).json({ error: 'Could not create user' })
+  }
+})
+
+app.get('/api/admin/users/:id/memberships', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const targetUserId = Number(req.params.id)
+    if (!Number.isFinite(targetUserId) || targetUserId <= 0) {
+      return res.status(400).json({ error: 'Invalid target user' })
+    }
+    const memberships = await listMembershipsForUser(targetUserId)
+    res.json({ ok: true, memberships })
+  } catch (e) {
+    console.error('admin.users.memberships.list failed', e)
+    res.status(500).json({ error: 'Could not list user memberships' })
+  }
+})
+
+app.post('/api/admin/users/:id/memberships', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const targetUserId = Number(req.params.id)
+    const organizationId = String(req.body?.organizationId || '').trim()
+    const role = String(req.body?.role || 'job_seeker').trim()
+    if (!Number.isFinite(targetUserId) || targetUserId <= 0) {
+      return res.status(400).json({ error: 'Invalid target user' })
+    }
+    if (!organizationId) return res.status(400).json({ error: 'organizationId is required' })
+    if (!['admin', 'staff', 'job_seeker'].includes(role)) {
+      return res.status(400).json({ error: 'Invalid role' })
+    }
+    const targetUser = await getUserById(targetUserId)
+    if (!targetUser) return res.status(404).json({ error: 'User not found' })
+    const organizations = await listOrganizations()
+    if (!organizations.some(org => org.id === organizationId)) {
+      return res.status(404).json({ error: 'Organization not found' })
+    }
+    await ensureUserMembership(targetUserId, { organizationId, role })
+    const memberships = await listMembershipsForUser(targetUserId)
+    await createAuditLog({
+      organizationId: req.organizationId,
+      actorUserId: req.userId,
+      targetUserId,
+      action: 'admin.user.membership.upserted',
+      entityType: 'membership',
+      entityId: `${organizationId}:${targetUserId}`,
+      metadata: { username: targetUser.username, organizationId, role }
+    })
+    res.json({ ok: true, memberships })
+  } catch (e) {
+    console.error('admin.users.memberships.upsert failed', e)
+    res.status(500).json({ error: 'Could not save user membership' })
   }
 })
 
