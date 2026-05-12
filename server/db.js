@@ -306,6 +306,14 @@ async function ensureStaffOpsSchema() {
   await db.execute('CREATE INDEX IF NOT EXISTS candidate_messages_thread_idx ON candidate_messages(thread_id, created_at)')
 }
 
+async function ensureSheetSyncRunScopeSchema() {
+  const cols = await getTableColumnSet('sheet_sync_runs')
+  if (!cols.has('organization_id')) {
+    await db.execute('ALTER TABLE sheet_sync_runs ADD COLUMN organization_id TEXT')
+  }
+  await db.execute('CREATE INDEX IF NOT EXISTS sheet_sync_runs_org_created_idx ON sheet_sync_runs(organization_id, created_at DESC)')
+}
+
 async function getDefaultUserId() {
   const res = await db.execute('SELECT id FROM users ORDER BY is_admin DESC, id ASC LIMIT 1')
   const row = firstRow(res)
@@ -368,7 +376,8 @@ async function runMigrations() {
     { id: '2026-04-29-001-tenant-schema', description: 'organizations memberships and user-owned record scope', up: ensureTenantSchema },
     { id: '2026-04-30-001-staff-ops-schema', description: 'staff recommendations and tasks tables', up: ensureStaffOpsSchema },
     { id: '2026-04-30-002-candidate-messaging-schema', description: 'candidate thread and message tables', up: ensureStaffOpsSchema },
-    { id: '2026-05-01-001-pipeline-contacts-schema', description: 'pipeline multi-contact JSON field', up: ensureActionSchema }
+    { id: '2026-05-01-001-pipeline-contacts-schema', description: 'pipeline multi-contact JSON field', up: ensureActionSchema },
+    { id: '2026-05-12-001-sheet-sync-org-scope', description: 'organization_id for sheet sync run records', up: ensureSheetSyncRunScopeSchema }
   ]
 
   for (const migration of migrations) {
@@ -561,7 +570,7 @@ export async function getPrimaryMembershipForUser(userId) {
     `,
     args: [Number(userId)]
   })
-  return toMembership(firstRow(res)) || ensureUserMembership(userId)
+  return toMembership(firstRow(res))
 }
 
 export async function listOrganizationUsers(organizationId = DEFAULT_ORG_ID) {
@@ -1913,26 +1922,37 @@ export async function updateEntitySheetSyncOutboundHash(id, hash) {
   })
 }
 
-export async function createSheetSyncRun(direction, status, summary = null, errorText = null) {
+export async function createSheetSyncRun(direction, status, summary = null, errorText = null, organizationId = null) {
   await db.execute({
     sql: `
-      INSERT INTO sheet_sync_runs (direction, status, summary_json, error_text, created_at)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO sheet_sync_runs (direction, status, summary_json, error_text, created_at, organization_id)
+      VALUES (?, ?, ?, ?, ?, ?)
     `,
-    args: [direction, status, summary ? JSON.stringify(summary) : null, errorText || null, now()]
+    args: [direction, status, summary ? JSON.stringify(summary) : null, errorText || null, now(), organizationId == null ? null : String(organizationId)]
   })
 }
 
-export async function getRecentSheetSyncRuns(limit = 20) {
+export async function getRecentSheetSyncRuns(limit = 20, organizationId = null) {
   const safeLimit = Math.max(1, Math.min(100, Number(limit) || 20))
-  const res = await db.execute({
-    sql: `
-      SELECT * FROM sheet_sync_runs
-      ORDER BY created_at DESC
-      LIMIT ?
-    `,
-    args: [safeLimit]
-  })
+  const orgId = String(organizationId || '').trim()
+  const res = orgId
+    ? await db.execute({
+      sql: `
+        SELECT * FROM sheet_sync_runs
+        WHERE organization_id = ?
+        ORDER BY created_at DESC
+        LIMIT ?
+      `,
+      args: [orgId, safeLimit]
+    })
+    : await db.execute({
+      sql: `
+        SELECT * FROM sheet_sync_runs
+        ORDER BY created_at DESC
+        LIMIT ?
+      `,
+      args: [safeLimit]
+    })
 
   return toPlainRows(res)
 }
@@ -1962,11 +1982,17 @@ export async function getRecentCostSnapshots(limit = 20) {
   return toPlainRows(res)
 }
 
-export async function getLocalDataLastUpdatedAt() {
+export async function getLocalDataLastUpdatedAt(scope = null) {
   const tables = ['daily_logs', 'pipeline_entries', 'contacts', 'interviews', 'events', 'templates', 'watchlist']
+  const scoped = scope ? await scopedOwnerWhere(scope) : null
   let latest = 0
   for (const table of tables) {
-    const res = await db.execute(`SELECT MAX(updated_at) AS max_ts FROM ${table}`)
+    const res = scoped
+      ? await db.execute({
+        sql: `SELECT MAX(updated_at) AS max_ts FROM ${table} WHERE ${scoped.clause}`,
+        args: scoped.args
+      })
+      : await db.execute(`SELECT MAX(updated_at) AS max_ts FROM ${table}`)
     const value = Number(firstRow(res)?.max_ts || 0)
     if (value > latest) latest = value
   }

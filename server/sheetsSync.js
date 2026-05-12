@@ -1591,24 +1591,24 @@ export async function runSheetsSync(configOverrides = {}, scope = null) {
 
   try {
     const inbound = await runInboundSync({ sheets, spreadsheetId, tabs, scope })
-    await createSheetSyncRun('inbound', 'ok', inbound)
+    await createSheetSyncRun('inbound', 'ok', inbound, null, scope?.organizationId || null)
 
     const outbound = await runOutboundSync({ sheets, spreadsheetId, tabs, scope })
-    await createSheetSyncRun('outbound', 'ok', outbound)
+    await createSheetSyncRun('outbound', 'ok', outbound, null, scope?.organizationId || null)
 
     const contacts = await runContactsSync({ sheets, spreadsheetId, tabs: contactsTabs, scope })
-    await createSheetSyncRun('contacts', 'ok', contacts)
+    await createSheetSyncRun('contacts', 'ok', contacts, null, scope?.organizationId || null)
 
     const interviews = await runInterviewsSync({ sheets, spreadsheetId, tabs: interviewsTabs, scope })
-    await createSheetSyncRun('interviews', 'ok', interviews)
+    await createSheetSyncRun('interviews', 'ok', interviews, null, scope?.organizationId || null)
 
     const events = await runEventsSync({ sheets, spreadsheetId, tabs: eventsTabs, scope })
-    await createSheetSyncRun('events', 'ok', events)
+    await createSheetSyncRun('events', 'ok', events, null, scope?.organizationId || null)
 
     return { ok: true, pipeline: { inbound, outbound }, contacts, interviews, events }
   } catch (error) {
     const normalized = normalizeSheetsSyncError(error)
-    await createSheetSyncRun('combined', 'error', { code: normalized.code, retryable: normalized.retryable }, normalized.details)
+    await createSheetSyncRun('combined', 'error', { code: normalized.code, retryable: normalized.retryable }, normalized.details, scope?.organizationId || null)
     const e = new Error(normalized.userMessage)
     e.normalized = normalized
     e.status = normalized.status

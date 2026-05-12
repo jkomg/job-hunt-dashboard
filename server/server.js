@@ -211,6 +211,12 @@ function userScopedSettingKey(userId, key) {
   return `user:${normalizedUserId}:${key}`
 }
 
+function orgScopedSettingKey(organizationId, key) {
+  const orgId = String(organizationId || '').trim()
+  if (!orgId) return key
+  return `org:${orgId}:${key}`
+}
+
 async function getOnboardingStatus(userId, fallbackDisplayName = 'there') {
   const userOnboardingKey = userScopedSettingKey(userId, APP_SETTINGS_KEYS.onboardingComplete)
   const userDisplayNameKey = userScopedSettingKey(userId, APP_SETTINGS_KEYS.displayName)
@@ -228,37 +234,51 @@ async function getOnboardingStatus(userId, fallbackDisplayName = 'there') {
   }
 }
 
-async function getSheetsConfigOverrides() {
-  const settings = await getAppSettings(Object.values(SHEET_SETTINGS_KEYS))
-  const overrides = {}
+async function getSheetsConfigOverrides(organizationId) {
+  const scopedMap = {}
+  const keys = []
+  for (const key of Object.values(SHEET_SETTINGS_KEYS)) {
+    const scoped = orgScopedSettingKey(organizationId, key)
+    scopedMap[key] = scoped
+    keys.push(scoped, key)
+  }
 
-  if (settings[SHEET_SETTINGS_KEYS.enabled] != null) {
-    overrides.enabled = parseBool(settings[SHEET_SETTINGS_KEYS.enabled], true)
+  const settings = await getAppSettings(keys)
+  const overrides = {}
+  const valueFor = (key) => settings[scopedMap[key]] ?? settings[key]
+
+  if (valueFor(SHEET_SETTINGS_KEYS.enabled) != null) {
+    overrides.enabled = parseBool(valueFor(SHEET_SETTINGS_KEYS.enabled), true)
   }
-  if (settings[SHEET_SETTINGS_KEYS.sheetId]) {
-    overrides.sheetId = settings[SHEET_SETTINGS_KEYS.sheetId]
+  if (valueFor(SHEET_SETTINGS_KEYS.sheetId)) {
+    overrides.sheetId = valueFor(SHEET_SETTINGS_KEYS.sheetId)
   }
-  if (settings[SHEET_SETTINGS_KEYS.pipelineTabs]) {
-    overrides.pipelineTabs = splitTabs(settings[SHEET_SETTINGS_KEYS.pipelineTabs])
+  if (valueFor(SHEET_SETTINGS_KEYS.pipelineTabs)) {
+    overrides.pipelineTabs = splitTabs(valueFor(SHEET_SETTINGS_KEYS.pipelineTabs))
   }
-  if (settings[SHEET_SETTINGS_KEYS.contactsTabs]) {
-    overrides.contactsTabs = splitTabs(settings[SHEET_SETTINGS_KEYS.contactsTabs])
+  if (valueFor(SHEET_SETTINGS_KEYS.contactsTabs)) {
+    overrides.contactsTabs = splitTabs(valueFor(SHEET_SETTINGS_KEYS.contactsTabs))
   }
-  if (settings[SHEET_SETTINGS_KEYS.interviewsTabs]) {
-    overrides.interviewsTabs = splitTabs(settings[SHEET_SETTINGS_KEYS.interviewsTabs])
+  if (valueFor(SHEET_SETTINGS_KEYS.interviewsTabs)) {
+    overrides.interviewsTabs = splitTabs(valueFor(SHEET_SETTINGS_KEYS.interviewsTabs))
   }
-  if (settings[SHEET_SETTINGS_KEYS.eventsTabs]) {
-    overrides.eventsTabs = splitTabs(settings[SHEET_SETTINGS_KEYS.eventsTabs])
+  if (valueFor(SHEET_SETTINGS_KEYS.eventsTabs)) {
+    overrides.eventsTabs = splitTabs(valueFor(SHEET_SETTINGS_KEYS.eventsTabs))
   }
 
   return overrides
 }
 
-async function getGmailConnection() {
+async function getGmailConnection(organizationId) {
+  const scoped = {
+    tokens: orgScopedSettingKey(organizationId, GMAIL_SETTINGS_KEYS.tokens),
+    email: orgScopedSettingKey(organizationId, GMAIL_SETTINGS_KEYS.email),
+    connectedAt: orgScopedSettingKey(organizationId, GMAIL_SETTINGS_KEYS.connectedAt)
+  }
   const [rawTokens, email, connectedAt] = await Promise.all([
-    getAppSetting(GMAIL_SETTINGS_KEYS.tokens),
-    getAppSetting(GMAIL_SETTINGS_KEYS.email),
-    getAppSetting(GMAIL_SETTINGS_KEYS.connectedAt)
+    getAppSetting(scoped.tokens).then(v => v ?? getAppSetting(GMAIL_SETTINGS_KEYS.tokens)),
+    getAppSetting(scoped.email).then(v => v ?? getAppSetting(GMAIL_SETTINGS_KEYS.email)),
+    getAppSetting(scoped.connectedAt).then(v => v ?? getAppSetting(GMAIL_SETTINGS_KEYS.connectedAt))
   ])
   return {
     tokens: parseJson(rawTokens, null),
@@ -267,31 +287,33 @@ async function getGmailConnection() {
   }
 }
 
-async function setGmailConnection({ tokens, email }) {
-  await setAppSetting(GMAIL_SETTINGS_KEYS.tokens, JSON.stringify(tokens || {}))
-  await setAppSetting(GMAIL_SETTINGS_KEYS.email, email || '')
-  await setAppSetting(GMAIL_SETTINGS_KEYS.connectedAt, new Date().toISOString())
+async function setGmailConnection(organizationId, { tokens, email }) {
+  await setAppSetting(orgScopedSettingKey(organizationId, GMAIL_SETTINGS_KEYS.tokens), JSON.stringify(tokens || {}))
+  await setAppSetting(orgScopedSettingKey(organizationId, GMAIL_SETTINGS_KEYS.email), email || '')
+  await setAppSetting(orgScopedSettingKey(organizationId, GMAIL_SETTINGS_KEYS.connectedAt), new Date().toISOString())
 }
 
-async function clearGmailConnection() {
-  await setAppSetting(GMAIL_SETTINGS_KEYS.tokens, '')
-  await setAppSetting(GMAIL_SETTINGS_KEYS.email, '')
-  await setAppSetting(GMAIL_SETTINGS_KEYS.connectedAt, '')
+async function clearGmailConnection(organizationId) {
+  await setAppSetting(orgScopedSettingKey(organizationId, GMAIL_SETTINGS_KEYS.tokens), '')
+  await setAppSetting(orgScopedSettingKey(organizationId, GMAIL_SETTINGS_KEYS.email), '')
+  await setAppSetting(orgScopedSettingKey(organizationId, GMAIL_SETTINGS_KEYS.connectedAt), '')
 }
 
-async function saveGmailOauthState(state) {
-  await setAppSetting(GMAIL_SETTINGS_KEYS.oauthState, String(state || ''))
-  await setAppSetting(GMAIL_SETTINGS_KEYS.oauthStateCreatedAt, String(Date.now()))
+async function saveGmailOauthState(organizationId, state) {
+  await setAppSetting(orgScopedSettingKey(organizationId, GMAIL_SETTINGS_KEYS.oauthState), String(state || ''))
+  await setAppSetting(orgScopedSettingKey(organizationId, GMAIL_SETTINGS_KEYS.oauthStateCreatedAt), String(Date.now()))
 }
 
-async function consumeAndValidateGmailOauthState(state) {
+async function consumeAndValidateGmailOauthState(organizationId, state) {
+  const scopedStateKey = orgScopedSettingKey(organizationId, GMAIL_SETTINGS_KEYS.oauthState)
+  const scopedCreatedAtKey = orgScopedSettingKey(organizationId, GMAIL_SETTINGS_KEYS.oauthStateCreatedAt)
   const [expectedState, createdAtRaw] = await Promise.all([
-    getAppSetting(GMAIL_SETTINGS_KEYS.oauthState),
-    getAppSetting(GMAIL_SETTINGS_KEYS.oauthStateCreatedAt)
+    getAppSetting(scopedStateKey).then(v => v ?? getAppSetting(GMAIL_SETTINGS_KEYS.oauthState)),
+    getAppSetting(scopedCreatedAtKey).then(v => v ?? getAppSetting(GMAIL_SETTINGS_KEYS.oauthStateCreatedAt))
   ])
   await Promise.all([
-    setAppSetting(GMAIL_SETTINGS_KEYS.oauthState, ''),
-    setAppSetting(GMAIL_SETTINGS_KEYS.oauthStateCreatedAt, '')
+    setAppSetting(scopedStateKey, ''),
+    setAppSetting(scopedCreatedAtKey, '')
   ])
 
   if (!expectedState || !state || state !== expectedState) return false
@@ -476,6 +498,9 @@ async function requireAuth(req, res, next) {
     req.isAdmin = !!user?.isAdmin || req.userRole === 'admin'
     req.mustChangePassword = !!user?.mustChangePassword
     req.authMode = 'session'
+    if (!req.organizationId) {
+      return res.status(403).json({ error: 'Organization membership required', code: 'ORG_MEMBERSHIP_REQUIRED' })
+    }
 
     if (req.mustChangePassword && !PASSWORD_CHANGE_ALLOWED_PATHS.has(req.path)) {
       return res.status(403).json({ error: 'Password change required', code: 'PASSWORD_CHANGE_REQUIRED' })
@@ -505,6 +530,10 @@ app.post('/api/login', async (req, res) => {
 
   if (!bcrypt.compareSync(password, user.password_hash)) {
     return res.status(401).json({ error: 'Invalid credentials' })
+  }
+  const membership = await getPrimaryMembershipForUser(user.id)
+  if (!membership?.organizationId) {
+    return res.status(403).json({ error: 'Organization membership required', code: 'ORG_MEMBERSHIP_REQUIRED' })
   }
 
   for (const token of getSessionTokenCandidates(req)) {
@@ -1811,9 +1840,9 @@ app.patch('/api/daily/:id', requireAuth, async (req, res) => {
 
 // ─── Sheets Sync ──────────────────────────────────────────────────────────────
 
-app.get('/api/sheets/config', requireAuth, async (_req, res) => {
+app.get('/api/sheets/config', requireAuth, async (req, res) => {
   try {
-    const overrides = await getSheetsConfigOverrides()
+    const overrides = await getSheetsConfigOverrides(req.organizationId)
     const status = await getSheetsSyncStatus(overrides)
     res.json({ ok: true, config: status })
   } catch (e) {
@@ -1824,7 +1853,7 @@ app.get('/api/sheets/config', requireAuth, async (_req, res) => {
 
 app.put('/api/sheets/config', requireAuth, async (req, res) => {
   try {
-    const existingOverrides = await getSheetsConfigOverrides()
+    const existingOverrides = await getSheetsConfigOverrides(req.organizationId)
     const body = req.body || {}
     const updates = {}
 
@@ -1840,14 +1869,14 @@ app.put('/api/sheets/config', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'Sheet ID cannot be empty.' })
     }
 
-    if (updates.enabled != null) await setAppSetting(SHEET_SETTINGS_KEYS.enabled, updates.enabled ? 'true' : 'false')
-    if (updates.sheetId != null) await setAppSetting(SHEET_SETTINGS_KEYS.sheetId, updates.sheetId)
-    if (updates.pipelineTabs != null) await setAppSetting(SHEET_SETTINGS_KEYS.pipelineTabs, updates.pipelineTabs.join(','))
-    if (updates.contactsTabs != null) await setAppSetting(SHEET_SETTINGS_KEYS.contactsTabs, updates.contactsTabs.join(','))
-    if (updates.interviewsTabs != null) await setAppSetting(SHEET_SETTINGS_KEYS.interviewsTabs, updates.interviewsTabs.join(','))
-    if (updates.eventsTabs != null) await setAppSetting(SHEET_SETTINGS_KEYS.eventsTabs, updates.eventsTabs.join(','))
+    if (updates.enabled != null) await setAppSetting(orgScopedSettingKey(req.organizationId, SHEET_SETTINGS_KEYS.enabled), updates.enabled ? 'true' : 'false')
+    if (updates.sheetId != null) await setAppSetting(orgScopedSettingKey(req.organizationId, SHEET_SETTINGS_KEYS.sheetId), updates.sheetId)
+    if (updates.pipelineTabs != null) await setAppSetting(orgScopedSettingKey(req.organizationId, SHEET_SETTINGS_KEYS.pipelineTabs), updates.pipelineTabs.join(','))
+    if (updates.contactsTabs != null) await setAppSetting(orgScopedSettingKey(req.organizationId, SHEET_SETTINGS_KEYS.contactsTabs), updates.contactsTabs.join(','))
+    if (updates.interviewsTabs != null) await setAppSetting(orgScopedSettingKey(req.organizationId, SHEET_SETTINGS_KEYS.interviewsTabs), updates.interviewsTabs.join(','))
+    if (updates.eventsTabs != null) await setAppSetting(orgScopedSettingKey(req.organizationId, SHEET_SETTINGS_KEYS.eventsTabs), updates.eventsTabs.join(','))
 
-    const overrides = await getSheetsConfigOverrides()
+    const overrides = await getSheetsConfigOverrides(req.organizationId)
     const status = await getSheetsSyncStatus(overrides)
     res.json({ ok: true, config: status })
   } catch (e) {
@@ -1856,9 +1885,9 @@ app.put('/api/sheets/config', requireAuth, async (req, res) => {
   }
 })
 
-app.post('/api/sheets/test-connection', requireAuth, async (_req, res) => {
+app.post('/api/sheets/test-connection', requireAuth, async (req, res) => {
   try {
-    const overrides = await getSheetsConfigOverrides()
+    const overrides = await getSheetsConfigOverrides(req.organizationId)
     const result = await testSheetsConnection(overrides)
     res.json(result)
   } catch (e) {
@@ -1873,9 +1902,9 @@ app.post('/api/sheets/test-connection', requireAuth, async (_req, res) => {
   }
 })
 
-app.get('/api/sheets/schema-check', requireAuth, async (_req, res) => {
+app.get('/api/sheets/schema-check', requireAuth, async (req, res) => {
   try {
-    const overrides = await getSheetsConfigOverrides()
+    const overrides = await getSheetsConfigOverrides(req.organizationId)
     const report = await getSheetsSchemaReport(overrides)
     res.json(report)
   } catch (e) {
@@ -1891,7 +1920,7 @@ app.get('/api/sheets/schema-check', requireAuth, async (_req, res) => {
 
 app.post('/api/sheets/sync', requireAuth, async (req, res) => {
   try {
-    const overrides = await getSheetsConfigOverrides()
+    const overrides = await getSheetsConfigOverrides(req.organizationId)
     const result = await runSheetsSync(overrides, dataScope(req))
     res.json(result)
   } catch (e) {
@@ -1927,7 +1956,7 @@ app.post('/api/internal/sheets/sync', async (req, res) => {
       role: membership?.role || (serviceUser.isAdmin ? 'admin' : 'job_seeker'),
       isAdmin: !!serviceUser.isAdmin
     }
-    const overrides = await getSheetsConfigOverrides()
+    const overrides = await getSheetsConfigOverrides(scope.organizationId)
     const result = await runSheetsSync(overrides, scope)
     res.json(result)
   } catch (e) {
@@ -2034,24 +2063,24 @@ app.post('/api/admin/cost-snapshots/run', requireAuth, requireAdmin, async (_req
 
 app.get('/api/sheets/sync/runs', requireAuth, async (req, res) => {
   try {
-    const runs = await getRecentSheetSyncRuns(25)
+    const runs = await getRecentSheetSyncRuns(25, req.organizationId)
     res.json(runs.map(formatSyncRun))
   } catch (e) {
     res.status(500).json({ error: e.message })
   }
 })
 
-app.get('/api/sheets/status', requireAuth, async (_req, res) => {
+app.get('/api/sheets/status', requireAuth, async (req, res) => {
   try {
-    const overrides = await getSheetsConfigOverrides()
+    const overrides = await getSheetsConfigOverrides(req.organizationId)
     const config = await getSheetsSyncStatus(overrides)
-    const runs = await getRecentSheetSyncRuns(25)
+    const runs = await getRecentSheetSyncRuns(25, req.organizationId)
     const formattedRuns = runs.map(formatSyncRun)
     const latestRun = formattedRuns[0] || null
     const latestSuccess = latestRun?.status === 'ok' ? latestRun : null
     const latestError = latestRun?.status === 'error' ? latestRun : null
     const hasConfigIssue = config?.ok === false
-    const localLastSavedAt = await getLocalDataLastUpdatedAt()
+    const localLastSavedAt = await getLocalDataLastUpdatedAt(dataScope(req))
     const googleLastSyncedAt = formattedRuns.find(run => run.status === 'ok')?.createdAt || null
     const summaryByDirection = {}
     for (const run of formattedRuns) {
@@ -2093,9 +2122,9 @@ app.get('/api/sheets/status', requireAuth, async (_req, res) => {
   }
 })
 
-app.get('/api/sheets/sync/logs.csv', requireAuth, async (_req, res) => {
+app.get('/api/sheets/sync/logs.csv', requireAuth, async (req, res) => {
   try {
-    const runs = await getRecentSheetSyncRuns(200)
+    const runs = await getRecentSheetSyncRuns(200, req.organizationId)
     const rows = runs.map(row => {
       const createdAtIso = new Date(Number(row.created_at)).toISOString()
       let summary = ''
@@ -2129,10 +2158,10 @@ app.get('/api/sheets/sync/logs.csv', requireAuth, async (_req, res) => {
 
 // ─── Gmail Event Import ───────────────────────────────────────────────────────
 
-app.get('/api/gmail/status', requireAuth, async (_req, res) => {
+app.get('/api/gmail/status', requireAuth, async (req, res) => {
   try {
     const config = getGmailIntegrationConfig()
-    const connection = await getGmailConnection()
+    const connection = await getGmailConnection(req.organizationId)
     res.json({
       ok: true,
       configured: config.configured,
@@ -2146,10 +2175,10 @@ app.get('/api/gmail/status', requireAuth, async (_req, res) => {
   }
 })
 
-app.post('/api/gmail/auth-url', requireAuth, async (_req, res) => {
+app.post('/api/gmail/auth-url', requireAuth, async (req, res) => {
   try {
     const state = crypto.randomBytes(24).toString('hex')
-    await saveGmailOauthState(state)
+    await saveGmailOauthState(req.organizationId, state)
     const { url } = buildGmailAuthUrl(state)
     res.json({ ok: true, url })
   } catch (e) {
@@ -2162,11 +2191,11 @@ app.get('/api/gmail/oauth/callback', requireAuth, async (req, res) => {
     const code = String(req.query?.code || '').trim()
     const state = String(req.query?.state || '').trim()
     if (!code) return res.status(400).send('Missing OAuth code')
-    const stateValid = await consumeAndValidateGmailOauthState(state)
+    const stateValid = await consumeAndValidateGmailOauthState(req.organizationId, state)
     if (!stateValid) return res.status(400).send('Invalid OAuth state. Start Gmail connect again from Settings.')
 
     const { tokens, email } = await exchangeGmailCode(code)
-    await setGmailConnection({ tokens, email })
+    await setGmailConnection(req.organizationId, { tokens, email })
     return res.redirect('/?settings=gmail-connected')
   } catch (e) {
     console.error('gmail.oauth.callback failed', e)
@@ -2174,9 +2203,9 @@ app.get('/api/gmail/oauth/callback', requireAuth, async (req, res) => {
   }
 })
 
-app.post('/api/gmail/disconnect', requireAuth, async (_req, res) => {
+app.post('/api/gmail/disconnect', requireAuth, async (req, res) => {
   try {
-    await clearGmailConnection()
+    await clearGmailConnection(req.organizationId)
     res.json({ ok: true })
   } catch (e) {
     res.status(500).json({ error: e.message })
@@ -2185,14 +2214,14 @@ app.post('/api/gmail/disconnect', requireAuth, async (_req, res) => {
 
 app.post('/api/gmail/import-events', requireAuth, async (req, res) => {
   try {
-    const connection = await getGmailConnection()
+    const connection = await getGmailConnection(req.organizationId)
     if (!connection.tokens) {
       return res.status(400).json({ error: 'Gmail is not connected yet.' })
     }
 
     const maxMessages = Number(req.body?.maxMessages || 40)
     const imported = await importEventsFromGmail({ tokens: connection.tokens, maxMessages })
-    await setGmailConnection({ tokens: imported.tokens, email: connection.email })
+    await setGmailConnection(req.organizationId, { tokens: imported.tokens, email: connection.email })
 
     let created = 0
     let deduped = 0

@@ -4,6 +4,8 @@ import { mkdtemp, rm } from 'fs/promises'
 import net from 'net'
 import os from 'os'
 import path from 'path'
+import { createClient } from '@libsql/client'
+import bcrypt from 'bcryptjs'
 
 const TEST_USERNAME = 'smoke'
 const SECOND_USERNAME = 'smoke2'
@@ -16,6 +18,8 @@ const THIRD_TEMP_PASSWORD = 'smoke3-temp-password-2026!'
 const THIRD_NEXT_PASSWORD = 'smoke3-password-2026!'
 const FOURTH_USERNAME = 'smoke4'
 const FOURTH_TEMP_PASSWORD = 'smoke4-temp-password-2026!'
+const ORPHAN_USERNAME = 'orphan_smoke'
+const ORPHAN_PASSWORD = 'orphan-smoke-password-2026!'
 const SMOKE_SUITE = String(process.env.SMOKE_SUITE || 'full').trim().toLowerCase()
 
 async function reserveAvailablePort() {
@@ -262,6 +266,27 @@ async function run() {
     allowStatuses: [200]
   })
   if (!createFourthUser.body?.ok || !createFourthUser.body?.id) throw new Error('Admin fourth-user create failed')
+
+  const sql = createClient({ url: `file:${dbPath}` })
+  await sql.execute({
+    sql: 'INSERT INTO users (username, password_hash, is_admin, must_change_password) VALUES (?, ?, ?, ?)',
+    args: [ORPHAN_USERNAME, bcrypt.hashSync(ORPHAN_PASSWORD, 10), 0, 0]
+  })
+  await api('/api/logout', { method: 'POST', allowStatuses: [200] })
+  cookieJar.clear()
+  const orphanLogin = await api('/api/login', {
+    method: 'POST',
+    body: { username: ORPHAN_USERNAME, password: ORPHAN_PASSWORD },
+    allowStatuses: [403]
+  })
+  if (orphanLogin.body?.code !== 'ORG_MEMBERSHIP_REQUIRED') {
+    throw new Error(`Expected missing-membership login to fail closed, got ${JSON.stringify(orphanLogin.body)}`)
+  }
+  await api('/api/login', {
+    method: 'POST',
+    body: { username: TEST_USERNAME, password: NEXT_PASSWORD },
+    allowStatuses: [200]
+  })
 
   const assignment = await api('/api/admin/staff-assignments', {
     method: 'POST',
