@@ -90,6 +90,17 @@ const CSRF_EXEMPT_PATHS = new Set([
   '/api/internal/cost/snapshot'
 ])
 const execFileAsync = promisify(execFile)
+const SESSION_COOKIE_NAME = 'session'
+
+function sessionCookieOptions() {
+  return {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: isProd,
+    path: '/',
+    maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+  }
+}
 
 function parseBool(value, fallback = false) {
   if (value == null) return fallback
@@ -153,15 +164,67 @@ function setCsrfCookie(res, token) {
   })
 }
 
+function getCookieHeaderValues(req, name) {
+  const header = String(req.headers?.cookie || '')
+  if (!header) return []
+  const needle = `${name}=`
+  const out = []
+  for (const part of header.split(';')) {
+    const trimmed = part.trim()
+    if (!trimmed.startsWith(needle)) continue
+    const rawValue = trimmed.slice(needle.length)
+    if (!rawValue) continue
+    try {
+      out.push(decodeURIComponent(rawValue))
+    } catch {
+      out.push(rawValue)
+    }
+  }
+  return out
+}
+
+function getSessionTokenCandidates(req) {
+  const candidates = []
+  const fromParser = String(req.cookies?.[SESSION_COOKIE_NAME] || '').trim()
+  if (fromParser) candidates.push(fromParser)
+  for (const value of getCookieHeaderValues(req, SESSION_COOKIE_NAME)) {
+    const token = String(value || '').trim()
+    if (token) candidates.push(token)
+  }
+  return [...new Set(candidates)]
+}
+
+function clearSessionCookies(res) {
+  const opts = { ...sessionCookieOptions(), maxAge: undefined }
+  res.clearCookie(SESSION_COOKIE_NAME, opts)
+  // Legacy cleanup in case older builds set a scoped cookie.
+  res.clearCookie(SESSION_COOKIE_NAME, { ...opts, path: '/api' })
+}
+
 function isMutatingMethod(method) {
   return ['POST', 'PUT', 'PATCH', 'DELETE'].includes(String(method || '').toUpperCase())
 }
 
-async function getOnboardingStatus() {
-  const settings = await getAppSettings([APP_SETTINGS_KEYS.onboardingComplete, APP_SETTINGS_KEYS.displayName])
+function userScopedSettingKey(userId, key) {
+  const normalizedUserId = Number(userId)
+  if (!Number.isFinite(normalizedUserId) || normalizedUserId <= 0) return key
+  return `user:${normalizedUserId}:${key}`
+}
+
+async function getOnboardingStatus(userId, fallbackDisplayName = 'there') {
+  const userOnboardingKey = userScopedSettingKey(userId, APP_SETTINGS_KEYS.onboardingComplete)
+  const userDisplayNameKey = userScopedSettingKey(userId, APP_SETTINGS_KEYS.displayName)
+  const settings = await getAppSettings([
+    userOnboardingKey,
+    userDisplayNameKey,
+    APP_SETTINGS_KEYS.onboardingComplete,
+    APP_SETTINGS_KEYS.displayName
+  ])
+  const onboardingRaw = settings[userOnboardingKey] ?? settings[APP_SETTINGS_KEYS.onboardingComplete]
+  const displayNameRaw = settings[userDisplayNameKey] ?? settings[APP_SETTINGS_KEYS.displayName]
   return {
-    onboardingComplete: parseBool(settings[APP_SETTINGS_KEYS.onboardingComplete], false),
-    displayName: (settings[APP_SETTINGS_KEYS.displayName] || 'there').trim() || 'there'
+    onboardingComplete: parseBool(onboardingRaw, false),
+    displayName: (displayNameRaw || fallbackDisplayName).trim() || fallbackDisplayName
   }
 }
 
@@ -387,10 +450,23 @@ async function requireAuth(req, res, next) {
       }
     }
 
-    const token = req.cookies?.session
-    if (!token) return res.status(401).json({ error: 'Unauthorized' })
-    const session = await getSession(token)
+    const tokens = getSessionTokenCandidates(req)
+    if (!tokens.length) return res.status(401).json({ error: 'Unauthorized' })
+
+    let token = null
+    let session = null
+    for (const candidate of tokens) {
+      const found = await getSession(candidate)
+      if (!found) continue
+      if (!session || Number(found.created_at || 0) > Number(session.created_at || 0)) {
+        token = candidate
+        session = found
+      }
+    }
     if (!session) return res.status(401).json({ error: 'Unauthorized' })
+
+    // Normalize back to the selected token to collapse duplicate cookie states.
+    if (token) res.cookie(SESSION_COOKIE_NAME, token, sessionCookieOptions())
     req.userId = session.user_id
     const user = await getUserById(session.user_id)
     const membership = await getPrimaryMembershipForUser(session.user_id)
@@ -431,16 +507,16 @@ app.post('/api/login', async (req, res) => {
     return res.status(401).json({ error: 'Invalid credentials' })
   }
 
+  for (const token of getSessionTokenCandidates(req)) {
+    await deleteSession(token)
+  }
+  clearSessionCookies(res)
+
   const token = crypto.randomBytes(32).toString('hex')
   await createSession(token, user.id)
   const csrfToken = generateCsrfToken()
 
-  res.cookie('session', token, {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: isProd,
-    maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
-  })
+  res.cookie(SESSION_COOKIE_NAME, token, sessionCookieOptions())
   setCsrfCookie(res, csrfToken)
 
   res.json({
@@ -451,17 +527,18 @@ app.post('/api/login', async (req, res) => {
 })
 
 app.post('/api/logout', async (req, res) => {
-  const token = req.cookies?.session
-  if (token) await deleteSession(token)
-  res.clearCookie('session')
+  for (const token of getSessionTokenCandidates(req)) {
+    await deleteSession(token)
+  }
+  clearSessionCookies(res)
   res.clearCookie('csrf_token')
   res.json({ ok: true })
 })
 
 app.get('/api/me', requireAuth, async (req, res) => {
   try {
-    const onboarding = await getOnboardingStatus()
     const user = await getUserById(req.userId)
+    const onboarding = await getOnboardingStatus(req.userId, user?.username || 'there')
     res.json({
       ok: true,
       authMode: req.authMode,
@@ -1400,7 +1477,8 @@ app.get('/api/csrf', requireAuth, (_req, res) => {
 
 app.get('/api/setup/status', requireAuth, async (_req, res) => {
   try {
-    const onboarding = await getOnboardingStatus()
+    const user = await getUserById(_req.userId)
+    const onboarding = await getOnboardingStatus(_req.userId, user?.username || 'there')
     res.json({ ok: true, ...onboarding })
   } catch (e) {
     console.error('setup.status failed', e)
@@ -1423,8 +1501,8 @@ app.post('/api/setup/complete', requireAuth, async (req, res) => {
       }
       await updateUsername(req.userId, nextUsername)
     }
-    await setAppSetting(APP_SETTINGS_KEYS.displayName, displayName)
-    await setAppSetting(APP_SETTINGS_KEYS.onboardingComplete, 'true')
+    await setAppSetting(userScopedSettingKey(req.userId, APP_SETTINGS_KEYS.displayName), displayName)
+    await setAppSetting(userScopedSettingKey(req.userId, APP_SETTINGS_KEYS.onboardingComplete), 'true')
     const updatedUser = await getUserById(req.userId)
     res.json({ ok: true, onboardingComplete: true, displayName, username: updatedUser?.username || null })
   } catch (e) {
