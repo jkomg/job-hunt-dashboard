@@ -177,7 +177,7 @@ function ErrorCallout({ error }) {
   )
 }
 
-export default function Settings({ me, onProfileUpdated, onNavigate, focusSection = null }) {
+export default function Settings({ me, onProfileUpdated, onNavigate, mode = 'settings' }) {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [savingProfile, setSavingProfile] = useState(false)
@@ -229,7 +229,14 @@ export default function Settings({ me, onProfileUpdated, onNavigate, focusSectio
   const [removingAssignmentId, setRemovingAssignmentId] = useState('')
   const [showRuns, setShowRuns] = useState(false)
   const canOpenPipelineCleanup = !(me?.role === 'staff' || me?.isAdmin)
-  const focusSectionRef = useRef('')
+  const isAdminOperationsMode = mode === 'admin_operations'
+  const isAdminUsersMode = mode === 'admin_users'
+  const isAdminAssignmentsMode = mode === 'admin_assignments'
+  const showAccountSettings = mode === 'settings'
+  const showOperations = mode === 'settings' || isAdminOperationsMode
+  const showUserManagement = mode === 'settings' || isAdminUsersMode
+  const showAssignments = mode === 'settings' || isAdminAssignmentsMode
+  const showAssignedUsers = mode === 'settings' || isAdminUsersMode || isAdminAssignmentsMode
 
   const healthState = status?.health?.status || 'unknown'
   const healthColor = useMemo(() => {
@@ -411,14 +418,6 @@ export default function Settings({ me, onProfileUpdated, onNavigate, focusSectio
   useEffect(() => {
     setDisplayName(me?.displayName || '')
   }, [me?.displayName])
-
-  useEffect(() => {
-    if (!focusSection || focusSectionRef.current === focusSection) return
-    const el = document.getElementById(focusSection)
-    if (!el) return
-    focusSectionRef.current = focusSection
-    el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }, [focusSection])
 
   async function saveSettings() {
     setSaving(true)
@@ -889,14 +888,28 @@ export default function Settings({ me, onProfileUpdated, onNavigate, focusSectio
 
   const staffCandidates = adminUsers.filter(user => user.role === 'staff' || user.role === 'admin')
   const jobSeekerCandidates = adminUsers.filter(user => user.role === 'job_seeker')
+  const pageTitle = isAdminOperationsMode
+    ? 'Operations'
+    : isAdminUsersMode
+      ? 'User Management'
+      : isAdminAssignmentsMode
+        ? 'Assignments'
+        : 'Settings'
+  const pageSubtitle = isAdminOperationsMode
+    ? 'Sync, health, audit, and runtime operations'
+    : isAdminUsersMode
+      ? 'Create users, roles, and password policy'
+      : isAdminAssignmentsMode
+        ? 'Staff-to-job-seeker ownership mapping'
+        : 'Profile, integrations, and administration'
 
   return (
     <div>
       <div className="page-header">
-        <h1>Settings</h1>
-        <div className="subtitle">Profile, integrations, and administration</div>
+        <h1>{pageTitle}</h1>
+        <div className="subtitle">{pageSubtitle}</div>
       </div>
-      {me?.isAdmin && (
+      {me?.isAdmin && showAccountSettings && (
         <div className="quick-actions" style={{ marginBottom: 10 }}>
           <a className="btn btn-ghost btn-sm" href="#settings-profile">Profile</a>
           <a className="btn btn-ghost btn-sm" href="#settings-integrations">Integrations</a>
@@ -911,7 +924,7 @@ export default function Settings({ me, onProfileUpdated, onNavigate, focusSectio
       <ErrorCallout error={error} />
 
       {/* ── Build Info ── */}
-      <div className="card mb-16" id="settings-profile">
+      {showAccountSettings && <div className="card mb-16" id="settings-profile">
         <div className="card-title">Build Info</div>
         <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Frontend bundle: <code>{BUNDLE_VERSION}</code></div>
         <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Server deploy: <code>{serverDeployVersion || 'unknown'}</code></div>
@@ -933,10 +946,10 @@ export default function Settings({ me, onProfileUpdated, onNavigate, focusSectio
             </button>
           </div>
         )}
-      </div>
+      </div>}
 
       {/* ── Profile ── */}
-      <div className="card mb-16" id="settings-integrations">
+      {showAccountSettings && <div className="card mb-16" id="settings-integrations">
         <div className="card-title">Profile</div>
         <div className="field">
           <label>Display Name</label>
@@ -955,10 +968,10 @@ export default function Settings({ me, onProfileUpdated, onNavigate, focusSectio
             Role: {me?.role || 'job_seeker'} {me?.isAdmin ? '• Admin' : ''}
           </div>
         </div>
-      </div>
+      </div>}
 
       {/* ── Google Sheets Sync (merged: health + details + config + runs) ── */}
-      <div className="card mb-16" id="settings-ops">
+      {showOperations && <div className="card mb-16" id="settings-ops">
         <div className="card-title">Google Sheets Sync</div>
 
         {/* Health summary */}
@@ -1162,10 +1175,10 @@ export default function Settings({ me, onProfileUpdated, onNavigate, focusSectio
             </div>
           )}
         </div>
-      </div>
+      </div>}
 
       {/* ── Email Event Import (Gmail) ── */}
-      <div className="card mb-16">
+      {showOperations && <div className="card mb-16">
         <div className="card-title">Email Event Import (Gmail)</div>
         <div style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 10 }}>
           Imports interview/calendar invite events from Gmail into the Events section.
@@ -1203,10 +1216,10 @@ export default function Settings({ me, onProfileUpdated, onNavigate, focusSectio
             Disconnect
           </button>
         </div>
-      </div>
+      </div>}
 
       {/* ── Assigned Users (staff/admin) ── */}
-      {(me?.isAdmin || me?.role === 'staff') && (
+      {(me?.isAdmin || me?.role === 'staff') && showAssignedUsers && (
         <div className="card mb-16" id="settings-assigned-users">
           <div className="card-title">Assigned Users</div>
           {!assignedUsers.length && (
@@ -1252,7 +1265,7 @@ export default function Settings({ me, onProfileUpdated, onNavigate, focusSectio
       )}
 
       {/* ── Admin: Team Access ── */}
-      {me?.isAdmin && (
+      {me?.isAdmin && showUserManagement && (
         <div className="card mb-16" id="settings-users">
           <div className="card-title">User Management</div>
           <div style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 10 }}>
@@ -1339,7 +1352,7 @@ export default function Settings({ me, onProfileUpdated, onNavigate, focusSectio
       )}
 
       {/* ── Admin: Staff Assignments ── */}
-      {me?.isAdmin && (
+      {me?.isAdmin && showAssignments && (
         <div className="card mb-16" id="settings-assignments">
           <div className="card-title">Staff Assignments</div>
           <div className="settings-grid">
@@ -1402,7 +1415,7 @@ export default function Settings({ me, onProfileUpdated, onNavigate, focusSectio
       )}
 
       {/* ── Admin: Audit Log ── */}
-      {me?.isAdmin && (
+      {me?.isAdmin && showOperations && (
         <div className="card mb-16">
           <div className="card-title">Audit Log</div>
           {!auditLogs.length && <div style={{ color: 'var(--text-muted)' }}>No audit activity yet.</div>}
@@ -1435,7 +1448,7 @@ export default function Settings({ me, onProfileUpdated, onNavigate, focusSectio
         </div>
       )}
 
-      {me?.isAdmin && (
+      {me?.isAdmin && showOperations && (
         <div className="card mb-16">
           <div className="card-title">Admin Ops Status</div>
           <div style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 8 }}>
@@ -1559,7 +1572,7 @@ export default function Settings({ me, onProfileUpdated, onNavigate, focusSectio
         </div>
       )}
 
-      {me?.isAdmin && (
+      {me?.isAdmin && showOperations && (
         <div className="card mb-16">
           <div className="card-title">Deployment Profile</div>
           <div style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 8 }}>
@@ -1601,7 +1614,7 @@ export default function Settings({ me, onProfileUpdated, onNavigate, focusSectio
         </div>
       )}
 
-      {me?.isAdmin && (
+      {me?.isAdmin && showOperations && (
         <div className="card mb-16">
           <div className="card-title">Cost Snapshot</div>
           <div style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 10 }}>
@@ -1629,7 +1642,7 @@ export default function Settings({ me, onProfileUpdated, onNavigate, focusSectio
       )}
 
       {/* ── Backup & Restore (admin only) ── */}
-      <div className="card" id="settings-backups">
+      {showOperations && <div className="card" id="settings-backups">
         <div className="card-title">Backup & Restore</div>
         <div style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 10 }}>
           Export your current app data to a JSON file and restore it later.
@@ -1660,7 +1673,7 @@ export default function Settings({ me, onProfileUpdated, onNavigate, focusSectio
         <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>
           `.db` export works only in local SQLite mode (for example `DATABASE_URL=file:./data/app.db`).
         </div>
-      </div>
+      </div>}
     </div>
   )
 }

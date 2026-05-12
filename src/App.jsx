@@ -82,13 +82,13 @@ export default function App() {
   const isStaff = me?.role === 'staff'
   const isStaffLike = isStaff || isAdminOnly
   const navItems = isAdminOnly ? ADMIN_NAV : (isStaff ? STAFF_NAV : JOB_SEEKER_NAV)
-  const settingsFocusSection = view === 'admin_operations'
-    ? 'settings-ops'
+  const settingsMode = view === 'admin_operations'
+    ? 'admin_operations'
     : view === 'admin_users'
-      ? 'settings-users'
+      ? 'admin_users'
       : view === 'admin_assignments'
-        ? 'settings-assignments'
-        : null
+        ? 'admin_assignments'
+        : 'settings'
 
   useEffect(() => {
     if (!authed || !isStaffLike) return
@@ -224,7 +224,7 @@ export default function App() {
         {!isStaffLike && view === 'templates'  && <Templates />}
         {!isStaffLike && view === 'watchlist'  && <Watchlist />}
         {(view === 'settings' || view === 'admin_operations' || view === 'admin_users' || view === 'admin_assignments')
-          && <Settings me={me} onProfileUpdated={refreshMe} onNavigate={navigate} focusSection={settingsFocusSection} />}
+          && <Settings me={me} onProfileUpdated={refreshMe} onNavigate={navigate} mode={settingsMode} />}
       </main>
 
       {/* Mobile bottom nav */}
