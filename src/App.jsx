@@ -38,6 +38,9 @@ const STAFF_NAV = [
 
 const ADMIN_NAV = [
   { id: 'dashboard', label: 'Briefing', icon: '☀️' },
+  { id: 'admin_operations', label: 'Operations', icon: '🧭' },
+  { id: 'admin_users', label: 'User Management', icon: '👤' },
+  { id: 'admin_assignments', label: 'Assignments', icon: '🔗' },
   { id: 'settings',  label: 'Settings', icon: '⚙️' }
 ]
 
@@ -79,6 +82,13 @@ export default function App() {
   const isStaff = me?.role === 'staff'
   const isStaffLike = isStaff || isAdminOnly
   const navItems = isAdminOnly ? ADMIN_NAV : (isStaff ? STAFF_NAV : JOB_SEEKER_NAV)
+  const settingsFocusSection = view === 'admin_operations'
+    ? 'settings-ops'
+    : view === 'admin_users'
+      ? 'settings-users'
+      : view === 'admin_assignments'
+        ? 'settings-assignments'
+        : null
 
   useEffect(() => {
     if (!authed || !isStaffLike) return
@@ -195,6 +205,11 @@ export default function App() {
             />
           ))}
         </div>
+        <div className="identity-chip" title={`username=${me?.username || 'unknown'} role=${me?.role || 'unknown'} org=${me?.organizationId || 'unknown'}`}>
+          <strong>{me?.username || 'unknown'}</strong>
+          <span>{me?.role || 'unknown'}</span>
+          <span>{me?.organizationId || 'unknown-org'}</span>
+        </div>
 
         {view === 'dashboard'  && <Dashboard onNavigate={navigate} me={me} />}
         {isStaff && view === 'operations' && <StaffOps me={me} mode="operations" />}
@@ -208,7 +223,8 @@ export default function App() {
         {!isStaffLike && view === 'events'     && <Events />}
         {!isStaffLike && view === 'templates'  && <Templates />}
         {!isStaffLike && view === 'watchlist'  && <Watchlist />}
-        {view === 'settings'   && <Settings me={me} onProfileUpdated={refreshMe} onNavigate={navigate} />}
+        {(view === 'settings' || view === 'admin_operations' || view === 'admin_users' || view === 'admin_assignments')
+          && <Settings me={me} onProfileUpdated={refreshMe} onNavigate={navigate} focusSection={settingsFocusSection} />}
       </main>
 
       {/* Mobile bottom nav */}
