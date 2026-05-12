@@ -192,6 +192,13 @@ async function run() {
     allowStatuses: [200]
   })
   if (!setup.body?.ok) throw new Error('Setup completion failed')
+  const firstProfile = await api('/api/me', { allowStatuses: [200] })
+  if (firstProfile.body?.username !== TEST_USERNAME) {
+    throw new Error(`Expected first user identity to be ${TEST_USERNAME}, got ${JSON.stringify(firstProfile.body)}`)
+  }
+  if (firstProfile.body?.displayName !== 'Smoke Tester') {
+    throw new Error(`Expected first user display name isolation to be Smoke Tester, got ${JSON.stringify(firstProfile.body)}`)
+  }
 
   const createDaily = await api('/api/daily', {
     method: 'POST',
@@ -327,12 +334,23 @@ async function run() {
     throw new Error('Expected second user to require password change')
   }
   const secondProfile = await api('/api/me', { allowStatuses: [200] })
+  if (secondProfile.body?.username !== SECOND_USERNAME) {
+    throw new Error(`Expected switched identity to be ${SECOND_USERNAME}, got ${JSON.stringify(secondProfile.body)}`)
+  }
   if (secondProfile.body?.role !== 'staff') {
     throw new Error(`Expected second user to retain staff role, got ${JSON.stringify(secondProfile.body)}`)
+  }
+  if (secondProfile.body?.displayName === 'Smoke Tester') {
+    throw new Error(`Display name leaked across users: ${JSON.stringify(secondProfile.body)}`)
   }
   await api('/api/change-password', {
     method: 'POST',
     body: { currentPassword: SECOND_TEMP_PASSWORD, newPassword: SECOND_NEXT_PASSWORD },
+    allowStatuses: [200]
+  })
+  await api('/api/setup/complete', {
+    method: 'POST',
+    body: { displayName: 'Smoke Staff', username: SECOND_USERNAME },
     allowStatuses: [200]
   })
   const assignedUsers = await api('/api/staff/assigned-users', { allowStatuses: [200] })
@@ -364,6 +382,10 @@ async function run() {
     body: { username: TEST_USERNAME, password: NEXT_PASSWORD },
     allowStatuses: [200]
   })
+  const switchedBackProfile = await api('/api/me', { allowStatuses: [200] })
+  if (switchedBackProfile.body?.username !== TEST_USERNAME || switchedBackProfile.body?.displayName !== 'Smoke Tester') {
+    throw new Error(`Expected return to first identity/profile, got ${JSON.stringify(switchedBackProfile.body)}`)
+  }
   const ownerPipeline = await api('/api/pipeline', { allowStatuses: [200] })
   const ownerEntry = ownerPipeline.body?.find(item => item.id === createPipeline.body.id)
   if (!ownerEntry || ownerEntry.Company !== 'Smoke Co') {

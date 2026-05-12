@@ -241,6 +241,27 @@ html, body, #root {
   z-index: 10;
 }
 
+.identity-chip {
+  position: absolute;
+  top: 16px;
+  left: 14px;
+  z-index: 10;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.identity-chip strong {
+  color: var(--text);
+  font-weight: 700;
+}
+
 .theme-dot {
   width: 28px;
   height: 28px;
@@ -261,6 +282,12 @@ html, body, #root {
 @media (max-width: 640px) {
   .theme-picker { display: none; }
   .theme-picker-mobile { display: flex; }
+  .identity-chip {
+    right: 128px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   .main { position: relative; }
 }
 
