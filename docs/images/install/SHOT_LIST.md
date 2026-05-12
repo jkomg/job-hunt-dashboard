@@ -1,6 +1,6 @@
-# Hosted Screenshot Shot List
+# Hosted Screenshot Shot List (Post-Admin-Nav Refresh)
 
-Capture these in order and save with the exact filenames below.
+Capture these in order and save with the exact filenames below. This list reflects the split admin nav (`Operations`, `User Management`, `Assignments`) and identity chip in the app shell.
 
 ## 1) Hosted login page
 
@@ -55,30 +55,49 @@ Capture these in order and save with the exact filenames below.
 
 ## 9) Admin team access
 
-- Filename: `admin-team-access.png`
+- Filename: `admin-user-management.png`
 - Show:
+  - left-nav with top-level `User Management` selected
   - create user form
-  - role selection
+  - role selection + existing user actions
 
 ## 10) Admin staff assignments
 
 - Filename: `admin-staff-assignments.png`
 - Show:
+  - left-nav with top-level `Assignments` selected
   - assignment controls and current mappings
 
-## 11) Sync health/settings
+## 11) Admin operations
 
-- Filename: `settings-sync-health.png`
+- Filename: `admin-operations-overview.png`
 - Show:
+  - left-nav with top-level `Operations` selected
+  - Admin Ops Status table
+  - scheduler coverage section
+
+## 12) Sync health/settings
+
+- Filename: `operations-sync-health.png`
+- Show:
+  - Google Sheets Sync health card
   - last local save vs last google sync
   - per-entity sync summary
 
-## 12) Backup tools
+## 13) Backup tools
 
-- Filename: `settings-backup-restore.png`
+- Filename: `operations-backup-restore.png`
 - Show:
+  - Backup & Restore card in Operations
   - export backup
   - restore backup
+
+## 14) Identity chip
+
+- Filename: `identity-chip-context.png`
+- Show:
+  - identity chip in main content (`username`, `role`, `org`)
+  - capture once as admin and once as job seeker if possible
 
 ## Optional fallback (local reinstall only)
 

@@ -24,11 +24,10 @@ Operational guide for staff and admins using hosted Job Hunt Dashboard environme
 3. Close completed threads and mark tasks done.
 
 ## Daily Admin Workflow
-1. Check `Settings`:
-   - Team Access
-   - Staff Assignments
-   - Audit Log
-   - Google Sheets Sync (health + entity status in one card)
+1. Check top-level admin nav:
+   - `User Management`
+   - `Assignments`
+   - `Operations` (audit, sync health, scheduler/cost, backups)
 2. Rebalance caseload:
    - use Staff Ops task reassignment
    - verify assignment coverage for all active candidates
@@ -52,8 +51,8 @@ Operational guide for staff and admins using hosted Job Hunt Dashboard environme
 ## User + Access Management
 
 ### Admin path (Settings)
-1. `Settings` -> `Team Access`: create users with role (`job_seeker`, `staff`, `admin`) and set temporary password
-2. `Settings` -> `Staff Assignments`: assign each job seeker to a staff/admin owner
+1. `User Management`: create users with role (`job_seeker`, `staff`, `admin`) and set temporary password
+2. `Assignments`: assign each job seeker to a staff/admin owner
 3. Verify with `Assigned Users` view under staff accounts.
 
 ### Staff path (Staff Ops)
