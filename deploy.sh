@@ -71,6 +71,15 @@ fi
 if gcloud secrets describe jobhunt-gmail-oauth-redirect-uri --project "$PROJECT_ID" >/dev/null 2>&1; then
   SECRET_ARGS+=(--set-secrets GMAIL_OAUTH_REDIRECT_URI=jobhunt-gmail-oauth-redirect-uri:latest)
 fi
+if gcloud secrets describe jobhunt-agent-api-token --project "$PROJECT_ID" >/dev/null 2>&1; then
+  SECRET_ARGS+=(--set-secrets AGENT_API_TOKEN=jobhunt-agent-api-token:latest)
+fi
+if gcloud secrets describe jobhunt-agent-user-id --project "$PROJECT_ID" >/dev/null 2>&1; then
+  SECRET_ARGS+=(--set-secrets AGENT_USER_ID=jobhunt-agent-user-id:latest)
+fi
+if gcloud secrets describe jobhunt-agent-org-id --project "$PROJECT_ID" >/dev/null 2>&1; then
+  SECRET_ARGS+=(--set-secrets AGENT_ORG_ID=jobhunt-agent-org-id:latest)
+fi
 
 if [[ "$AUTH_MODE" == "session" ]]; then
   if ! gcloud secrets describe jobhunt-default-password --project "$PROJECT_ID" >/dev/null 2>&1; then

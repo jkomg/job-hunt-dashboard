@@ -40,6 +40,7 @@ import {
 } from './db.js'
 import { runSheetsSync, testSheetsConnection, getSheetsSyncStatus, normalizeSheetsSyncError, getSheetsSchemaReport } from './sheetsSync.js'
 import { getGmailIntegrationConfig, buildGmailAuthUrl, exchangeGmailCode, importEventsFromGmail } from './gmailEvents.js'
+import { createMcpRouter } from './mcp-server.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -809,6 +810,7 @@ app.patch('/api/admin/users/:id/password-policy', requireAuth, requireAdmin, asy
     res.status(500).json({ error: 'Could not update password policy' })
   }
 })
+
 
 app.get('/api/admin/staff-assignments', requireAuth, requireAdmin, async (req, res) => {
   try {
@@ -2434,6 +2436,8 @@ try {
   // Keep the service online; request handlers will surface backend-unavailable errors.
   console.error('DB bootstrap failed; starting server in degraded mode', e)
 }
+
+app.use('/mcp', createMcpRouter())
 
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`)

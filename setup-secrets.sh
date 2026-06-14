@@ -51,6 +51,9 @@ upsert_secret "jobhunt-sheets-sync-cron-token" "$(get_env SHEETS_SYNC_CRON_TOKEN
 upsert_secret "jobhunt-backup-export-cron-token" "$(get_env BACKUP_EXPORT_CRON_TOKEN)"
 upsert_secret "jobhunt-backup-gcs-bucket" "$(get_env BACKUP_GCS_BUCKET)"
 upsert_secret "jobhunt-backup-gcs-prefix" "$(get_env BACKUP_GCS_PREFIX)"
+upsert_secret "jobhunt-agent-api-token" "$(get_env AGENT_API_TOKEN)"
+upsert_secret "jobhunt-agent-user-id" "$(get_env AGENT_USER_ID)"
+upsert_secret "jobhunt-agent-org-id" "$(get_env AGENT_ORG_ID)"
 
 SA_EMAIL="$(gcloud run services describe "$SERVICE_NAME" --region "$REGION" --format='value(spec.template.spec.serviceAccountName)' 2>/dev/null || true)"
 if [[ -z "$SA_EMAIL" ]]; then
@@ -70,7 +73,10 @@ for s in \
   jobhunt-sheets-sync-cron-token \
   jobhunt-backup-export-cron-token \
   jobhunt-backup-gcs-bucket \
-  jobhunt-backup-gcs-prefix; do
+  jobhunt-backup-gcs-prefix \
+  jobhunt-agent-api-token \
+  jobhunt-agent-user-id \
+  jobhunt-agent-org-id; do
   if gcloud secrets describe "$s" --project "$PROJECT_ID" >/dev/null 2>&1; then
     gcloud secrets add-iam-policy-binding "$s" \
       --member="serviceAccount:${SA_EMAIL}" \

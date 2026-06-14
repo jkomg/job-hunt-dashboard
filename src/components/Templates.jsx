@@ -1,18 +1,26 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
+import { Icon } from '../ui-icons.jsx'
 
 const CATEGORIES = [
   'Connection Request', 'Follow-Up', 'Thank You Note',
   'Cold Outreach', 'Referral Ask', 'Informational Interview', 'Other'
 ]
 
-function categoryColor(c) {
-  if (c === 'Connection Request') return 'badge-blue'
-  if (c === 'Follow-Up') return 'badge-yellow'
-  if (c === 'Thank You Note') return 'badge-green'
-  if (c === 'Cold Outreach') return 'badge-orange'
-  if (c === 'Referral Ask') return 'badge-purple'
-  if (c === 'Informational Interview') return 'badge-red'
-  return 'badge-gray'
+const CAT_COLORS = {
+  'Connection Request': 'var(--accent)',
+  'Cold Outreach': 'var(--amber)',
+  'Follow-Up': 'oklch(0.62 0.14 300)',
+  'Thank You Note': 'var(--green)',
+  'Referral Ask': 'oklch(0.62 0.18 28)',
+  'Informational Interview': 'oklch(0.62 0.13 230)',
+  'Other': 'var(--text-3)',
+}
+
+function renderBody(body) {
+  const parts = (body || '').split(/(\[[^\]]+\])/g)
+  return parts.map((p, i) =>
+    /^\[.+\]$/.test(p) ? <span key={i} className="tpl-placeholder">{p}</span> : p
+  )
 }
 
 function emptyForm(defaults = {}) {
@@ -29,7 +37,7 @@ function TemplateForm({ form, set }) {
       <div className="field">
         <label>Message Body</label>
         <textarea value={form.Body} onChange={e => set('Body', e.target.value)} placeholder={'Hi [Name],\n\nI came across your profile and...'} style={{ minHeight: 160, fontFamily: 'inherit' }} />
-        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>Use [Name], [Company], [Role] etc. as placeholders</div>
+        <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>Use [Name], [Company], [Role] etc. as placeholders</div>
       </div>
       <div className="field"><label>Notes — when to use this</label><textarea value={form.Notes} onChange={e => set('Notes', e.target.value)} style={{ minHeight: 60 }} /></div>
     </>
@@ -72,47 +80,6 @@ function AddModal({ onClose, onSave }) {
         <div className="modal-footer">
           <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
           <button className="btn btn-primary" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save Template'}</button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function ViewModal({ template, onClose, onEdit }) {
-  const [copied, setCopied] = useState(false)
-
-  function copy() {
-    navigator.clipboard.writeText(template.Body || '')
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
-
-  return (
-    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal">
-        <div className="modal-handle" />
-        <div className="modal-header">
-          <span className="modal-title">{template.Name}</span>
-          <button className="modal-close" onClick={onClose}>×</button>
-        </div>
-        {template.Category && (
-          <div style={{ marginBottom: 12 }}>
-            <span className={`badge ${categoryColor(template.Category)}`}>{template.Category}</span>
-          </div>
-        )}
-        <div style={{ background: 'var(--surface)', borderRadius: 8, padding: 16, marginBottom: 16, whiteSpace: 'pre-wrap', fontSize: 13, lineHeight: 1.6, color: 'var(--text)' }}>
-          {template.Body || <span style={{ color: 'var(--text-muted)' }}>No message body yet.</span>}
-        </div>
-        {template.Notes && (
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
-            <strong>When to use:</strong> {template.Notes}
-          </div>
-        )}
-        <div className="modal-footer">
-          <button className="btn btn-ghost" onClick={onEdit}>Edit</button>
-          <button className="btn btn-primary" onClick={copy} disabled={!template.Body}>
-            {copied ? '✓ Copied!' : 'Copy to Clipboard'}
-          </button>
         </div>
       </div>
     </div>
@@ -172,10 +139,11 @@ function EditModal({ template, onClose, onUpdate }) {
 export default function Templates() {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
-  const [viewing, setViewing] = useState(null)
+  const [selId, setSelId] = useState(null)
   const [editing, setEditing] = useState(null)
   const [showAdd, setShowAdd] = useState(false)
-  const [filter, setFilter] = useState('all')
+  const [cat, setCat] = useState('all')
+  const [copied, setCopied] = useState(false)
 
   function load() {
     setLoading(true)
@@ -186,57 +154,113 @@ export default function Templates() {
 
   useEffect(load, [])
 
-  const filtered = filter === 'all' ? items : items.filter(i => i.Category === filter)
+  const list = useMemo(() => cat === 'all' ? items : items.filter(t => t.Category === cat), [items, cat])
+  const sel = items.find(t => t.id === selId) || list[0] || null
 
-  if (loading) return <div className="loading"><div className="spin" /> Loading templates…</div>
+  function copy() {
+    if (!sel?.Body) return
+    navigator.clipboard.writeText(sel.Body).catch(() => {})
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2200)
+  }
+
+  if (loading) return <div className="loading"><div className="spin" />Loading templates…</div>
 
   return (
-    <div>
-      <div className="page-header">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1>Outreach Templates</h1>
-            <div className="subtitle">{items.length} templates</div>
-          </div>
-          <button className="btn btn-primary btn-sm" onClick={() => setShowAdd(true)}>+ New</button>
+    <div className="page">
+      <div className="page-head">
+        <div>
+          <h1>Templates</h1>
+          <div className="sub">{items.length} OUTREACH TEMPLATES</div>
         </div>
+        <button className="btn btn-primary btn-sm" onClick={() => setShowAdd(true)}>
+          <Icon name="plus" /> New template
+        </button>
       </div>
 
-      <div className="tabs" style={{ flexWrap: 'wrap' }}>
-        <button className={`tab${filter === 'all' ? ' active' : ''}`} onClick={() => setFilter('all')}>All</button>
-        {CATEGORIES.map(c => (
-          <button key={c} className={`tab${filter === c ? ' active' : ''}`} onClick={() => setFilter(c)}>{c}</button>
-        ))}
-      </div>
-
-      <div className="card" style={{ padding: 0 }}>
-        {filtered.length === 0 ? (
-          <div className="empty-state">
-            <div className="icon">✉️</div>
-            <p>{filter === 'all' ? 'No templates yet — add your first one.' : `No ${filter} templates yet.`}</p>
+      <div className="tpl-layout">
+        <div className="tpl-sidebar">
+          <div className="tpl-sidebar-head">
+            <Icon name="mail" /> Templates
           </div>
-        ) : (
-          filtered.map(t => (
-            <div key={t.id} className="contact-row" onClick={() => setViewing(t)} style={{ cursor: 'pointer' }}>
-              <div className="contact-info">
-                <div className="contact-name">{t.Name}</div>
-                {t.Notes && <div className="contact-meta">{t.Notes}</div>}
-              </div>
-              <div className="contact-actions">
-                {t.Category && <span className={`badge ${categoryColor(t.Category)}`}>{t.Category}</span>}
+          <div className="tpl-cats">
+            <button className={'tpl-all-btn' + (cat === 'all' ? ' sel' : '')} onClick={() => setCat('all')}>
+              All templates <span className="tpl-cat-count">{items.length}</span>
+            </button>
+            {CATEGORIES.map(c => {
+              const count = items.filter(t => t.Category === c).length
+              if (!count) return null
+              return (
+                <button key={c} className={'tpl-cat-btn' + (cat === c ? ' sel' : '')} onClick={() => setCat(c)}>
+                  <span className="tpl-cat-dot" style={{ background: CAT_COLORS[c] || 'var(--text-3)' }} />
+                  {c}
+                  <span className="tpl-cat-count">{count}</span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        <div className="tpl-col">
+          {list.length === 0 ? (
+            <div className="placeholder">
+              <div className="placeholder-inner">
+                <div className="placeholder-icn"><Icon name="mail" /></div>
+                <p>{cat === 'all' ? 'No templates yet — add your first one.' : `No ${cat} templates yet.`}</p>
+                <button className="btn btn-primary btn-sm" onClick={() => setShowAdd(true)}>New template</button>
               </div>
             </div>
-          ))
-        )}
-      </div>
+          ) : (
+            <>
+              <div className="tpl-list">
+                {list.map(t => (
+                  <button key={t.id} className={'tpl-row' + (t.id === (sel?.id) ? ' sel' : '')} onClick={() => setSelId(t.id)}>
+                    <span className="tpl-row-dot" style={{ background: CAT_COLORS[t.Category] || 'var(--text-3)' }} />
+                    <div className="tpl-row-body">
+                      <div className="tpl-row-name">{t.Name}</div>
+                      <div className="tpl-row-usage">{t.Notes}</div>
+                    </div>
+                    {t.Category && <span className="chip chip-gray">{t.Category}</span>}
+                  </button>
+                ))}
+              </div>
 
-      {viewing && !editing && (
-        <ViewModal
-          template={viewing}
-          onClose={() => setViewing(null)}
-          onEdit={() => { setEditing(viewing); setViewing(null) }}
-        />
-      )}
+              {sel && (
+                <div className="tpl-card">
+                  <div className="tpl-card-head">
+                    <div className="tpl-card-info">
+                      <div className="tpl-card-name">{sel.Name}</div>
+                      {sel.Notes && <div className="tpl-card-usage">{sel.Notes}</div>}
+                      {sel.Category && (
+                        <div style={{ marginTop: 9 }}>
+                          <span className="chip chip-line" style={{ color: CAT_COLORS[sel.Category] || 'var(--text-3)' }}>
+                            <span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', background: CAT_COLORS[sel.Category] || 'var(--text-3)', marginRight: 5, verticalAlign: 'middle' }} />
+                            {sel.Category}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="tpl-body-wrap">
+                    <div className="tpl-body-text">
+                      {sel.Body ? renderBody(sel.Body) : <span style={{ color: 'var(--text-3)' }}>No message body yet.</span>}
+                    </div>
+                  </div>
+                  <div className="tpl-card-foot">
+                    <button className={'btn btn-primary' + (copied ? ' btn-copied' : '')} onClick={copy} disabled={!sel.Body}>
+                      <Icon name={copied ? 'check' : 'clipboard-list'} />
+                      {copied ? 'Copied!' : 'Copy to clipboard'}
+                    </button>
+                    <button className="btn btn-ghost btn-sm" onClick={() => setEditing(sel)}>
+                      <Icon name="pen-line" /> Edit
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
 
       {editing && (
         <EditModal

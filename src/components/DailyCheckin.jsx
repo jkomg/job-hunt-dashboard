@@ -1,24 +1,13 @@
 import { useState, useEffect } from 'react'
+import { Icon } from '../ui-icons.jsx'
 
-const EXERCISE_OPTIONS = ['🏃 Cardio/Run', '🏋️ Weights/Strength', '🧘 Yoga/Stretch', '🚶 Walk', '🏀 Sport/Activity', '❌ Rest Day']
+const EXERCISE_OPTIONS = ['Cardio/Run', 'Weights/Strength', 'Yoga/Stretch', 'Walk', 'Sport/Activity', 'Rest Day']
 const CERT_OPTIONS = ['Gainsight', 'HubSpot Inbound', 'HubSpot CRM', 'SuccessHACKER', 'LinkedIn Learning', 'None today']
 
-function Slider({ label, name, value, onChange }) {
-  const color = value >= 7 ? 'var(--green)' : value >= 4 ? 'var(--yellow)' : 'var(--red)'
-  return (
-    <div className="field">
-      <label>{label}</label>
-      <div className="slider-wrap">
-        <input
-          type="range"
-          min={1} max={10}
-          value={value || 5}
-          onChange={e => onChange(name, Number(e.target.value))}
-        />
-        <span className="slider-val" style={{ color }}>{value || 5}</span>
-      </div>
-    </div>
-  )
+function moodColor(v) {
+  if (v >= 7) return 'var(--green)'
+  if (v >= 4) return 'var(--amber)'
+  return 'var(--red)'
 }
 
 export default function DailyCheckin() {
@@ -49,6 +38,19 @@ export default function DailyCheckin() {
     'Gratitude / Reflection': '',
     "Tomorrow's Top 3": ''
   })
+
+  // Split Top 3 textarea into 3 separate lines for the new UI
+  const top3Lines = (() => {
+    const raw = String(form["Tomorrow's Top 3"] || '')
+    const lines = raw.split('\n').map(s => s.trim())
+    return [lines[0] || '', lines[1] || '', lines[2] || '']
+  })()
+
+  function setTop(i, val) {
+    const next = [...top3Lines]
+    next[i] = val
+    setForm(prev => ({ ...prev, "Tomorrow's Top 3": next.join('\n') }))
+  }
 
   useEffect(() => {
     const todayLabel = new Date().toLocaleDateString('en-US', {
@@ -86,6 +88,10 @@ export default function DailyCheckin() {
     setForm(prev => ({ ...prev, [key]: val }))
   }
 
+  function step(key, delta) {
+    setForm(prev => ({ ...prev, [key]: Math.max(0, (prev[key] || 0) + delta) }))
+  }
+
   async function save() {
     setSaving(true)
     setSaved(false)
@@ -98,10 +104,7 @@ export default function DailyCheckin() {
           credentials: 'include',
           body: JSON.stringify(form)
         })
-        if (!r.ok) {
-          const data = await r.json().catch(() => ({}))
-          throw new Error(data.error || `Save failed (${r.status})`)
-        }
+        if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `Save failed (${r.status})`)
       } else {
         const r = await fetch('/api/daily', {
           method: 'POST',
@@ -109,37 +112,28 @@ export default function DailyCheckin() {
           credentials: 'include',
           body: JSON.stringify(form)
         })
-        if (!r.ok) {
-          const data = await r.json().catch(() => ({}))
-          throw new Error(data.error || `Save failed (${r.status})`)
-        }
+        if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `Save failed (${r.status})`)
         const d = await r.json()
         setExistingId(d.id)
       }
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)
     } catch (e) {
-      if (e?.message === 'Failed to fetch') {
-        setError('Network/auth issue while saving. Refresh the page and sign in again, then retry.')
-      } else {
-        setError(e.message)
-      }
+      setError(e.message === 'Failed to fetch' ? 'Network/auth issue. Refresh and sign in again.' : e.message)
     } finally {
       setSaving(false)
     }
   }
 
-  async function autofillTop3FromQueue() {
+  async function autofillTop3() {
     setAutofillingTop3(true)
     setError('')
     try {
       const res = await fetch('/api/dashboard', { credentials: 'include' })
-      if (!res.ok) throw new Error('Could not load command center queue')
+      if (!res.ok) throw new Error('Could not load queue')
       const data = await res.json()
       const lines = Array.isArray(data?.suggestedTop3) ? data.suggestedTop3.slice(0, 3) : []
-      if (!lines.length) {
-        throw new Error('No queue-based suggestions right now. Add next actions or follow-up dates first.')
-      }
+      if (!lines.length) throw new Error('No queue suggestions right now. Add next actions or follow-up dates first.')
       set("Tomorrow's Top 3", lines.join('\n'))
     } catch (e) {
       setError(e.message || 'Could not auto-fill Top 3')
@@ -150,131 +144,276 @@ export default function DailyCheckin() {
 
   if (loading) return <div className="loading"><div className="spin" /> Loading today's log…</div>
 
+  const mindset = form['Mindset (1-10)'] || 5
+  const energy = form['Energy (1-10)'] || 5
+  const outreach = form['Outreach Sent'] || 0
+  const responses = form['Responses Received'] || 0
+  const applications = form['Applications Submitted'] || 0
+  const calls = form['Conversations / Calls'] || 0
+  const totalActivity = outreach + responses + applications + calls
+  const top3Filled = top3Lines.filter(t => t.trim()).length
+
+  const checklist = [
+    mindset !== 5 || energy !== 5,
+    totalActivity > 0 || form['LinkedIn Posts'] || form['Volunteer Activity'],
+    !!form['Exercise'],
+    !!form['Win of the Day'].trim(),
+    !!form['Gratitude / Reflection'].trim(),
+    top3Filled === 3,
+  ]
+  const doneCount = checklist.filter(Boolean).length
+  const pct = Math.round((doneCount / checklist.length) * 100)
+
+  const R = 30
+  const C = 2 * Math.PI * R
+  const todayShort = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }).toUpperCase()
+
+  const COUNTERS = [
+    { key: 'Outreach Sent', label: 'Outreach sent', sub: 'Messages sent today', icon: 'send', val: outreach },
+    { key: 'Responses Received', label: 'Responses', sub: 'Replies received', icon: 'reply', val: responses },
+    { key: 'Applications Submitted', label: 'Applications', sub: 'Jobs applied to', icon: 'file-text', val: applications },
+    { key: 'Conversations / Calls', label: 'Calls / convos', sub: 'Live conversations', icon: 'phone', val: calls },
+  ]
+
   return (
-    <form onSubmit={(e) => { e.preventDefault(); if (!saving) save() }}>
-      <div className="page-header">
-        <h1>Daily Check-in</h1>
-        <div className="subtitle">{today} {existingId ? '— updating existing entry' : '— new entry'}</div>
+    <div className="page">
+      <div className="page-head">
+        <div>
+          <h1>Daily Check-in</h1>
+          <div className="sub">{todayShort} · {existingId ? 'UPDATING' : 'NEW ENTRY'}</div>
+        </div>
+        <span className="chip chip-gray ci-status"><Icon name="flame" /> {existingId ? 'Entry exists' : 'New entry'}</span>
       </div>
 
       {error && <div className="error-msg">{error}</div>}
-      {saved && <div className="success-msg">Saved!</div>}
 
-      {/* Mindset & energy */}
-      <div className="checkin-section">
-        <div className="checkin-section-title">How are you feeling?</div>
-        <div className="checkin-grid">
-          <Slider label="Mindset (1–10)" name="Mindset (1-10)" value={form['Mindset (1-10)']} onChange={set} />
-          <Slider label="Energy (1–10)" name="Energy (1-10)" value={form['Energy (1-10)']} onChange={set} />
-        </div>
-      </div>
+      <div className="checkin-layout">
+        {/* ── main column ─────────────────────────────── */}
+        <div className="checkin-main">
 
-      {/* Activity numbers */}
-      <div className="checkin-section">
-        <div className="checkin-section-title">Today's Activity</div>
-        <div className="checkin-grid">
-          {[
-            ['Outreach Sent', 'Messages sent'],
-            ['Responses Received', 'Replies received'],
-            ['Applications Submitted', 'Applications'],
-            ['Conversations / Calls', 'Calls / convos']
-          ].map(([key, placeholder]) => (
-            <div className="field" key={key}>
-              <label>{key}</label>
-              <input
-                type="number"
-                min={0}
-                value={form[key]}
-                onChange={e => set(key, Number(e.target.value))}
-                placeholder={placeholder}
-              />
+          {/* 01 · How are you feeling */}
+          <div className="ci-card">
+            <div className="ci-card-head">
+              <span className="ci-num">01</span>
+              <span className="ci-card-title">How are you feeling?</span>
+              <span className="ci-card-hint">Sets the tone of tomorrow's briefing</span>
             </div>
-          ))}
-        </div>
-
-        <div className="checkin-grid">
-          <div>
-            <div className="check-row">
-              <input
-                type="checkbox"
-                id="linkedin"
-                checked={form['LinkedIn Posts']}
-                onChange={e => set('LinkedIn Posts', e.target.checked)}
-              />
-              <label htmlFor="linkedin">Posted on LinkedIn today</label>
-            </div>
-            <div className="check-row">
-              <input
-                type="checkbox"
-                id="volunteer"
-                checked={form['Volunteer Activity']}
-                onChange={e => set('Volunteer Activity', e.target.checked)}
-              />
-              <label htmlFor="volunteer">Volunteer activity</label>
+            <div className="mood-grid">
+              {[
+                { key: 'Mindset (1-10)', label: 'Mindset', icon: 'target', low: 'Scattered', high: 'Focused', val: mindset },
+                { key: 'Energy (1-10)', label: 'Energy', icon: 'zap', low: 'Drained', high: 'Energized', val: energy },
+              ].map(m => {
+                const col = moodColor(m.val)
+                return (
+                  <div className="mood" key={m.key}>
+                    <div className="mood-head">
+                      <div className="mood-ico"><Icon name={m.icon} /></div>
+                      <span className="mood-name">{m.label}</span>
+                      <span className="mood-val" style={{ color: col }}>{m.val}</span>
+                    </div>
+                    <input
+                      className="ci-range"
+                      type="range"
+                      min="1" max="10"
+                      value={m.val}
+                      style={{ '--pct': ((m.val - 1) / 9 * 100) + '%', '--rng': col }}
+                      onChange={e => set(m.key, Number(e.target.value))}
+                    />
+                    <div className="mood-scale"><span>{m.low}</span><span>{m.high}</span></div>
+                  </div>
+                )
+              })}
             </div>
           </div>
-          <div className="field">
-            <label>Exercise</label>
-            <select value={form.Exercise} onChange={e => set('Exercise', e.target.value)}>
-              <option value="">Select…</option>
-              {EXERCISE_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
-            </select>
+
+          {/* 02 · Today's activity */}
+          <div className="ci-card">
+            <div className="ci-card-head">
+              <span className="ci-num">02</span>
+              <span className="ci-card-title">Today's activity</span>
+              <span className="ci-card-hint"><Icon name="trending-up" /> Rolls into your weekly goals</span>
+            </div>
+            <div className="count-grid">
+              {COUNTERS.map(c => (
+                <div className="counter" key={c.key}>
+                  <div className="counter-ico"><Icon name={c.icon} /></div>
+                  <div className="counter-body">
+                    <div className="counter-label">{c.label}</div>
+                    <div className="counter-sub">{c.sub}</div>
+                  </div>
+                  <div className="stepper">
+                    <button type="button" onClick={() => step(c.key, -1)} disabled={c.val === 0} aria-label="decrease">
+                      <Icon name="minus" />
+                    </button>
+                    <span className="stepper-val">{c.val}</span>
+                    <button type="button" onClick={() => step(c.key, 1)} aria-label="increase">
+                      <Icon name="plus" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="choice-block">
+              <div className="choice-label">Habits</div>
+              <div className="toggle-stack">
+                {[
+                  { key: 'LinkedIn Posts', label: 'Posted on LinkedIn', icon: 'trending-up' },
+                  { key: 'Volunteer Activity', label: 'Volunteer activity', icon: 'heart' },
+                ].map(h => (
+                  <div
+                    key={h.key}
+                    className={'toggle-row' + (form[h.key] ? ' on' : '')}
+                    onClick={() => set(h.key, !form[h.key])}
+                  >
+                    <Icon name={h.icon} />
+                    <span className="toggle-label">{h.label}</span>
+                    <span className="switch"><i /></span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="choice-block">
+              <div className="choice-label"><Icon name="activity" /> Movement</div>
+              <div className="choice-row">
+                {EXERCISE_OPTIONS.map(o => (
+                  <button
+                    key={o}
+                    type="button"
+                    className={'choice' + (form['Exercise'] === o ? ' sel' : '')}
+                    onClick={() => set('Exercise', form['Exercise'] === o ? '' : o)}
+                  >{o}</button>
+                ))}
+              </div>
+            </div>
+
+            <div className="choice-block">
+              <div className="choice-label"><Icon name="award" /> Cert progress</div>
+              <div className="choice-row">
+                {CERT_OPTIONS.map(o => (
+                  <button
+                    key={o}
+                    type="button"
+                    className={'choice' + (form['Cert Progress'] === o ? ' sel' : '')}
+                    onClick={() => set('Cert Progress', form['Cert Progress'] === o ? '' : o)}
+                  >{o}</button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* 03 · Reflection */}
+          <div className="ci-card">
+            <div className="ci-card-head">
+              <span className="ci-num">03</span>
+              <span className="ci-card-title">Reflection</span>
+            </div>
+            <div className="ci-field" style={{ marginBottom: 16 }}>
+              <label><Icon name="pen-line" /> Win of the day</label>
+              <input
+                className="ci-input"
+                value={form['Win of the Day']}
+                onChange={e => set('Win of the Day', e.target.value)}
+                placeholder="One thing that went well — no matter how small"
+              />
+            </div>
+            <div className="ci-field">
+              <label><Icon name="heart" /> Gratitude / reflection <span className="opt">optional</span></label>
+              <textarea
+                className="ci-textarea"
+                value={form['Gratitude / Reflection']}
+                onChange={e => set('Gratitude / Reflection', e.target.value)}
+                placeholder="Something you're grateful for, or a note on how the day went"
+              />
+            </div>
+          </div>
+
+          {/* 04 · Tomorrow's Top 3 */}
+          <div className="ci-card top3">
+            <div className="ci-card-head">
+              <span className="ci-num">04</span>
+              <span className="ci-card-title">Tomorrow's Top 3</span>
+              <button type="button" className="btn btn-ghost btn-sm t3-auto" onClick={autofillTop3} disabled={autofillingTop3}>
+                <Icon name="rotate-ccw" /> {autofillingTop3 ? 'Pulling…' : 'Auto-fill from queue'}
+              </button>
+            </div>
+            <div className="top3-rows">
+              {[0, 1, 2].map(i => (
+                <div className="top3-row" key={i}>
+                  <span className="top3-num">{i + 1}</span>
+                  <input
+                    className="ci-input"
+                    value={top3Lines[i]}
+                    onChange={e => setTop(i, e.target.value)}
+                    placeholder={i === 0 ? 'The one thing that moves the search forward…' : 'Add a focus…'}
+                  />
+                </div>
+              ))}
+            </div>
           </div>
         </div>
 
-        <div className="field">
-          <label>Cert Progress</label>
-          <select value={form['Cert Progress']} onChange={e => set('Cert Progress', e.target.value)}>
-            <option value="">Select…</option>
-            {CERT_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
-          </select>
-        </div>
-      </div>
+        {/* ── right rail ────────────────────────────────── */}
+        <aside className="checkin-rail">
+          <div className="rail-card accent">
+            <div className="ring-wrap">
+              <svg className="ring" viewBox="0 0 72 72">
+                <circle className="ring-track" cx="36" cy="36" r={R} fill="none" strokeWidth="7" />
+                <circle
+                  className="ring-fill"
+                  cx="36" cy="36" r={R} fill="none" strokeWidth="7"
+                  strokeDasharray={C}
+                  strokeDashoffset={C * (1 - doneCount / checklist.length)}
+                />
+                <text className="ring-label" x="36" y="36" dominantBaseline="central" textAnchor="middle">{pct}%</text>
+              </svg>
+              <div className="ring-info">
+                <div className="rc-title">{doneCount === checklist.length ? 'All set' : 'Log your day'}</div>
+                <div className="rc-sub">{doneCount} of {checklist.length} steps done</div>
+              </div>
+            </div>
+          </div>
 
-      {/* Reflection */}
-      <div className="checkin-section">
-        <div className="checkin-section-title">Reflection</div>
-        <div className="field">
-          <label>Win of the Day</label>
-          <input
-            type="text"
-            value={form['Win of the Day']}
-            onChange={e => set('Win of the Day', e.target.value)}
-            placeholder="One thing that went well, no matter how small"
-          />
-        </div>
-        <div className="field">
-          <label>Gratitude / Reflection</label>
-          <textarea
-            value={form['Gratitude / Reflection']}
-            onChange={e => set('Gratitude / Reflection', e.target.value)}
-            placeholder="Something you're grateful for or a reflection on the day"
-          />
-        </div>
-      </div>
+          <div className="rail-card">
+            <div className="rail-label">Feeds tomorrow's briefing</div>
+            <div className="feed-row">
+              <Icon name="trending-up" />
+              <span className="fr-label">Activity logged</span>
+              <b>{totalActivity}</b>
+            </div>
+            <div className="feed-row">
+              <Icon name="sun" />
+              <span className="fr-label">Mindset · energy</span>
+              <b>{mindset} · {energy}</b>
+            </div>
+            <div className="feed-row">
+              <Icon name="list-checks" />
+              <span className="fr-label">Top 3 set</span>
+              <b>{top3Filled}/3</b>
+            </div>
+            <div className="feed-foot">
+              <Icon name="sparkles" />
+              <span>Your Top 3 become tomorrow's focus tasks on the Briefing.</span>
+            </div>
+          </div>
 
-      {/* Tomorrow's Top 3 */}
-      <div className="checkin-section" style={{ borderColor: 'var(--accent)' }}>
-        <div className="checkin-section-title" style={{ color: 'var(--accent)' }}>Tomorrow's Top 3</div>
-        <div style={{ marginBottom: 10 }}>
-          <button className="btn btn-ghost btn-sm" type="button" onClick={autofillTop3FromQueue} disabled={autofillingTop3}>
-            {autofillingTop3 ? 'Pulling from queue…' : 'Auto-fill from Today Queue'}
-          </button>
-        </div>
-        <div className="field">
-          <label>3 most important things to do tomorrow</label>
-          <textarea
-            value={form["Tomorrow's Top 3"]}
-            onChange={e => set("Tomorrow's Top 3", e.target.value)}
-            placeholder={'1. ...\n2. ...\n3. ...'}
-            style={{ minHeight: 100 }}
-          />
-        </div>
+          <div className="rail-card">
+            <div className="save-stack">
+              <button
+                type="button"
+                className={'btn btn-primary btn-full' + (saved ? ' btn-saved' : '')}
+                onClick={save}
+                disabled={saving}
+              >
+                <Icon name={saved ? 'check' : 'save'} />
+                {saving ? 'Saving…' : saved ? 'Saved for today' : (existingId ? 'Update check-in' : 'Save check-in')}
+              </button>
+              <div className="save-meta">{saved ? 'Synced · see you tomorrow' : 'Saves to your daily log'}</div>
+            </div>
+          </div>
+        </aside>
       </div>
-
-      <button className="btn btn-primary btn-full" type="submit" disabled={saving}>
-        {saving ? 'Saving…' : existingId ? 'Update' : 'Save'}
-      </button>
-    </form>
+    </div>
   )
 }

@@ -13,36 +13,187 @@ import Templates from './components/Templates.jsx'
 import Watchlist from './components/Watchlist.jsx'
 import Settings from './components/Settings.jsx'
 import StaffOps from './components/StaffOps.jsx'
-import { useTheme, THEMES } from './useTheme.js'
+import { Icon } from './ui-icons.jsx'
+import { useTheme } from './useTheme.js'
 
-const JOB_SEEKER_NAV = [
-  { id: 'dashboard',   label: 'Briefing',   icon: '☀️' },
-  { id: 'checkin',     label: 'Check-in',   icon: '✅' },
-  { id: 'pipeline',    label: 'Pipeline',   icon: '🎯' },
-  { id: 'contacts',    label: 'Outreach',   icon: '👥' },
-  { id: 'interviews',  label: 'Interviews', icon: '📞' },
-  { id: 'inbox',       label: 'Inbox',      icon: '💬' },
-  { id: 'events',      label: 'Events',     icon: '🗓️' },
-  { id: 'templates',   label: 'Templates',  icon: '✉️' },
-  { id: 'watchlist',   label: 'Watchlist',  icon: '🔭' },
-  { id: 'settings',    label: 'Settings',   icon: '⚙️' },
+const JOB_SEEKER_GROUPS = [
+  {
+    label: 'TODAY',
+    items: [
+      { id: 'dashboard',  label: 'Briefing',   icon: 'sunrise',       ico: 'oklch(0.60 0.22 252)' },
+      { id: 'checkin',    label: 'Check-in',   icon: 'circle-check',  ico: 'oklch(0.60 0.17 200)' },
+    ]
+  },
+  {
+    label: 'SEARCH',
+    items: [
+      { id: 'pipeline',   label: 'Pipeline',   icon: 'columns',       ico: 'oklch(0.56 0.21 258)' },
+      { id: 'contacts',   label: 'Outreach',   icon: 'users',         ico: 'oklch(0.64 0.16 232)' },
+      { id: 'interviews', label: 'Interviews', icon: 'phone',         ico: 'oklch(0.58 0.22 244)' },
+      { id: 'events',     label: 'Events',     icon: 'calendar',      ico: 'oklch(0.56 0.19 272)' },
+      { id: 'watchlist',  label: 'Watchlist',  icon: 'eye',           ico: 'oklch(0.60 0.14 214)' },
+    ]
+  },
+  {
+    label: 'COMMS',
+    items: [
+      { id: 'inbox',      label: 'Inbox',      icon: 'message',       ico: 'oklch(0.58 0.20 246)' },
+      { id: 'templates',  label: 'Templates',  icon: 'mail',          ico: 'oklch(0.54 0.13 262)' },
+    ]
+  },
 ]
 
-const STAFF_NAV = [
-  { id: 'dashboard', label: 'Briefing', icon: '☀️' },
-  { id: 'operations', label: 'Operations', icon: '🧭' },
-  { id: 'staff_tasks', label: 'Tasks', icon: '🗂️' },
-  { id: 'staff_threads', label: 'Threads', icon: '💬' },
-  { id: 'settings',  label: 'Settings', icon: '⚙️' }
+const STAFF_GROUPS = [
+  {
+    label: 'OVERVIEW',
+    items: [
+      { id: 'dashboard',      label: 'Briefing',    icon: 'sunrise',        ico: 'oklch(0.60 0.22 252)' },
+      { id: 'operations',     label: 'Operations',  icon: 'clipboard-list', ico: 'oklch(0.56 0.21 258)' },
+    ]
+  },
+  {
+    label: 'WORK',
+    items: [
+      { id: 'staff_tasks',    label: 'Tasks',       icon: 'list-checks',    ico: 'oklch(0.60 0.17 200)' },
+      { id: 'staff_threads',  label: 'Threads',     icon: 'message-square', ico: 'oklch(0.64 0.16 232)' },
+    ]
+  },
 ]
 
-const ADMIN_NAV = [
-  { id: 'dashboard', label: 'Briefing', icon: '☀️' },
-  { id: 'admin_operations', label: 'Operations', icon: '🧭' },
-  { id: 'admin_users', label: 'User Management', icon: '👤' },
-  { id: 'admin_assignments', label: 'Assignments', icon: '🔗' },
-  { id: 'settings',  label: 'Settings', icon: '⚙️' }
+const ADMIN_GROUPS = [
+  {
+    label: 'ADMIN',
+    items: [
+      { id: 'dashboard',          label: 'Briefing',        icon: 'sunrise',        ico: 'oklch(0.70 0.18 60)'  },
+      { id: 'admin_operations',   label: 'Operations',      icon: 'zap',            ico: 'oklch(0.60 0.18 28)'  },
+      { id: 'admin_users',        label: 'User Mgmt',       icon: 'users',          ico: 'oklch(0.56 0.22 268)' },
+      { id: 'admin_assignments',  label: 'Assignments',     icon: 'link',           ico: 'oklch(0.62 0.14 300)' },
+    ]
+  },
 ]
+
+const SETTINGS_ITEM = { id: 'settings', label: 'Settings', icon: 'settings', ico: 'oklch(0.52 0.06 258)' }
+
+const MOBILE_NAV_ITEMS_SEEKER = [
+  { id: 'dashboard',  label: 'Briefing',   icon: 'sunrise'      },
+  { id: 'pipeline',   label: 'Pipeline',   icon: 'columns'      },
+  { id: 'contacts',   label: 'Outreach',   icon: 'users'        },
+  { id: 'inbox',      label: 'Inbox',      icon: 'message'      },
+  { id: 'settings',   label: 'Settings',   icon: 'settings'     },
+]
+
+const MOBILE_NAV_ITEMS_STAFF = [
+  { id: 'dashboard',     label: 'Briefing',   icon: 'sunrise'        },
+  { id: 'operations',    label: 'Ops',        icon: 'clipboard-list' },
+  { id: 'staff_tasks',   label: 'Tasks',      icon: 'list-checks'    },
+  { id: 'staff_threads', label: 'Threads',    icon: 'message-square' },
+  { id: 'settings',      label: 'Settings',   icon: 'settings'       },
+]
+
+function Sidebar({ view, go, groups, staffBadges, isStaffLike, me, onLogout }) {
+  const allItems = groups.flatMap(g => g.items)
+  const activeItem = allItems.find(it => it.id === view) || SETTINGS_ITEM
+
+  function getBadge(id) {
+    if (!isStaffLike) return 0
+    if (id === 'staff_tasks') return staffBadges.tasksOpen
+    if (id === 'staff_threads') return staffBadges.threadsOpen
+    return 0
+  }
+
+  const initials = (me?.displayName || me?.username || '?').slice(0, 2).toUpperCase()
+  const roleName = me?.isAdmin ? 'Admin' : me?.role === 'staff' ? 'Staff' : 'Job Seeker'
+
+  return (
+    <aside className="sidebar">
+      <div className="brand">
+        <div className="brand-mark"><Icon name="briefcase" /></div>
+        <div className="brand-name">Job Hunt<span> ·</span></div>
+      </div>
+
+      <button className="cmdk" onClick={() => {}}>
+        <Icon name="search" />
+        <span>Quick jump…</span>
+        <kbd>⌘K</kbd>
+      </button>
+
+      <nav className="nav">
+        {groups.map(group => (
+          <div key={group.label} className="nav-group">
+            <div className="nav-group-label">{group.label}</div>
+            {group.items.map(it => {
+              const badge = getBadge(it.id)
+              return (
+                <button
+                  key={it.id}
+                  className={'nav-item' + (view === it.id ? ' active' : '')}
+                  style={{ '--ico-color': it.ico }}
+                  onClick={() => go(it.id)}
+                >
+                  <span className="nav-ico"><Icon name={it.icon} /></span>
+                  <span>{it.label}</span>
+                  {!!badge && <span className={'nav-badge' + (badge > 0 ? ' alert' : '')}>{badge}</span>}
+                </button>
+              )
+            })}
+          </div>
+        ))}
+      </nav>
+
+      <div className="sidebar-foot">
+        <div className="identity-chip" title={`role=${me?.role} org=${me?.organizationId || 'unknown'}`}>
+          <strong>{me?.username || '?'}</strong>
+          <span>{me?.role || 'unknown'}</span>
+          {me?.organizationId && <span>{me.organizationId}</span>}
+        </div>
+        <button
+          className={'nav-item' + (view === 'settings' ? ' active' : '')}
+          style={{ '--ico-color': SETTINGS_ITEM.ico }}
+          onClick={() => go('settings')}
+        >
+          <span className="nav-ico"><Icon name="settings" /></span>
+          <span>Settings</span>
+        </button>
+        <div className="profile" onClick={onLogout} title="Sign out">
+          <div className="avatar">{initials}</div>
+          <div className="profile-info">
+            <div className="profile-name">{me?.displayName || me?.username}</div>
+            <div className="profile-role">{roleName}</div>
+          </div>
+          <Icon name="log-out" />
+        </div>
+      </div>
+    </aside>
+  )
+}
+
+function MobileNav({ view, go, items, staffBadges, isStaffLike }) {
+  function getBadge(id) {
+    if (!isStaffLike) return 0
+    if (id === 'staff_tasks') return staffBadges.tasksOpen
+    if (id === 'staff_threads') return staffBadges.threadsOpen
+    return 0
+  }
+
+  return (
+    <nav className="bottom-nav">
+      {items.map(it => {
+        const badge = getBadge(it.id)
+        return (
+          <button
+            key={it.id}
+            className={'bnav-item' + (view === it.id ? ' active' : '')}
+            onClick={() => go(it.id)}
+          >
+            {!!badge && <span className="bnav-badge">{badge}</span>}
+            <Icon name={it.icon} />
+            <span>{it.label}</span>
+          </button>
+        )
+      })}
+    </nav>
+  )
+}
 
 export default function App() {
   const [authed, setAuthed] = useState(null)
@@ -50,7 +201,7 @@ export default function App() {
   const [view, setView] = useState('dashboard')
   const [navIntent, setNavIntent] = useState(null)
   const [staffBadges, setStaffBadges] = useState({ tasksOpen: 0, threadsOpen: 0 })
-  const [theme, setTheme] = useTheme()
+  const { mode, accent, setMode, setAccent } = useTheme()
 
   function navigate(nextView, intent = null) {
     setView(nextView)
@@ -60,11 +211,7 @@ export default function App() {
   async function refreshMe() {
     try {
       const r = await fetch('/api/me', { credentials: 'include' })
-      if (!r.ok) {
-        setAuthed(false)
-        setMe(null)
-        return
-      }
+      if (!r.ok) { setAuthed(false); setMe(null); return }
       const data = await r.json()
       setMe(data)
       setAuthed(true)
@@ -74,14 +221,13 @@ export default function App() {
     }
   }
 
-  useEffect(() => {
-    refreshMe()
-  }, [])
+  useEffect(() => { refreshMe() }, [])
 
   const isAdminOnly = me?.isAdmin && me?.role === 'admin'
   const isStaff = me?.role === 'staff'
   const isStaffLike = isStaff || isAdminOnly
-  const navItems = isAdminOnly ? ADMIN_NAV : (isStaff ? STAFF_NAV : JOB_SEEKER_NAV)
+  const navGroups = isAdminOnly ? ADMIN_GROUPS : (isStaff ? STAFF_GROUPS : JOB_SEEKER_GROUPS)
+  const mobileItems = isStaff ? MOBILE_NAV_ITEMS_STAFF : MOBILE_NAV_ITEMS_SEEKER
   const settingsMode = view === 'admin_operations'
     ? 'admin_operations'
     : view === 'admin_users'
@@ -104,26 +250,18 @@ export default function App() {
           tasksOpen: Number(summary.tasksTodo || 0) + Number(summary.tasksInProgress || 0),
           threadsOpen: Number(summary.threadsOpen || 0)
         })
-      } catch {
-        // ignore badge refresh errors
-      }
+      } catch { /* ignore */ }
     }
     loadBadges()
     const id = setInterval(loadBadges, 60000)
-    return () => {
-      active = false
-      clearInterval(id)
-    }
+    return () => { active = false; clearInterval(id) }
   }, [authed, isStaffLike])
 
   useEffect(() => {
     if (authed !== true || !me?.onboardingComplete || me?.mustChangePassword) return
     if (view === 'staff_ops') setView('operations')
-    const navIds = new Set(navItems.map(n => n.id))
-    if (!navIds.has(view)) {
-      setView(isStaffLike ? 'settings' : 'dashboard')
-    }
-  }, [authed, me, isStaffLike, navItems, view])
+    if (!allNavIds.has(view)) setView(isStaffLike ? 'operations' : 'dashboard')
+  }, [authed, me, isStaffLike])
 
   async function logout() {
     await fetch('/api/logout', { method: 'POST', credentials: 'include' })
@@ -132,121 +270,63 @@ export default function App() {
   }
 
   if (authed === null) {
-    return <div className="loading"><div className="spin" />Loading…</div>
+    return (
+      <div className="stage" data-mode={mode} data-accent={accent}>
+        <div className="loading"><div className="spin" />Loading…</div>
+      </div>
+    )
   }
 
-  if (!authed) {
-    return <Login onLogin={refreshMe} />
-  }
-
-  if (me?.mustChangePassword) {
-    return <ForcePasswordChange onDone={refreshMe} onLogout={logout} />
-  }
-
-  if (!me?.onboardingComplete) {
-    return <SetupWizard me={me} onComplete={refreshMe} onLogout={logout} />
-  }
+  if (!authed) return <Login onLogin={refreshMe} />
+  if (me?.mustChangePassword) return <ForcePasswordChange onDone={refreshMe} onLogout={logout} />
+  if (!me?.onboardingComplete) return <SetupWizard me={me} onComplete={refreshMe} onLogout={logout} />
 
   return (
-    <div className="app">
-      {/* Desktop sidebar */}
-      <aside className="sidebar">
-        <div className="sidebar-logo">Job Hunt<span>.</span></div>
-        <nav>
-          {navItems.map(n => {
-            const badge = isStaffLike
-              ? (n.id === 'staff_tasks' ? staffBadges.tasksOpen : n.id === 'staff_threads' ? staffBadges.threadsOpen : 0)
-              : 0
-            return (
-            <button
-              key={n.id}
-              className={`nav-item${view === n.id ? ' active' : ''}`}
-              onClick={() => navigate(n.id)}
-            >
-              <span className="nav-icon">{n.icon}</span>
-              {n.label}
-              {!!badge && <span className="nav-badge">{badge}</span>}
-            </button>
-            )
-          })}
-        </nav>
-        <div className="sidebar-footer">
-          {/* Theme picker */}
-          <div className="theme-picker">
-            {THEMES.map(t => (
-              <button
-                key={t.id}
-                className={`theme-btn${theme === t.id ? ' active' : ''}`}
-                onClick={() => setTheme(t.id)}
-                title={t.label}
-              >
-                <span className="theme-icon">{t.icon}</span>
-                {t.label}
-              </button>
-            ))}
-          </div>
-          <button className="logout-btn" onClick={logout}>
-            <span>↩</span> Sign out
-          </button>
-        </div>
-      </aside>
+    <div className="stage" data-mode={mode} data-accent={accent} data-nav="full">
+      <Sidebar
+        view={view}
+        go={navigate}
+        groups={navGroups}
+        staffBadges={staffBadges}
+        isStaffLike={isStaffLike}
+        me={me}
+        onLogout={logout}
+      />
 
-      {/* Main content */}
       <main className="main">
-        {/* Mobile theme picker — dots in top-right corner */}
-        <div className="theme-picker-mobile">
-          {THEMES.map(t => (
-            <button
-              key={t.id}
-              className={`theme-dot${theme === t.id ? ' active' : ''}`}
-              data-t={t.id}
-              onClick={() => setTheme(t.id)}
-              title={t.label}
-            />
-          ))}
-        </div>
-        <div className="identity-chip" title={`username=${me?.username || 'unknown'} role=${me?.role || 'unknown'} org=${me?.organizationId || 'unknown'}`}>
-          <strong>{me?.username || 'unknown'}</strong>
-          <span>{me?.role || 'unknown'}</span>
-          <span>{me?.organizationId || 'unknown-org'}</span>
-        </div>
-
-        {view === 'dashboard'  && <Dashboard onNavigate={navigate} me={me} />}
-        {isStaff && view === 'operations' && <StaffOps me={me} mode="operations" />}
-        {isStaff && view === 'staff_tasks' && <StaffOps me={me} mode="tasks" />}
-        {isStaff && view === 'staff_threads' && <StaffOps me={me} mode="threads" />}
-        {!isStaffLike && view === 'checkin'    && <DailyCheckin />}
-        {!isStaffLike && view === 'pipeline'   && <Pipeline navIntent={navIntent} />}
-        {!isStaffLike && view === 'contacts'   && <Contacts />}
-        {!isStaffLike && view === 'interviews' && <Interviews />}
-        {!isStaffLike && view === 'inbox'      && <Inbox />}
-        {!isStaffLike && view === 'events'     && <Events />}
-        {!isStaffLike && view === 'templates'  && <Templates />}
-        {!isStaffLike && view === 'watchlist'  && <Watchlist />}
-        {(view === 'settings' || view === 'admin_operations' || view === 'admin_users' || view === 'admin_assignments')
-          && <Settings me={me} onProfileUpdated={refreshMe} onNavigate={navigate} mode={settingsMode} />}
+        {view === 'dashboard'      && <Dashboard onNavigate={navigate} me={me} />}
+        {isStaff && view === 'operations'     && <StaffOps me={me} mode="operations" />}
+        {isStaff && view === 'staff_tasks'    && <StaffOps me={me} mode="tasks" />}
+        {isStaff && view === 'staff_threads'  && <StaffOps me={me} mode="threads" />}
+        {!isStaffLike && view === 'checkin'       && <DailyCheckin />}
+        {!isStaffLike && view === 'pipeline'      && <Pipeline navIntent={navIntent} />}
+        {!isStaffLike && view === 'contacts'      && <Contacts />}
+        {!isStaffLike && view === 'interviews'    && <Interviews />}
+        {!isStaffLike && view === 'inbox'         && <Inbox />}
+        {!isStaffLike && view === 'events'        && <Events />}
+        {!isStaffLike && view === 'templates'     && <Templates />}
+        {!isStaffLike && view === 'watchlist'     && <Watchlist />}
+        {(view === 'settings' || view === 'admin_operations' || view === 'admin_users' || view === 'admin_assignments') && (
+          <Settings
+            me={me}
+            onProfileUpdated={refreshMe}
+            onNavigate={navigate}
+            settingsMode={settingsMode}
+            themeMode={mode}
+            accent={accent}
+            onModeChange={setMode}
+            onAccentChange={setAccent}
+          />
+        )}
       </main>
 
-      {/* Mobile bottom nav */}
-      <nav className="bottom-nav">
-        {navItems.map(n => {
-          const badge = isStaffLike
-            ? (n.id === 'staff_tasks' ? staffBadges.tasksOpen : n.id === 'staff_threads' ? staffBadges.threadsOpen : 0)
-            : 0
-          return (
-          <button
-            key={n.id}
-            className={`bottom-nav-item${view === n.id ? ' active' : ''}`}
-            onClick={() => navigate(n.id)}
-          >
-            <span className="nav-icon">{n.icon}</span>
-            {n.label}
-            {!!badge && <span className="nav-badge">{badge}</span>}
-            {view === n.id && <div className="bnav-dot" />}
-          </button>
-          )
-        })}
-      </nav>
+      <MobileNav
+        view={view}
+        go={navigate}
+        items={mobileItems}
+        staffBadges={staffBadges}
+        isStaffLike={isStaffLike}
+      />
     </div>
   )
 }

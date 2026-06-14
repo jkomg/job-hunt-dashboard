@@ -10,5 +10,6 @@ export const JOB_SOURCES = [
   'Remote.co',
   'Remote Rebellion',
   'Welcome to the Jungle',
+  'Pepper (AI)',
   'Other'
 ]

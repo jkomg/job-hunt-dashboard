@@ -1,12 +1,21 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
+import { Icon } from '../ui-icons.jsx'
 
 const STATUSES = ['Interested', 'Registered', 'Attended', 'Skipped']
+const FILTERS = ['Upcoming', 'Attended', 'All']
 
-function statusColor(s) {
-  if (s === 'Registered') return 'badge-green'
-  if (s === 'Attended') return 'badge-purple'
-  if (s === 'Skipped') return 'badge-gray'
-  return 'badge-blue' // Interested
+function statusChip(s) {
+  if (s === 'Registered') return 'chip chip-green'
+  if (s === 'Attended') return 'chip chip-line'
+  if (s === 'Skipped') return 'chip chip-gray'
+  return 'chip chip-blue'
+}
+
+function daysUntil(dateStr) {
+  if (!dateStr) return null
+  const today = new Date(); today.setHours(0,0,0,0)
+  const d = new Date(dateStr); d.setHours(0,0,0,0)
+  return Math.round((d - today) / 86400000)
 }
 
 function isUpcoming(dateStr) {
@@ -31,7 +40,7 @@ function EventForm({ form, set }) {
         <div className="field">
           <label>Status</label>
           <select value={form.Status} onChange={e => set('Status', e.target.value)}>{STATUSES.map(s => <option key={s}>{s}</option>)}</select>
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>Use “Registered” to keep this in your active event list.</div>
+          <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 4 }}>Use "Registered" to keep this in your active event list.</div>
         </div>
         <div className="field"><label>Price</label><input value={form.Price} onChange={e => set('Price', e.target.value)} placeholder="e.g. Free, $25, $150" /></div>
       </div>
@@ -136,12 +145,79 @@ function EditModal({ event, onClose, onUpdate }) {
   )
 }
 
+function EventRow({ e, sel, onSelect, onEdit }) {
+  const days = daysUntil(e.Date)
+  const shortDate = e.Date ? new Date(e.Date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'
+
+  return (
+    <>
+      <button className={'ev-row' + (sel ? ' sel' : '')} onClick={onSelect}>
+        <span className="ev-type-dot" style={{ background: e.Status === 'Registered' ? 'var(--green)' : e.Status === 'Attended' ? 'var(--accent)' : 'var(--text-3)' }} />
+        <div className="ev-row-body">
+          <div className="ev-row-name">{e.Name}</div>
+          <div className="ev-row-meta">
+            {e.Price && <><span>{e.Price}</span><span className="sep">·</span></>}
+            <span>{e.Status}</span>
+          </div>
+        </div>
+        <div className="ev-row-right">
+          <span className="ev-date">{shortDate}</span>
+          <span className={statusChip(e.Status)}>{e.Status}</span>
+        </div>
+      </button>
+
+      {sel && (
+        <div className="ev-detail">
+          <div className="ev-det-inner">
+            {e.Date && (
+              <div>
+                <div className="ev-det-label">Date</div>
+                <div className="ev-det-val">
+                  {new Date(e.Date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                  {days !== null && <span style={{ color: days < 0 ? 'var(--red)' : days === 0 ? 'var(--amber)' : 'var(--text-3)', marginLeft: 8, fontSize: 12 }}>
+                    {days < 0 ? `${-days}d ago` : days === 0 ? 'Today' : `In ${days}d`}
+                  </span>}
+                </div>
+              </div>
+            )}
+            {e.Price && (
+              <div>
+                <div className="ev-det-label">Price</div>
+                <div className={'ev-det-val' + (e.Price === 'Free' ? ' free' : '')}>{e.Price}</div>
+              </div>
+            )}
+            {e.Notes && (
+              <div className="ev-det-full">
+                <div className="ev-det-label">Notes</div>
+                <div className="ev-det-val">{e.Notes}</div>
+              </div>
+            )}
+          </div>
+          <div className="ev-det-foot">
+            {e['Registration Link'] ? (
+              <a href={e['Registration Link']} target="_blank" rel="noreferrer" className="btn btn-ghost btn-sm">
+                <Icon name="external-link" /> Open link
+              </a>
+            ) : (
+              <button className="btn btn-ghost btn-sm" disabled><Icon name="external-link" /> No link</button>
+            )}
+            <button className="btn btn-primary btn-sm ev-advance" onClick={onEdit}>
+              <Icon name="pen-line" /> Edit
+            </button>
+          </div>
+        </div>
+      )}
+    </>
+  )
+}
+
 export default function Events() {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
-  const [selected, setSelected] = useState(null)
+  const [editing, setEditing] = useState(null)
   const [showAdd, setShowAdd] = useState(false)
-  const [filter, setFilter] = useState('upcoming')
+  const [filter, setFilter] = useState('Upcoming')
+  const [selId, setSelId] = useState(null)
 
   function load() {
     setLoading(true)
@@ -152,81 +228,144 @@ export default function Events() {
 
   useEffect(load, [])
 
-  const filtered = filter === 'upcoming'
-    ? items.filter(i => isUpcoming(i.Date) && i.Status !== 'Skipped')
-    : filter === 'registered'
-    ? items.filter(i => i.Status === 'Registered')
-    : items
+  const registered = items.filter(i => i.Status === 'Registered').sort((a, b) => {
+    const da = daysUntil(a.Date) ?? 9999
+    const db = daysUntil(b.Date) ?? 9999
+    return da - db
+  })
+
+  const list = useMemo(() => {
+    return items.filter(i => {
+      if (filter === 'Upcoming') return isUpcoming(i.Date) && i.Status !== 'Skipped'
+      if (filter === 'Attended') return i.Status === 'Attended' || i.Status === 'Skipped'
+      return true
+    }).sort((a, b) => {
+      const da = daysUntil(a.Date) ?? 9999
+      const db = daysUntil(b.Date) ?? 9999
+      return da - db
+    })
+  }, [items, filter])
+
+  const groups = useMemo(() => {
+    if (filter !== 'Upcoming') {
+      return [{ label: filter === 'All' ? 'All events' : 'Past', items: list }]
+    }
+    const thisWeek = list.filter(e => { const d = daysUntil(e.Date); return d !== null && d >= 0 && d <= 7 })
+    const thisMonth = list.filter(e => { const d = daysUntil(e.Date); return d !== null && d > 7 && d <= 30 })
+    const later = list.filter(e => { const d = daysUntil(e.Date); return d === null || d > 30 })
+    return [
+      thisWeek.length ? { label: 'This week', items: thisWeek } : null,
+      thisMonth.length ? { label: 'This month', items: thisMonth } : null,
+      later.length ? { label: 'Later', items: later } : null,
+    ].filter(Boolean)
+  }, [list, filter])
 
   const upcomingCount = items.filter(i => isUpcoming(i.Date) && i.Status !== 'Skipped').length
 
-  if (loading) return <div className="loading"><div className="spin" /> Loading events…</div>
+  if (loading) return <div className="loading"><div className="spin" />Loading events…</div>
 
   return (
-    <div>
-      <div className="page-header">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1>Events</h1>
-            <div className="subtitle">{items.length} total · {upcomingCount} upcoming</div>
-          </div>
-          <button className="btn btn-primary btn-sm" onClick={() => setShowAdd(true)}>+ Add</button>
+    <div className="page">
+      <div className="page-head">
+        <div>
+          <h1>Events</h1>
+          <div className="sub">{items.length} TOTAL · {upcomingCount} UPCOMING</div>
         </div>
-      </div>
-
-      <div className="tabs">
-        <button className={`tab${filter === 'upcoming' ? ' active' : ''}`} onClick={() => setFilter('upcoming')}>
-          Upcoming {upcomingCount > 0 && <span style={{ color: 'var(--accent)', marginLeft: 3 }}>({upcomingCount})</span>}
+        <button className="btn btn-primary btn-sm" onClick={() => setShowAdd(true)}>
+          <Icon name="plus" /> Add event
         </button>
-        <button className={`tab${filter === 'registered' ? ' active' : ''}`} onClick={() => setFilter('registered')}>Registered</button>
-        <button className={`tab${filter === 'all' ? ' active' : ''}`} onClick={() => setFilter('all')}>All</button>
       </div>
 
-      {items.length === 0 && (
-        <div className="card mb-16">
-          <div className="card-title">Capture Job-Search Events</div>
-          <div style={{ color: 'var(--text-muted)', marginBottom: 10 }}>
-            Track meetups, webinars, and fairs so opportunities do not slip.
+      <div className="ev-layout">
+        {registered.length > 0 && (
+          <div>
+            <div className="ev-section-head">
+              <span className="ev-section-title">On your calendar</span>
+              <span className="chip chip-green">{registered.length} registered</span>
+            </div>
+            <div className="ev-registered">
+              {registered.map(e => {
+                const d = e.Date ? new Date(e.Date + 'T00:00:00') : null
+                const day = d ? d.getDate() : '—'
+                const mon = d ? d.toLocaleString('en-US', { month: 'short' }) : ''
+                return (
+                  <div className="ev-committed" key={e.id}>
+                    <div className="ev-committed-num">
+                      <span className="ev-day">{day}</span>
+                      <span className="ev-mon">{mon}</span>
+                    </div>
+                    <div className="ev-committed-body">
+                      <h3>{e.Name}</h3>
+                      <div className="ev-committed-meta">
+                        {e.Price && e.Price !== 'Free' && <span><Icon name="tag" />{e.Price}</span>}
+                      </div>
+                      <div className="ev-committed-foot">
+                        {e['Registration Link'] ? (
+                          <a href={e['Registration Link']} target="_blank" rel="noreferrer" className="btn btn-ghost btn-sm">
+                            <Icon name="external-link" /> Open link
+                          </a>
+                        ) : (
+                          <button className="btn btn-ghost btn-sm" disabled><Icon name="external-link" /> No link</button>
+                        )}
+                        <button className="btn btn-quiet btn-sm" onClick={() => setEditing(e)}>
+                          <Icon name="pen-line" /> Edit
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
           </div>
-          <button className="btn btn-primary btn-sm" onClick={() => setShowAdd(true)}>+ Add First Event</button>
-        </div>
-      )}
+        )}
 
-      <div className="card" style={{ padding: 0 }}>
-        {filtered.length === 0 ? (
-          <div className="empty-state">
-            <div className="icon">🗓️</div>
-            <p>{filter === 'upcoming' ? 'No upcoming events.' : 'No events match this filter.'}</p>
+        <div>
+          <div className="ev-section-head">
+            <span className="ev-section-title">All events</span>
+            <div className="seg">
+              {FILTERS.map(f => (
+                <button key={f} className={filter === f ? 'active' : ''} onClick={() => { setFilter(f); setSelId(null) }}>{f}</button>
+              ))}
+            </div>
           </div>
-        ) : (
-          filtered.map(e => (
-            <div key={e.id} className="contact-row" onClick={() => setSelected(e)} style={{ cursor: 'pointer' }}>
-              <div className="contact-info">
-                <div className="contact-name">{e.Name}</div>
-                <div className="contact-meta">
-                  {[e.Date, e.Price].filter(Boolean).join(' · ')}
-                </div>
-              </div>
-              <div className="contact-actions">
-                {e['Registration Link'] && (
-                  <a href={e['Registration Link']} target="_blank" rel="noreferrer"
-                    onClick={ev => ev.stopPropagation()}
-                    className="btn btn-ghost btn-sm" style={{ fontSize: 11 }}>
-                    Register ↗
-                  </a>
-                )}
-                <span className={`badge ${statusColor(e.Status)}`}>{e.Status}</span>
+
+          {items.length === 0 ? (
+            <div className="placeholder">
+              <div className="placeholder-inner">
+                <div className="placeholder-icn"><Icon name="calendar" /></div>
+                <p>Track meetups, webinars, and fairs so opportunities don't slip.</p>
+                <button className="btn btn-primary btn-sm" onClick={() => setShowAdd(true)}>
+                  <Icon name="plus" /> Add first event
+                </button>
               </div>
             </div>
-          ))
-        )}
+          ) : groups.length === 0 ? (
+            <div className="or-empty">
+              <Icon name="calendar" />
+              <div>No events in this view.</div>
+            </div>
+          ) : groups.map(g => (
+            <div className="ev-group" key={g.label}>
+              <div className="ev-bucket-label">{g.label}</div>
+              {g.items.map(e => (
+                <EventRow
+                  key={e.id}
+                  e={e}
+                  sel={selId === e.id}
+                  onSelect={() => setSelId(selId === e.id ? null : e.id)}
+                  onEdit={() => { setEditing(e); setSelId(null) }}
+                />
+              ))}
+            </div>
+          ))}
+        </div>
       </div>
 
-      {selected && (
+      {editing && (
         <EditModal
-          event={selected}
-          onClose={() => setSelected(null)}
-          onUpdate={() => { load(); setSelected(null) }}
+          event={editing}
+          onClose={() => setEditing(null)}
+          onUpdate={() => { load(); setEditing(null) }}
         />
       )}
 
