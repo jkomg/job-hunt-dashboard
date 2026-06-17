@@ -228,6 +228,7 @@ export default function App() {
   const isStaffLike = isStaff || isAdminOnly
   const navGroups = isAdminOnly ? ADMIN_GROUPS : (isStaff ? STAFF_GROUPS : JOB_SEEKER_GROUPS)
   const mobileItems = isStaff ? MOBILE_NAV_ITEMS_STAFF : MOBILE_NAV_ITEMS_SEEKER
+  const allNavIds = new Set([...navGroups.flatMap(g => g.items.map(i => i.id)), 'settings', 'admin_operations', 'admin_users', 'admin_assignments'])
   const settingsMode = view === 'admin_operations'
     ? 'admin_operations'
     : view === 'admin_users'
