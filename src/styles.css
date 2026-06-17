@@ -6,6 +6,18 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
+  /* Light-mode surface defaults so pre-auth screens (Login, SetupWizard) render correctly */
+  --bg:        oklch(0.985 0.004 255);
+  --surface:   #ffffff;
+  --surface-2: oklch(0.968 0.005 255);
+  --surface-3: oklch(0.945 0.007 255);
+  --border:    oklch(0.925 0.006 255);
+  --border-2:  oklch(0.885 0.008 255);
+  --text:      oklch(0.28 0.025 265);
+  --text-2:    oklch(0.46 0.02 265);
+  --text-3:    oklch(0.60 0.015 265);
+  --text-muted: oklch(0.60 0.015 265);
+
   /* Accent is set on the .stage element and inherited; default cool indigo */
   --accent:        oklch(0.55 0.17 264);
   --accent-strong: oklch(0.48 0.18 264);
