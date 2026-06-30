@@ -14,7 +14,10 @@ Local install is now fallback/recovery only.
 
 ## Access Model
 
-- `job_seeker`: manages own job search workflow
+- `accelerator_user`: candidate workflow
+- `premium_user`: candidate workflow
+- `vip_user`: candidate workflow
+- `job_seeker` (legacy): candidate workflow
 - `staff`: supports assigned candidates in Staff Ops
 - `admin`: staff actions + user/assignment/audit/sync/backup controls
 
@@ -22,9 +25,10 @@ Local install is now fallback/recovery only.
 
 1. Sign in as admin at hosted URL.
 2. Open `Settings` -> `Team Access` and create users.
-3. Assign roles (`job_seeker`, `staff`, `admin`).
-4. Open `Settings` -> `Staff Assignments` and map job seekers to staff owners.
-5. Confirm staff can see assigned candidates in `Staff Ops`.
+3. Assign roles (`accelerator_user`, `premium_user`, `vip_user`, `staff`, `admin`; `job_seeker` is legacy).
+4. Open `Settings` -> `Staff Assignments` and map candidates to staff owners.
+5. In `User Management`, enable BYO agent only for users who should have it.
+6. Confirm staff can see assigned candidates in `Staff Ops`.
 
 ## First-Time User Setup (Job Seeker)
 

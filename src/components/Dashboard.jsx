@@ -164,11 +164,11 @@ export default function Dashboard({ onNavigate, me }) {
 
     return (
       <div>
-        <div className="morning-greeting">Good morning, {me?.displayName || 'there'}.</div>
-        <div className="today-date">{todayDate}</div>
+        <div className="morning-greeting">Good morning, {me?.displayName || me?.username || 'there'}.</div>
+        <div className="today-date">{todayDate} · @{me?.username || 'unknown'} ({me?.role || 'unknown'})</div>
 
-        <div className="card mb-16">
-          <div className="card-title">Staff Briefing</div>
+        <div className="card mb-16" style={{ borderColor: 'var(--accent)' }}>
+          <div className="card-title" style={{ color: 'var(--accent)' }}>Today Focus</div>
           {me?.isAdmin && (
             <div style={{ marginBottom: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <button className={`btn btn-sm ${staffScope === 'assigned' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setStaffScope('assigned')}>My Queue</button>
@@ -178,72 +178,40 @@ export default function Dashboard({ onNavigate, me }) {
           <div style={{ color: 'var(--text-muted)', fontSize: 12, marginBottom: 10 }}>
             Viewing: {scopeLabel}
           </div>
-          <div className="stats-grid">
+          <div className="stats-grid" style={{ marginBottom: 12 }}>
             <div className="stat-card"><div className="stat-value">{summary.candidates || candidates.length}</div><div className="stat-label">{summary.scope === 'all' ? 'Total Candidates' : 'Assigned Candidates'}</div></div>
-            <div className="stat-card"><div className="stat-value">{summary.recommendationsDraft || draftRecommendations.length}</div><div className="stat-label">Draft Jobs</div></div>
-            <div className="stat-card"><div className="stat-value">{summary.recommendationsPosted || postedRecommendations.length}</div><div className="stat-label">Posted Jobs</div></div>
+            <div className="stat-card">
+              <div className="stat-value">{summary.weeklyRecommendationPosted || 0}/{summary.weeklyRecommendationTarget || 0}</div>
+              <div className="stat-label">Weekly Job Posts</div>
+            </div>
             <div className="stat-card"><div className="stat-value">{(summary.tasksTodo || todoTasks.length) + (summary.tasksInProgress || inProgressTasks.length)}</div><div className="stat-label">Open Tasks</div></div>
+            <div className="stat-card"><div className="stat-value">{openThreads}</div><div className="stat-label">Open Threads</div></div>
           </div>
-          <div className="stats-grid" style={{ marginTop: 10 }}>
-            <div className="stat-card"><div className="stat-value">{Number(summary.candidatesInterviewActive || 0)}</div><div className="stat-label">Interview Active</div></div>
-            <div className="stat-card"><div className="stat-value">{Number(summary.candidatesStaleFollowUps || 0)}</div><div className="stat-label">Stale Follow-Ups</div></div>
-            <div className="stat-card"><div className="stat-value">{Number(summary.candidatesInactive7d || 0)}</div><div className="stat-label">Inactive 7d</div></div>
-            <div className="stat-card"><div className="stat-value">{Number(summary.candidatesRrPosted72h || 0)}</div><div className="stat-label">RR Posted 72h</div></div>
+          <div className="quick-actions">
+            <button className="btn btn-primary" onClick={() => onNavigate('operations', { staffFocus: 'candidates' })}>
+              Review Queue
+            </button>
+            <button className="btn btn-ghost" onClick={() => onNavigate('operations', { staffFocus: 'recommendations' })}>
+              Post Jobs ({summary.weeklyRecommendationRemaining || 0} due)
+            </button>
+            <button className="btn btn-ghost" onClick={() => onNavigate('operations', { staffFocus: 'tasks' })}>
+              Tasks ({todoTasks.length + inProgressTasks.length})
+            </button>
+            <button className="btn btn-ghost" onClick={() => onNavigate('operations', { staffFocus: 'threads' })}>
+              Threads ({openThreads})
+            </button>
+            {me?.isAdmin && (
+              <button className="btn btn-ghost" onClick={() => onNavigate('admin_operations')}>
+                Admin Operations
+              </button>
+            )}
           </div>
-        </div>
-
-        <div className="card mb-16" style={{ borderColor: 'var(--accent)' }}>
-          <div className="card-title" style={{ color: 'var(--accent)' }}>Daily Ops Checklist</div>
-          <div className="contact-row" style={{ padding: '8px 0' }}>
-            <div className="contact-info">
-              <div className="contact-name">1. Review candidate queue</div>
-              <div className="contact-meta">{candidates.length} candidate{candidates.length === 1 ? '' : 's'} {candidateCountLabel}</div>
-            </div>
-            <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('operations')}>Open Operations</button>
-          </div>
-          <div className="contact-row" style={{ padding: '8px 0' }}>
-            <div className="contact-info">
-              <div className="contact-name">2. Post researched jobs</div>
-              <div className="contact-meta">{draftRecommendations.length} draft recommendation{draftRecommendations.length === 1 ? '' : 's'} pending</div>
-            </div>
-            <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('operations')}>Post Jobs</button>
-          </div>
-          <div className="contact-row" style={{ padding: '8px 0' }}>
-            <div className="contact-info">
-              <div className="contact-name">3. Resolve support/admin tasks</div>
-              <div className="contact-meta">
-                {todoTasks.length} todo · {inProgressTasks.length} in progress · {overdueTasks.length} overdue · {dueTodayTasks.length} due today
-              </div>
-            </div>
-            <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('staff_tasks')}>Open Tasks</button>
-          </div>
-          <div className="contact-row" style={{ padding: '8px 0' }}>
-            <div className="contact-info">
-              <div className="contact-name">4. Review audit + sync health</div>
-              <div className="contact-meta">Keep org actions and integrations healthy</div>
-            </div>
-            <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('settings')}>Open Settings</button>
-          </div>
-          <div className="contact-row" style={{ padding: '8px 0' }}>
-            <div className="contact-info">
-              <div className="contact-name">5. Clear thread inbox</div>
-              <div className="contact-meta">{openThreads} open · {staleThreads} stale 48h+</div>
-            </div>
-            <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('staff_threads')}>Open Threads</button>
+          <div style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 10 }}>
+            Overdue tasks: {overdueTasks.length} · Due today: {dueTodayTasks.length} · Stale threads 48h+: {staleThreads}
           </div>
         </div>
 
         <div className="card">
-          <div className="card-title">Weekly Staff Rhythm</div>
-          <div style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 10 }}>
-            Monday: rebalance assignments · Midweek: pipeline quality checks · Friday: outcomes review.
-          </div>
-          <div className="quick-actions">
-            <button className="btn btn-primary" onClick={() => onNavigate('operations')}>🧭 Operations</button>
-            <button className="btn btn-ghost" onClick={() => onNavigate('settings')}>⚙️ Admin Settings</button>
-          </div>
-        </div>
-        <div className="card" style={{ marginTop: 16 }}>
           <div className="card-title">Source Performance</div>
           {!sourcePerformance.length && <div style={{ color: 'var(--text-muted)' }}>No source data yet.</div>}
           {!!sourcePerformance.length && (

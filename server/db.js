@@ -74,6 +74,10 @@ function normalizeEmail(email) {
   return (email || '').trim().toLowerCase()
 }
 
+function normalizeUsername(username) {
+  return String(username || '').trim().toLowerCase()
+}
+
 function slugifyOrganizationName(value) {
   return String(value || '')
     .trim()
@@ -85,6 +89,8 @@ function slugifyOrganizationName(value) {
 
 const DEFAULT_ORG_ID = 'remote-rebellion'
 const DEFAULT_ORG_NAME = 'Remote Rebellion'
+const DEFAULT_CANDIDATE_ROLE = 'accelerator_user'
+const CANDIDATE_ROLES = new Set(['job_seeker', 'accelerator_user', 'premium_user', 'vip_user'])
 const USER_OWNED_TABLES = [
   'daily_logs',
   'pipeline_entries',
@@ -94,6 +100,17 @@ const USER_OWNED_TABLES = [
   'templates',
   'watchlist'
 ]
+
+function isCandidateRole(role) {
+  return CANDIDATE_ROLES.has(String(role || '').trim())
+}
+
+function normalizeMembershipRole(role, fallback = DEFAULT_CANDIDATE_ROLE) {
+  const normalized = String(role || '').trim()
+  if (['admin', 'staff'].includes(normalized)) return normalized
+  if (isCandidateRole(normalized)) return normalized
+  return fallback
+}
 
 async function getTableColumnSet(table) {
   const res = await db.execute(`PRAGMA table_info(${table})`)
@@ -339,7 +356,7 @@ async function backfillDefaultOrganizationMemberships() {
     if (firstRow(existing)) continue
     await ensureUserMembership(Number(row.id), {
       organizationId: DEFAULT_ORG_ID,
-      role: Number(row.is_admin || 0) === 1 ? 'admin' : 'job_seeker'
+      role: Number(row.is_admin || 0) === 1 ? 'admin' : DEFAULT_CANDIDATE_ROLE
     })
   }
 }
@@ -541,8 +558,9 @@ function parseJsonSafe(raw, fallback = null) {
   }
 }
 
-export async function ensureUserMembership(userId, { organizationId = DEFAULT_ORG_ID, role = 'job_seeker' } = {}) {
+export async function ensureUserMembership(userId, { organizationId = DEFAULT_ORG_ID, role = DEFAULT_CANDIDATE_ROLE } = {}) {
   if (!userId) return null
+  const safeRole = normalizeMembershipRole(role, DEFAULT_CANDIDATE_ROLE)
   const ts = now()
   const membershipId = `${organizationId}:${userId}`
   await db.execute({
@@ -556,7 +574,7 @@ export async function ensureUserMembership(userId, { organizationId = DEFAULT_OR
         END,
         updated_at = excluded.updated_at
     `,
-    args: [membershipId, organizationId, Number(userId), role, ts, ts]
+    args: [membershipId, organizationId, Number(userId), safeRole, ts, ts]
   })
 
   const res = await db.execute({
@@ -564,6 +582,33 @@ export async function ensureUserMembership(userId, { organizationId = DEFAULT_OR
     args: [organizationId, Number(userId)]
   })
   return toMembership(firstRow(res))
+}
+
+export async function deleteUserMembership(userId, { organizationId = DEFAULT_ORG_ID } = {}) {
+  const res = await db.execute({
+    sql: 'DELETE FROM memberships WHERE organization_id = ? AND user_id = ?',
+    args: [String(organizationId), Number(userId)]
+  })
+  return Number(res.rowsAffected || 0) > 0
+}
+
+export async function deleteUserAccount(userId) {
+  const uid = Number(userId)
+  if (!Number.isFinite(uid) || uid <= 0) return false
+  await db.execute({ sql: 'DELETE FROM sessions WHERE user_id = ?', args: [uid] })
+  await db.execute({ sql: 'DELETE FROM memberships WHERE user_id = ?', args: [uid] })
+  await db.execute({ sql: 'DELETE FROM staff_assignments WHERE staff_user_id = ? OR job_seeker_user_id = ?', args: [uid, uid] })
+  await db.execute({ sql: 'DELETE FROM candidate_messages WHERE author_user_id = ?', args: [uid] })
+  await db.execute({ sql: 'DELETE FROM candidate_threads WHERE created_by_user_id = ? OR job_seeker_user_id = ?', args: [uid, uid] })
+  await db.execute({ sql: 'DELETE FROM job_recommendations WHERE staff_user_id = ? OR job_seeker_user_id = ?', args: [uid, uid] })
+  await db.execute({ sql: 'DELETE FROM staff_tasks WHERE assignee_user_id = ? OR related_user_id = ? OR created_by_user_id = ?', args: [uid, uid, uid] })
+  await db.execute({ sql: 'DELETE FROM audit_log WHERE actor_user_id = ? OR target_user_id = ?', args: [uid, uid] })
+  for (const table of USER_OWNED_TABLES) {
+    await db.execute({ sql: `DELETE FROM ${table} WHERE user_id = ?`, args: [uid] })
+  }
+  await db.execute({ sql: 'DELETE FROM app_settings WHERE key LIKE ?', args: [`user:${uid}:%`] })
+  const res = await db.execute({ sql: 'DELETE FROM users WHERE id = ?', args: [uid] })
+  return Number(res.rowsAffected || 0) > 0
 }
 
 export async function listOrganizations() {
@@ -641,7 +686,7 @@ export async function listMembershipsForUser(userId) {
     organizationName: String(row.organization_name || ''),
     organizationSlug: String(row.organization_slug || ''),
     userId: Number(row.user_id),
-    role: String(row.role || 'job_seeker'),
+    role: String(row.role || DEFAULT_CANDIDATE_ROLE),
     createdAt: isoFromTs(row.created_at),
     updatedAt: isoFromTs(row.updated_at)
   }))
@@ -669,6 +714,23 @@ export async function listOrganizationUsers(organizationId = DEFAULT_ORG_ID) {
     args: [String(organizationId)]
   })
   return toPlainRows(res).map(toOrganizationUser)
+}
+
+export async function listAllUsers() {
+  const res = await db.execute({
+    sql: `
+      SELECT id, username, email, is_admin, must_change_password
+      FROM users
+      ORDER BY id ASC
+    `
+  })
+  return toPlainRows(res).map(row => ({
+    id: Number(row.id),
+    username: String(row.username || ''),
+    email: row.email || null,
+    isAdmin: Number(row.is_admin || 0) === 1,
+    mustChangePassword: Number(row.must_change_password || 0) === 1
+  }))
 }
 
 export async function listAssignedUsersForStaff(staffUserId, organizationId = DEFAULT_ORG_ID) {
@@ -723,7 +785,7 @@ export async function createStaffAssignment({ organizationId = DEFAULT_ORG_ID, s
   const seekerMembership = await getMembership(orgId, seekerId)
   if (!staffMembership || !seekerMembership) throw new Error('Both users must belong to the organization')
   if (!['staff', 'admin'].includes(staffMembership.role)) throw new Error('Assigned staff user must have staff or admin role')
-  if (seekerMembership.role !== 'job_seeker') throw new Error('Assigned user must have job_seeker role')
+  if (!isCandidateRole(seekerMembership.role)) throw new Error('Assigned user must have a candidate role')
 
   const ts = now()
   const id = `${orgId}:${staffId}:${seekerId}`
@@ -910,6 +972,51 @@ export async function markRecommendationPosted(id, pipelineEntryId) {
   return getJobRecommendationById(id)
 }
 
+export async function updateJobRecommendationDraft(id, {
+  company = null,
+  role = null,
+  jobUrl = null,
+  source = null,
+  fitNote = null
+} = {}) {
+  await db.execute({
+    sql: `
+      UPDATE job_recommendations
+      SET company = ?,
+          role = ?,
+          job_url = ?,
+          source = ?,
+          fit_note = ?,
+          updated_at = ?
+      WHERE id = ? AND status = 'draft'
+    `,
+    args: [
+      String(company || '').trim(),
+      role == null ? null : String(role).trim(),
+      jobUrl == null ? null : String(jobUrl).trim(),
+      source == null ? null : String(source).trim(),
+      fitNote == null ? null : String(fitNote).trim(),
+      now(),
+      String(id)
+    ]
+  })
+  return getJobRecommendationById(id)
+}
+
+export async function markRecommendationDraft(id) {
+  await db.execute({
+    sql: `
+      UPDATE job_recommendations
+      SET status = 'draft',
+          posted_pipeline_entry_id = NULL,
+          updated_at = ?
+      WHERE id = ?
+    `,
+    args: [now(), String(id)]
+  })
+  return getJobRecommendationById(id)
+}
+
 export async function listStaffTasks({
   organizationId = DEFAULT_ORG_ID,
   assigneeUserId = null,
@@ -971,16 +1078,43 @@ export async function listCandidateThreadsForMember({
   jobSeekerUserId,
   limit = 200
 } = {}) {
-  return listCandidateThreads({ organizationId, jobSeekerUserId, limit })
+  const res = await db.execute({
+    sql: `
+      SELECT
+        t.*,
+        c.username AS created_by_username,
+        j.username AS job_seeker_username
+      FROM candidate_threads t
+      JOIN users c ON c.id = t.created_by_user_id
+      JOIN users j ON j.id = t.job_seeker_user_id
+      WHERE t.organization_id = ?
+        AND t.job_seeker_user_id = ?
+        AND EXISTS (
+          SELECT 1
+          FROM candidate_messages m
+          WHERE m.thread_id = t.id
+            AND m.visibility = 'shared_with_candidate'
+        )
+      ORDER BY t.updated_at DESC
+      LIMIT ?
+    `,
+    args: [String(organizationId), Number(jobSeekerUserId), Math.max(1, Math.min(500, Number(limit) || 200))]
+  })
+  return toPlainRows(res).map(toCandidateThread)
 }
 
 export async function listCandidateThreadsByScope({
   organizationId = DEFAULT_ORG_ID,
   staffUserId = null,
+  jobSeekerUserId = null,
   limit = 500
 } = {}) {
   const args = [String(organizationId)]
   let where = 't.organization_id = ?'
+  if (jobSeekerUserId != null) {
+    where += ' AND t.job_seeker_user_id = ?'
+    args.push(Number(jobSeekerUserId))
+  }
   if (staffUserId != null) {
     where += ' AND EXISTS (SELECT 1 FROM staff_assignments sa WHERE sa.organization_id = t.organization_id AND sa.staff_user_id = ? AND sa.job_seeker_user_id = t.job_seeker_user_id)'
     args.push(Number(staffUserId))
@@ -1078,11 +1212,11 @@ export async function listCandidateMessagesForMember(threadId, jobSeekerUserId, 
       JOIN candidate_threads t ON t.id = m.thread_id
       WHERE m.thread_id = ?
         AND t.job_seeker_user_id = ?
-        AND (m.visibility = 'shared_with_candidate' OR m.author_user_id = ?)
+        AND m.visibility = 'shared_with_candidate'
       ORDER BY m.created_at ASC
       LIMIT ?
     `,
-    args: [String(threadId), Number(jobSeekerUserId), Number(jobSeekerUserId), Math.max(1, Math.min(1000, Number(limit) || 200))]
+    args: [String(threadId), Number(jobSeekerUserId), Math.max(1, Math.min(1000, Number(limit) || 200))]
   })
   return toPlainRows(res).map(toCandidateMessage)
 }
@@ -1550,11 +1684,12 @@ function dailyRowToRecord(row) {
 function pipelineRowToRecord(row) {
   if (!row) return null
   const contacts = parseJsonSafe(row.application_contacts_json, [])
+  const normalizedStage = String(row.stage || '').trim() === 'Wishlist' ? '🔍 Researching' : (row.stage || '')
   return {
     id: row.id,
     Company: row.company || '',
     Role: row.role || '',
-    Stage: row.stage || '',
+    Stage: normalizedStage,
     Priority: row.priority || '',
     Sector: row.sector || '',
     'Job Source': row.job_source || '',
@@ -1577,7 +1712,9 @@ function pipelineRowToRecord(row) {
     'Application Contacts': Array.isArray(contacts) ? contacts : [],
     'Work Location': row.work_location || '',
     'Next Action': row.next_action || '',
-    'Next Action Date': row.next_action_date || ''
+    'Next Action Date': row.next_action_date || '',
+    _createdTime: isoFromTs(row.created_at),
+    _lastEditedTime: isoFromTs(row.updated_at)
   }
 }
 
@@ -1599,7 +1736,9 @@ function contactRowToRecord(row) {
     'Resume Used': row.resume_used || '',
     Notes: row.notes || '',
     'Next Action': row.next_action || '',
-    'Next Action Date': row.next_action_date || ''
+    'Next Action Date': row.next_action_date || '',
+    _createdTime: isoFromTs(row.created_at),
+    _lastEditedTime: isoFromTs(row.updated_at)
   }
 }
 
@@ -1619,7 +1758,9 @@ function interviewRowToRecord(row) {
     'Follow-Up Sent': Number(row.follow_up_sent || 0) === 1,
     Notes: row.notes || '',
     'Next Action': row.next_action || '',
-    'Next Action Date': row.next_action_date || ''
+    'Next Action Date': row.next_action_date || '',
+    _createdTime: isoFromTs(row.created_at),
+    _lastEditedTime: isoFromTs(row.updated_at)
   }
 }
 
@@ -1633,7 +1774,9 @@ function eventRowToRecord(row) {
     Status: row.status || '',
     'Registration Link': row.registration_link || '',
     Notes: row.notes || '',
-    'Source Key': row.source_key || ''
+    'Source Key': row.source_key || '',
+    _createdTime: isoFromTs(row.created_at),
+    _lastEditedTime: isoFromTs(row.updated_at)
   }
 }
 
@@ -1665,9 +1808,12 @@ function watchlistRowToRecord(row) {
 }
 
 export async function getUserByUsername(username) {
+  const normalized = normalizeUsername(username)
+  if (!normalized) return null
+
   const res = await db.execute({
     sql: 'SELECT * FROM users WHERE username = ?',
-    args: [username]
+    args: [normalized]
   })
   return toUser(firstRow(res))
 }
@@ -1719,7 +1865,7 @@ export async function ensureUserByEmail(email, { isAdmin = false } = {}) {
 }
 
 export async function upsertLocalAdminUser(username, password, { mustChangePassword = true } = {}) {
-  const normalizedUsername = String(username || '').trim().toLowerCase()
+  const normalizedUsername = normalizeUsername(username)
   const rawPassword = String(password || '')
   if (!normalizedUsername || !rawPassword) {
     throw new Error('username and password are required')
@@ -1745,14 +1891,14 @@ export async function createUserAccount({
   username,
   password,
   email = null,
-  role = 'job_seeker',
+  role = DEFAULT_CANDIDATE_ROLE,
   organizationId = DEFAULT_ORG_ID,
   mustChangePassword = true
 } = {}) {
-  const normalizedUsername = String(username || '').trim().toLowerCase()
+  const normalizedUsername = normalizeUsername(username)
   const rawPassword = String(password || '')
   const normalizedEmail = normalizeEmail(email) || null
-  const safeRole = ['admin', 'staff', 'job_seeker'].includes(String(role)) ? String(role) : 'job_seeker'
+  const safeRole = normalizeMembershipRole(role, DEFAULT_CANDIDATE_ROLE)
 
   if (!normalizedUsername || !rawPassword) {
     throw new Error('username and password are required')
@@ -1772,8 +1918,8 @@ export async function createUserAccount({
   return user
 }
 
-export async function updateOrganizationUserRole(userId, organizationId = DEFAULT_ORG_ID, role = 'job_seeker') {
-  const safeRole = ['admin', 'staff', 'job_seeker'].includes(String(role)) ? String(role) : 'job_seeker'
+export async function updateOrganizationUserRole(userId, organizationId = DEFAULT_ORG_ID, role = DEFAULT_CANDIDATE_ROLE) {
+  const safeRole = normalizeMembershipRole(role, DEFAULT_CANDIDATE_ROLE)
   const user = await getUserById(Number(userId))
   if (!user) throw new Error('User not found')
 
@@ -1837,7 +1983,7 @@ export async function updatePassword(userId, newHash, { clearMustChangePassword 
 }
 
 export async function updateUsername(userId, nextUsername) {
-  const normalized = String(nextUsername || '').trim().toLowerCase()
+  const normalized = normalizeUsername(nextUsername)
   if (!normalized) throw new Error('Username is required')
   await db.execute({
     sql: 'UPDATE users SET username = ? WHERE id = ?',
@@ -2492,6 +2638,15 @@ export async function updatePipelineEntry(id, data = {}, scope = {}) {
     sql: `UPDATE pipeline_entries SET ${updates.join(', ')} WHERE id = ? AND ${owner.clause}`,
     args
   })
+}
+
+export async function deletePipelineEntry(id, scope = {}) {
+  const owner = await scopedOwnerWhere(scope)
+  const res = await db.execute({
+    sql: `DELETE FROM pipeline_entries WHERE id = ? AND ${owner.clause}`,
+    args: [String(id), ...owner.args]
+  })
+  return Number(res.rowsAffected || 0) > 0
 }
 
 export async function updatePipelineStage(id, stage, scope = {}) {

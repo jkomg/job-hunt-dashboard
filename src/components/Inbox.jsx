@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import MessageMarkdown from './MessageMarkdown.jsx'
 
 async function api(path, options = {}) {
   const res = await fetch(path, { credentials: 'include', ...options })
@@ -22,6 +23,7 @@ export default function Inbox() {
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
   const [error, setError] = useState('')
+  const replyRef = useRef(null)
 
   async function loadThreads() {
     setLoading(true)
@@ -77,6 +79,22 @@ export default function Inbox() {
     }
   }
 
+  function applyMarkdown(prefix, suffix = '') {
+    const el = replyRef.current
+    if (!el) return
+    const start = el.selectionStart || 0
+    const end = el.selectionEnd || 0
+    const raw = String(messageBody || '')
+    const selected = raw.slice(start, end) || 'text'
+    const next = `${raw.slice(0, start)}${prefix}${selected}${suffix}${raw.slice(end)}`
+    setMessageBody(next)
+    requestAnimationFrame(() => {
+      el.focus()
+      const caret = start + prefix.length + selected.length + suffix.length
+      el.setSelectionRange(caret, caret)
+    })
+  }
+
   if (loading) return <div className="loading"><div className="spin" />Loading inbox…</div>
 
   return (
@@ -90,31 +108,52 @@ export default function Inbox() {
       {error && <div className="error-msg mb-16">{error}</div>}
       {!threads.length && <div className="card">No messages yet.</div>}
       {!!threads.length && (
-        <div className="card">
-          <div className="tabs">
-            {threads.map(t => (
-              <button key={t.id} className={`tab ${selectedThreadId === t.id ? 'active' : ''}`} onClick={() => setSelectedThreadId(t.id)}>
-                {t.topic} {t.status === 'closed' ? '• closed' : ''}
-              </button>
-            ))}
+        <div className="card chat-shell">
+          <div className="chat-thread-list">
+            {threads.map(t => {
+              const active = selectedThreadId === t.id
+              return (
+                <button key={t.id} className={`chat-thread-item${active ? ' active' : ''}`} onClick={() => setSelectedThreadId(t.id)}>
+                  <div style={{ fontWeight: 600 }}>{t.topic}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                    {t.status === 'closed' ? 'Closed' : 'Open'} · {fmt(t.updatedAt || t.createdAt)}
+                  </div>
+                </button>
+              )
+            })}
           </div>
-          <table className="data-table" style={{ marginTop: 8 }}>
-            <thead><tr><th>When</th><th>From</th><th>Message</th></tr></thead>
-            <tbody>
-              {messages.map(m => (
-                <tr key={m.id}>
-                  <td>{fmt(m.createdAt)}</td>
-                  <td>{m.authorUsername || m.authorUserId}</td>
-                  <td>{m.body}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="chat-main">
+            <div className="chat-header">
+              <strong>{selectedThread?.topic || 'Thread'}</strong>
+              <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{selectedThread?.status === 'closed' ? 'Closed' : 'Open'}</span>
+            </div>
+            <div className="chat-messages">
+              {messages.map(m => {
+                const mine = String(m.authorUserId) === String(selectedThread?.jobSeekerUserId)
+                return (
+                  <div key={m.id} className={`chat-bubble-row ${mine ? 'mine' : ''}`}>
+                    <div className="chat-line">
+                      <div className="chat-author-col">{m.authorUsername || m.authorUserId}</div>
+                      <div className={`chat-bubble ${mine ? 'mine' : ''}`}>
+                        <div className="chat-meta">{fmt(m.createdAt)}</div>
+                        <MessageMarkdown text={m.body} />
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
           {selectedThread?.status !== 'closed' && (
-            <div style={{ marginTop: 10 }}>
+            <div className="chat-composer">
+              <div className="quick-actions" style={{ marginBottom: 8 }}>
+                <button className="btn btn-ghost btn-sm" onClick={() => applyMarkdown('**', '**')} type="button">Bold</button>
+                <button className="btn btn-ghost btn-sm" onClick={() => applyMarkdown('*', '*')} type="button">Italic</button>
+                <button className="btn btn-ghost btn-sm" onClick={() => applyMarkdown('- ')} type="button">Bullet</button>
+                <button className="btn btn-ghost btn-sm" onClick={() => applyMarkdown('[label](', ')')} type="button">Link</button>
+              </div>
               <div className="field">
                 <label>Reply</label>
-                <textarea rows={3} value={messageBody} onChange={e => setMessageBody(e.target.value)} />
+                <textarea ref={replyRef} rows={4} value={messageBody} onChange={e => setMessageBody(e.target.value)} />
               </div>
               <button className="btn btn-primary" onClick={send} disabled={sending || !messageBody.trim()}>
                 {sending ? 'Sending…' : 'Send Reply'}
@@ -124,6 +163,7 @@ export default function Inbox() {
           {selectedThread?.status === 'closed' && (
             <div style={{ color: 'var(--text-muted)', marginTop: 8 }}>This thread is closed.</div>
           )}
+          </div>
         </div>
       )}
     </div>

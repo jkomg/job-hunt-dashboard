@@ -15,7 +15,7 @@ This project is now documented as a **server/client app** first:
 - users do **not** install locally
 - users receive an account from an admin
 - users sign in to the hosted URL
-- access and features are role-based (`job_seeker`, `staff`, `admin`)
+- access and features are role-based (`accelerator_user`, `premium_user`, `vip_user`, `staff`, `admin`; `job_seeker` legacy)
 
 ## Core Capabilities
 
@@ -29,7 +29,7 @@ This project is now documented as a **server/client app** first:
 
 ## Roles
 
-### Job Seeker
+### Candidate (Accelerator / Premium / VIP)
 
 - Uses Briefing, Pipeline, Outreach, Interviews, Events, Check-in
 - Receives staff support via Inbox threads
@@ -37,7 +37,7 @@ This project is now documented as a **server/client app** first:
 
 ### Staff
 
-- Works assigned candidates in `Staff Ops`
+- Works assigned candidates in `Operations` using tabs (`Queue`, `Jobs`, `Support`)
 - Adds recommendations and posts them to candidate pipelines
 - Optionally notifies candidate automatically in Inbox when posting
 - Manages candidate threads and support tasks
@@ -56,7 +56,7 @@ This project is now documented as a **server/client app** first:
 1. Deploy app (Cloud Run or equivalent)
 2. Sign in with admin account
 3. Open `Settings` and create users
-4. Assign each job seeker to a staff/admin owner
+4. Assign each candidate to a staff/admin owner
 
 ### 2) User onboarding
 
@@ -71,20 +71,20 @@ This project is now documented as a **server/client app** first:
 2. Logs in and changes temporary password
 3. Uses `Staff Ops` to work candidate queues
 
-## Staff Ops Workflow
+## Staff Operations Workflow
 
-1. Use the candidate overview table to scan all assigned candidates at a glance
+1. Open `Today` and launch directly into Operations focus areas.
+2. In `Operations > Queue`, scan assigned candidates at a glance
    - Signal badges: `Interview`, `Stale`, `Inactive 7d`, `RR 72h`
    - Use the signal filter dropdown to focus (`interview_active`, `stale_followups`, `no_recent_activity`, `rr_posted_recently`)
-2. Select a candidate from the "Working on" context bar or the table
-3. Review the candidate support summary (check-in recency, queue/stale counts, signals)
-4. Draft and post recommendations in **Research & Recommend** (unified card)
+3. Select a candidate from the "Working on" context bar or the table
+4. In `Operations > Jobs`, draft and post recommendations in **Research & Recommend**
    - Keep `Notify candidate in Inbox when posting` enabled for normal workflow
-5. Use the separate **Tasks** and **Threads** cards to close support loops
+5. In `Operations > Support`, use **Tasks** and **Threads** cards to close support loops
 
 ### Creating candidates (staff)
 
-Staff can create new `job_seeker` accounts directly from Staff Ops without going through Settings — the new account is automatically assigned to them. Staff can also self-assign to existing unassigned candidates.
+Staff can create new candidate accounts directly from Staff Ops without going through Settings — the new account is automatically assigned to them (default role: `accelerator_user`). Staff can also self-assign to existing unassigned candidates.
 
 ## Google Sheets Sync (Optional)
 
@@ -142,6 +142,25 @@ Configure OAuth env vars and use `Settings`:
 
 - `Connect Gmail`
 - `Import Events from Gmail`
+
+## Bring Your Own AI Agent (BYO)
+
+BYO agent access is controlled by admin per user in `Settings -> User Management` (`Enable BYO Agent` / `Disable BYO Agent`).
+
+Enabled users can connect their own external AI agent in `Settings -> Operations -> Bring Your Own AI Agent`.
+
+- Generate/rotate a per-user ingest token
+- Send job-search results to:
+  - `POST /api/agents/ingest`
+  - header: `x-agent-token`
+  - body: `entries[]` with `company`, `role`, `jobUrl`, `source`, `notes`
+- Entries are written into that user’s pipeline scope.
+- Duplicate protection is built in (by `jobUrl`, then `company + role`).
+
+Pepper-specific integration mapping:
+
+- `docs/BYO_AGENT_PEPPER_INTEGRATION.md`
+- `docs/BYO_AGENT_EXTERNAL_SETUP.md` (customer-facing Claude/ChatGPT setup)
 
 ## Screenshots
 

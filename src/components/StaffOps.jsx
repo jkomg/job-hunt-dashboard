@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import MessageMarkdown from './MessageMarkdown.jsx'
 import { JOB_SOURCES } from '../constants/jobSources'
 
 async function api(path, options = {}) {
@@ -38,7 +39,7 @@ function SignalBadges({ signals }) {
   )
 }
 
-export default function StaffOps({ me, mode = 'operations' }) {
+export default function StaffOps({ me, mode = 'operations', navIntent = null }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -66,6 +67,10 @@ export default function StaffOps({ me, mode = 'operations' }) {
   const [customRecSourceMode, setCustomRecSourceMode] = useState(false)
   const [savingRec, setSavingRec] = useState(false)
   const [postingRecId, setPostingRecId] = useState('')
+  const [bulkPostingRecs, setBulkPostingRecs] = useState(false)
+  const [selectedDraftRecIds, setSelectedDraftRecIds] = useState([])
+  const [editingRecId, setEditingRecId] = useState('')
+  const [editRecForm, setEditRecForm] = useState({ company: '', role: '', jobUrl: '', source: '', fitNote: '' })
   const [notifyOnPost, setNotifyOnPost] = useState(true)
 
   // task form
@@ -83,10 +88,17 @@ export default function StaffOps({ me, mode = 'operations' }) {
   const [threadTopic, setThreadTopic] = useState('')
   const [messageBody, setMessageBody] = useState('')
   const [messageVisibility, setMessageVisibility] = useState('shared_with_candidate')
+  const messageRef = useRef(null)
   const [creatingThread, setCreatingThread] = useState(false)
   const [sendingMessage, setSendingMessage] = useState(false)
   const [threadStatusFilter, setThreadStatusFilter] = useState('open')
   const [threadActivityFilter, setThreadActivityFilter] = useState('all')
+  const [composerExpanded, setComposerExpanded] = useState(true)
+  const [opsTab, setOpsTab] = useState('queue')
+  const candidateSectionRef = useRef(null)
+  const recSectionRef = useRef(null)
+  const tasksSectionRef = useRef(null)
+  const threadsSectionRef = useRef(null)
 
   // candidate support summary
   const [candidateSupportSummary, setCandidateSupportSummary] = useState(null)
@@ -125,10 +137,30 @@ export default function StaffOps({ me, mode = 'operations' }) {
   useEffect(() => {
     if (!selectedCandidateId) { setThreads([]); setSelectedThreadId(''); setThreadMessages([]); return }
     setThreads([]); setSelectedThreadId(''); setThreadMessages([])
+    setSelectedDraftRecIds([])
+    cancelEditRecommendation()
     api(`/api/staff/candidates/${selectedCandidateId}/threads`)
       .then(d => { const list = d.threads || []; setThreads(list); setSelectedThreadId(list[0]?.id || '') })
       .catch(e => setError(e.message))
   }, [selectedCandidateId])
+
+  useEffect(() => {
+    const focus = navIntent?.staffFocus
+    if (!focus) return
+    if (focus === 'candidates') setOpsTab('queue')
+    if (focus === 'recommendations') setOpsTab('jobs')
+    if (focus === 'tasks' || focus === 'threads') setOpsTab('support')
+    const sectionMap = {
+      candidates: candidateSectionRef,
+      recommendations: recSectionRef,
+      tasks: tasksSectionRef,
+      threads: threadsSectionRef
+    }
+    const ref = sectionMap[focus]
+    if (ref?.current) {
+      ref.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }, [navIntent])
 
   useEffect(() => {
     if (!selectedThreadId) { setThreadMessages([]); return }
@@ -186,6 +218,10 @@ export default function StaffOps({ me, mode = 'operations' }) {
     const id = Number(selectedCandidateId)
     return (queue.recommendations || []).filter(r => Number(r.jobSeekerUserId) === id)
   }, [queue.recommendations, selectedCandidateId])
+  const draftRecommendations = useMemo(
+    () => candidateRecommendations.filter(r => r.status === 'draft'),
+    [candidateRecommendations]
+  )
 
   const candidateTasks = useMemo(() => {
     const id = Number(selectedCandidateId)
@@ -289,6 +325,68 @@ export default function StaffOps({ me, mode = 'operations' }) {
     finally { setPostingRecId('') }
   }
 
+  function beginEditRecommendation(rec) {
+    setEditingRecId(rec.id)
+    setEditRecForm({
+      company: rec.company || '',
+      role: rec.role || '',
+      jobUrl: rec.jobUrl || '',
+      source: rec.source || '',
+      fitNote: rec.fitNote || ''
+    })
+  }
+
+  function cancelEditRecommendation() {
+    setEditingRecId('')
+    setEditRecForm({ company: '', role: '', jobUrl: '', source: '', fitNote: '' })
+  }
+
+  async function saveEditedRecommendation(rec) {
+    try {
+      await api(`/api/staff/recommendations/${rec.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editRecForm)
+      })
+      await load()
+      setSuccess('Draft recommendation updated.')
+      cancelEditRecommendation()
+    } catch (e) { setError(e.message) }
+  }
+
+  function toggleDraftSelection(recId) {
+    setSelectedDraftRecIds(prev => prev.includes(recId) ? prev.filter(id => id !== recId) : [...prev, recId])
+  }
+
+  async function bulkPostSelectedRecommendations() {
+    if (!selectedDraftRecIds.length) return
+    setBulkPostingRecs(true)
+    try {
+      await api('/api/staff/recommendations/bulk-post', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recommendationIds: selectedDraftRecIds,
+          notifyCandidate: notifyOnPost
+        })
+      })
+      setSelectedDraftRecIds([])
+      await load()
+      setSuccess('Selected draft recommendations posted to pipeline.')
+    } catch (e) { setError(e.message) } finally { setBulkPostingRecs(false) }
+  }
+
+  async function deletePostedRecommendationFromPipeline(rec) {
+    try {
+      await api(`/api/staff/recommendations/${rec.id}/delete-from-pipeline`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      })
+      await load()
+      setSuccess('Removed pipeline entry and moved recommendation back to draft.')
+    } catch (e) { setError(e.message) }
+  }
+
   async function createTask() {
     setSavingTask(true); setError(''); setSuccess('')
     try {
@@ -361,6 +459,22 @@ export default function StaffOps({ me, mode = 'operations' }) {
     finally { setSendingMessage(false) }
   }
 
+  function applyMarkdown(prefix, suffix = '') {
+    const el = messageRef.current
+    if (!el) return
+    const start = el.selectionStart || 0
+    const end = el.selectionEnd || 0
+    const raw = String(messageBody || '')
+    const selected = raw.slice(start, end) || 'text'
+    const next = `${raw.slice(0, start)}${prefix}${selected}${suffix}${raw.slice(end)}`
+    setMessageBody(next)
+    requestAnimationFrame(() => {
+      el.focus()
+      const caret = start + prefix.length + selected.length + suffix.length
+      el.setSelectionRange(caret, caret)
+    })
+  }
+
   async function updateThreadStatus(status) {
     if (!selectedThread) return
     try {
@@ -372,11 +486,11 @@ export default function StaffOps({ me, mode = 'operations' }) {
 
   if (loading) return <div className="loading"><div className="spin" />Loading staff workspace…</div>
 
-  const showQueueSummary = mode === 'operations'
-  const showRecommendations = mode === 'operations'
-  const showTasks = mode === 'operations' || mode === 'tasks'
-  const showThreads = mode === 'operations' || mode === 'threads'
-  const title = mode === 'tasks' ? 'Tasks' : mode === 'threads' ? 'Threads' : 'Operations'
+  const showQueueSummary = opsTab === 'queue'
+  const showRecommendations = opsTab === 'jobs'
+  const showTasks = opsTab === 'support'
+  const showThreads = opsTab === 'support'
+  const title = 'Operations'
   const isAllScope = queue.summary?.scope === 'all'
 
   return (
@@ -384,8 +498,15 @@ export default function StaffOps({ me, mode = 'operations' }) {
       <div className="page-header">
         <div>
           <h1>{title}</h1>
-          <div className="subtle">Assigned-candidate workspace for recommendations, tasks, and conversations.</div>
+          <div className="subtle">
+            Signed in as @{me?.username || 'unknown'} ({me?.role || 'unknown'})
+          </div>
         </div>
+      </div>
+      <div className="quick-actions mb-16">
+        <button className={`btn btn-sm ${opsTab === 'queue' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setOpsTab('queue')}>Queue</button>
+        <button className={`btn btn-sm ${opsTab === 'jobs' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setOpsTab('jobs')}>Jobs</button>
+        <button className={`btn btn-sm ${opsTab === 'support' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setOpsTab('support')}>Support</button>
       </div>
       {me?.isAdmin && (
         <div className="quick-actions mb-16">
@@ -406,7 +527,7 @@ export default function StaffOps({ me, mode = 'operations' }) {
         <div className="stats-grid">
           <div className="stat-card"><div className="stat-label">{isAllScope ? 'Total Candidates' : 'Assigned Candidates'}</div><div className="stat-value">{queue.summary?.candidates || 0}</div></div>
           <div className="stat-card"><div className="stat-label">Unposted Recs</div><div className="stat-value">{queue.summary?.recommendationsDraft || 0}</div></div>
-          <div className="stat-card"><div className="stat-label">Posted to Pipelines</div><div className="stat-value">{queue.summary?.recommendationsPosted || 0}</div></div>
+          <div className="stat-card"><div className="stat-label">Weekly Job Posts</div><div className="stat-value">{queue.summary?.weeklyRecommendationPosted || 0}/{queue.summary?.weeklyRecommendationTarget || 0}</div></div>
           <div className="stat-card"><div className="stat-label">Tasks Open</div><div className="stat-value">{(queue.summary?.tasksTodo || 0) + (queue.summary?.tasksInProgress || 0)}</div></div>
           <div className="stat-card"><div className="stat-label">Open Threads</div><div className="stat-value">{queue.summary?.threadsOpen || 0}</div></div>
           <div className="stat-card"><div className="stat-label">Stale Threads</div><div className="stat-value">{queue.summary?.threadsStale48h || 0}</div></div>
@@ -420,7 +541,7 @@ export default function StaffOps({ me, mode = 'operations' }) {
       </div>}
 
       {/* Candidates */}
-      <div className="card mb-16">
+      <div className="card mb-16" ref={candidateSectionRef}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
           <div className="card-title" style={{ margin: 0 }}>Candidates</div>
           <button className="btn btn-ghost btn-sm" onClick={() => setShowNewCandidate(v => !v)}>
@@ -485,7 +606,7 @@ export default function StaffOps({ me, mode = 'operations' }) {
                 <th>Queue</th>
                 <th>Stale</th>
                 <th>Follow-ups Due</th>
-                <th>Last Check-in</th>
+                <th>Last Activity</th>
                 <th>Signals</th>
               </tr>
             </thead>
@@ -502,7 +623,9 @@ export default function StaffOps({ me, mode = 'operations' }) {
                     <td>{sum.queueSize ?? '—'}</td>
                     <td>{sum.staleTotal ?? '—'}</td>
                     <td>{sum.duePipelineFollowUps ?? '—'}</td>
-                    <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>{sum.lastCheckInDate ? `${sum.lastCheckInDate}` : 'none'}</td>
+                    <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                      {sig.lastActivityAt ? rel(sig.lastActivityAt) : (sum.lastCheckInDate ? `${sum.lastCheckInDate}` : 'none')}
+                    </td>
                     <td><SignalBadges signals={sig} /></td>
                   </tr>
                 )
@@ -525,7 +648,7 @@ export default function StaffOps({ me, mode = 'operations' }) {
           <SignalBadges signals={selectedCandidateSignals} />
           {candidateSupportSummary && (
             <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-              Last check-in: {candidateSupportSummary.lastCheckInDate || 'none'} ({rel(candidateSupportSummary.lastCheckInAt)})
+              Last activity: {candidateSupportSummary.lastActivityAt ? rel(candidateSupportSummary.lastActivityAt) : 'none'}
               {' · '}Queue: {candidateSupportSummary.queueSize || 0}
               {' · '}Stale: {candidateSupportSummary.staleTotal || 0}
               {' · '}Follow-ups due: {candidateSupportSummary.duePipelineFollowUps || 0}
@@ -542,7 +665,7 @@ export default function StaffOps({ me, mode = 'operations' }) {
 
       {/* Research & Recommend */}
       {showRecommendations && !!selectedCandidateId && (
-        <div className="card mb-16">
+        <div className="card mb-16" ref={recSectionRef}>
           <div className="card-title">Research &amp; Recommend</div>
           <div className="settings-grid">
             <div className="field"><label>Company</label><input value={recForm.company} onChange={e => setRecForm({ ...recForm, company: e.target.value })} /></div>
@@ -593,22 +716,78 @@ export default function StaffOps({ me, mode = 'operations' }) {
                   <input type="checkbox" checked={notifyOnPost} onChange={e => setNotifyOnPost(e.target.checked)} />
                   Notify candidate in Inbox when posting
                 </label>
+                {!!draftRecommendations.length && (
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+                    <input
+                      type="checkbox"
+                      checked={selectedDraftRecIds.length > 0 && selectedDraftRecIds.length === draftRecommendations.length}
+                      onChange={e => setSelectedDraftRecIds(e.target.checked ? draftRecommendations.map(r => r.id) : [])}
+                    />
+                    Select all drafts
+                  </label>
+                )}
+                <button
+                  className="btn btn-primary btn-sm"
+                  disabled={!selectedDraftRecIds.length || bulkPostingRecs}
+                  onClick={bulkPostSelectedRecommendations}
+                >
+                  {bulkPostingRecs ? 'Posting selected…' : `Post Selected (${selectedDraftRecIds.length})`}
+                </button>
               </div>
               <table className="data-table">
-                <thead><tr><th>Company</th><th>Role</th><th>Status</th><th>Updated</th><th /></tr></thead>
+                <thead><tr><th /></tr></thead>
                 <tbody>
                   {candidateRecommendations.map(rec => (
                     <tr key={rec.id}>
-                      <td>{rec.company}</td>
-                      <td>{rec.role || '—'}</td>
-                      <td><span className={`badge ${rec.status === 'posted' ? 'badge-green' : ''}`}>{rec.status}</span></td>
-                      <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>{fmt(rec.updatedAt)}</td>
-                      <td style={{ textAlign: 'right' }}>
-                        <button className="btn btn-ghost btn-sm"
-                          disabled={rec.status === 'posted' || postingRecId === rec.id}
-                          onClick={() => postToPipeline(rec)}>
-                          {postingRecId === rec.id ? 'Posting…' : rec.status === 'posted' ? 'Posted ✓' : 'Post to Pipeline'}
-                        </button>
+                      <td>
+                        {editingRecId === rec.id ? (
+                          <div className="card" style={{ margin: 0 }}>
+                            <div className="settings-grid">
+                              <div className="field"><label>Company</label><input value={editRecForm.company} onChange={e => setEditRecForm(prev => ({ ...prev, company: e.target.value }))} /></div>
+                              <div className="field"><label>Role</label><input value={editRecForm.role} onChange={e => setEditRecForm(prev => ({ ...prev, role: e.target.value }))} /></div>
+                              <div className="field"><label>Job URL</label><input value={editRecForm.jobUrl} onChange={e => setEditRecForm(prev => ({ ...prev, jobUrl: e.target.value }))} /></div>
+                              <div className="field"><label>Source</label><input value={editRecForm.source} onChange={e => setEditRecForm(prev => ({ ...prev, source: e.target.value }))} /></div>
+                            </div>
+                            <div className="field"><label>Fit Note</label><textarea rows={2} value={editRecForm.fitNote} onChange={e => setEditRecForm(prev => ({ ...prev, fitNote: e.target.value }))} /></div>
+                            <div className="quick-actions">
+                              <button className="btn btn-primary btn-sm" onClick={() => saveEditedRecommendation(rec)}>Save Draft</button>
+                              <button className="btn btn-ghost btn-sm" onClick={cancelEditRecommendation}>Cancel</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'space-between' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                              {rec.status === 'draft' && (
+                                <input
+                                  type="checkbox"
+                                  checked={selectedDraftRecIds.includes(rec.id)}
+                                  onChange={() => toggleDraftSelection(rec.id)}
+                                />
+                              )}
+                              <div>
+                                <div style={{ fontWeight: 700 }}>{rec.company}</div>
+                                <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>
+                                  {rec.role || '—'} · <span className={`badge ${rec.status === 'posted' ? 'badge-green' : ''}`}>{rec.status}</span> · {fmt(rec.updatedAt)}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="quick-actions">
+                              {rec.status === 'draft' && (
+                                <button className="btn btn-ghost btn-sm" onClick={() => beginEditRecommendation(rec)}>Edit Draft</button>
+                              )}
+                              <button className="btn btn-ghost btn-sm"
+                                disabled={rec.status === 'posted' || postingRecId === rec.id}
+                                onClick={() => postToPipeline(rec)}>
+                                {postingRecId === rec.id ? 'Posting…' : rec.status === 'posted' ? 'Posted ✓' : 'Post to Pipeline'}
+                              </button>
+                              {rec.status === 'posted' && rec.postedPipelineEntryId && (
+                                <button className="btn btn-ghost btn-sm" onClick={() => deletePostedRecommendationFromPipeline(rec)}>
+                                  Delete from Pipeline
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -622,7 +801,7 @@ export default function StaffOps({ me, mode = 'operations' }) {
       {/* Tasks */}
       {showTasks && !!selectedCandidateId && (
         <>
-          <div className="card mb-16">
+          <div className="card mb-16" ref={tasksSectionRef}>
             <div className="card-title">New Task</div>
             <div className="settings-grid">
               {me?.isAdmin && (
@@ -664,7 +843,7 @@ export default function StaffOps({ me, mode = 'operations' }) {
             </button>
           </div>
 
-          <div className="card mb-16">
+          <div className="card mb-16" ref={threadsSectionRef}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
               <div className="card-title" style={{ margin: 0 }}>Tasks — {selectedCandidate?.username}</div>
               <select value={taskStatusFilter} onChange={e => setTaskStatusFilter(e.target.value)} style={{ fontSize: 12 }}>
@@ -804,49 +983,73 @@ export default function StaffOps({ me, mode = 'operations' }) {
 
             {!!selectedThreadId && (
               <div>
+                <div style={{ color: 'var(--text-muted)', fontSize: 12, marginBottom: 8 }}>
+                  Conversation with <strong>@{selectedCandidate?.username || 'candidate'}</strong> in thread <strong>{selectedThread?.topic || 'untitled'}</strong>.
+                </div>
                 <div className="quick-actions" style={{ marginBottom: 10 }}>
                   {selectedThread?.status !== 'closed'
                     ? <button className="btn btn-ghost btn-sm" onClick={() => updateThreadStatus('closed')}>Close Thread</button>
                     : <button className="btn btn-ghost btn-sm" onClick={() => updateThreadStatus('open')}>Reopen Thread</button>
                   }
+                  <button className="btn btn-ghost btn-sm" onClick={() => setComposerExpanded(v => !v)}>
+                    {composerExpanded ? 'Hide Reply Box' : 'Show Reply Box'}
+                  </button>
                 </div>
 
                 {selectedThread?.status === 'closed' && (
                   <div style={{ color: 'var(--text-muted)', fontSize: 12, marginBottom: 8 }}>Thread is closed — reopen to send messages.</div>
                 )}
 
-                <div className="field"><label>Message</label><textarea rows={3} value={messageBody} onChange={e => setMessageBody(e.target.value)} /></div>
-                <div className="settings-grid" style={{ marginBottom: 10 }}>
-                  <div className="field">
-                    <label>Visibility</label>
-                    <select value={messageVisibility} onChange={e => setMessageVisibility(e.target.value)}>
-                      <option value="shared_with_candidate">Shared with candidate</option>
-                      <option value="internal_staff">Internal staff only</option>
-                    </select>
-                  </div>
-                  <div className="field">
-                    <label>&nbsp;</label>
-                    <button className="btn btn-primary" onClick={sendMessage}
-                      disabled={sendingMessage || !messageBody.trim() || selectedThread?.status === 'closed'}>
-                      {sendingMessage ? 'Sending…' : 'Send'}
-                    </button>
-                  </div>
-                </div>
-
                 {!!threadMessages.length && (
-                  <table className="data-table">
-                    <thead><tr><th>When</th><th>Author</th><th>Visibility</th><th>Message</th></tr></thead>
-                    <tbody>
-                      {threadMessages.map(m => (
-                        <tr key={m.id}>
-                          <td style={{ fontSize: 12, whiteSpace: 'nowrap' }}>{fmt(m.createdAt)}</td>
-                          <td>{m.authorUsername || m.authorUserId}</td>
-                          <td><span className={`badge ${m.visibility === 'internal_staff' ? 'badge-yellow' : ''}`}>{m.visibility === 'internal_staff' ? 'Internal' : 'Shared'}</span></td>
-                          <td style={{ fontSize: 13 }}>{m.body}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                  <div className="chat-messages" style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 10 }}>
+                    {threadMessages.map(m => {
+                      const mine = String(m.authorUserId) === String(me?.id)
+                      return (
+                        <div key={m.id} className={`chat-bubble-row ${mine ? 'mine' : ''}`}>
+                          <div className="chat-line">
+                            <div className="chat-author-col">{m.authorUsername || m.authorUserId}</div>
+                            <div className={`chat-bubble ${mine ? 'mine' : ''}`}>
+                              <div className="chat-meta">
+                                {fmt(m.createdAt)} · {m.visibility === 'internal_staff' ? 'Internal' : 'Shared'}
+                              </div>
+                              <MessageMarkdown text={m.body} />
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+                {!threadMessages.length && (
+                  <div style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 10 }}>No messages in this thread yet.</div>
+                )}
+
+                {composerExpanded && (
+                  <div style={{ marginTop: 10 }}>
+                    <div className="quick-actions" style={{ marginBottom: 8 }}>
+                      <button className="btn btn-ghost btn-sm" onClick={() => applyMarkdown('**', '**')} type="button">Bold</button>
+                      <button className="btn btn-ghost btn-sm" onClick={() => applyMarkdown('*', '*')} type="button">Italic</button>
+                      <button className="btn btn-ghost btn-sm" onClick={() => applyMarkdown('- ')} type="button">Bullet</button>
+                      <button className="btn btn-ghost btn-sm" onClick={() => applyMarkdown('[label](', ')')} type="button">Link</button>
+                    </div>
+                    <div className="field"><label>Reply</label><textarea ref={messageRef} rows={4} value={messageBody} onChange={e => setMessageBody(e.target.value)} /></div>
+                    <div className="settings-grid" style={{ marginBottom: 10 }}>
+                      <div className="field">
+                        <label>Visibility</label>
+                        <select value={messageVisibility} onChange={e => setMessageVisibility(e.target.value)}>
+                          <option value="shared_with_candidate">Shared with candidate</option>
+                          <option value="internal_staff">Internal staff only</option>
+                        </select>
+                      </div>
+                      <div className="field">
+                        <label>&nbsp;</label>
+                        <button className="btn btn-primary" onClick={sendMessage}
+                          disabled={sendingMessage || !messageBody.trim() || selectedThread?.status === 'closed'}>
+                          {sendingMessage ? 'Sending…' : 'Send'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 )}
               </div>
             )}

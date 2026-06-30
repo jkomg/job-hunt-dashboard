@@ -33,24 +33,27 @@ Capture these in order and save with the exact filenames below. This list reflec
 - Show:
   - candidate-visible support thread list/messages
 
-## 6) Staff Ops candidate filter
+## 6) Staff operations queue
 
 - Filename: `staffops-candidate-filters.png`
 - Show:
+  - `Operations` with `Queue` tab selected
   - candidate focus filters
   - selected candidate summary signals
 
-## 7) Staff Ops distribution
+## 7) Staff operations jobs
 
 - Filename: `staffops-distribution-notify-toggle.png`
 - Show:
+  - `Operations` with `Jobs` tab selected
   - recommendation list
   - `Notify candidate in Inbox when posting` toggle
 
-## 8) Staff Ops threads
+## 8) Staff operations support
 
 - Filename: `staffops-threads-visibility.png`
 - Show:
+  - `Operations` with `Support` tab selected
   - message visibility options (`shared_with_candidate`, `internal_staff`)
 
 ## 9) Admin team access

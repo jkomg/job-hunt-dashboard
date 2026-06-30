@@ -16,10 +16,10 @@ import { Storage } from '@google-cloud/storage'
 import {
   initDb,
   getUserByUsername, getUserByEmail, getUserById,
-  getPrimaryMembershipForUser, createUserAccount, listOrganizationUsers, listAssignedUsersForStaff,
-  listOrganizations, createOrganization, listMembershipsForUser, ensureUserMembership,
+  getPrimaryMembershipForUser, createUserAccount, listOrganizationUsers, listAssignedUsersForStaff, listAllUsers,
+  listOrganizations, createOrganization, listMembershipsForUser, ensureUserMembership, deleteUserMembership, deleteUserAccount,
   listStaffAssignments, createStaffAssignment, deleteStaffAssignment, createAuditLog, getAuditLogs,
-  hasStaffAssignment, listJobRecommendations, createJobRecommendation, getJobRecommendationById, markRecommendationPosted, listStaffTasks,
+  hasStaffAssignment, listJobRecommendations, createJobRecommendation, getJobRecommendationById, markRecommendationPosted, markRecommendationDraft, updateJobRecommendationDraft, listStaffTasks,
   getStaffTaskById, createStaffTask, updateStaffTask,
   listCandidateThreads, getCandidateThreadById, createCandidateThread, listCandidateMessages, createCandidateMessage,
   listCandidateThreadsByScope, updateCandidateThreadStatus,
@@ -35,7 +35,7 @@ import {
   getTemplates, createTemplate, updateTemplate,
   getWatchlist, createWatchlistEntry, updateWatchlistEntry,
   getDailyLogs, getTodayLog, createDailyLog, updateDailyLog,
-  getPipeline, updatePipelineEntry, updatePipelineStage, updatePipelineFollowUp, createPipelineEntry,
+  getPipeline, getPipelineEntryById, deletePipelineEntry, updatePipelineEntry, updatePipelineStage, updatePipelineFollowUp, createPipelineEntry,
   ensureInterviewForPipelineStage, backfillInterviewsFromPipeline, applyPipelineStageAutomation
 } from './db.js'
 import { runSheetsSync, testSheetsConnection, getSheetsSyncStatus, normalizeSheetsSyncError, getSheetsSchemaReport } from './sheetsSync.js'
@@ -76,6 +76,24 @@ const GMAIL_SETTINGS_KEYS = {
   connectedAt: 'gmail.oauth.connected_at',
   oauthState: 'gmail.oauth.state',
   oauthStateCreatedAt: 'gmail.oauth.state_created_at'
+}
+const AGENT_SETTINGS_KEYS = {
+  enabled: 'agent.enabled',
+  provider: 'agent.provider',
+  label: 'agent.label',
+  endpointUrl: 'agent.endpoint_url',
+  tokenHash: 'agent.token_hash'
+}
+const USER_PERMISSION_KEYS = {
+  canUseByoAgent: 'permissions.can_use_byo_agent'
+}
+const CANDIDATE_ROLES = new Set(['job_seeker', 'accelerator_user', 'premium_user', 'vip_user'])
+const DEFAULT_CANDIDATE_ROLE = 'accelerator_user'
+const WEEKLY_RECOMMENDATION_TARGETS = {
+  job_seeker: 3,
+  accelerator_user: 3,
+  premium_user: 5,
+  vip_user: 7
 }
 const RATE_LIMIT_WINDOW_MS = 60 * 1000
 const API_RATE_LIMIT = Number(process.env.API_RATE_LIMIT || 400)
@@ -218,21 +236,68 @@ function orgScopedSettingKey(organizationId, key) {
   return `org:${orgId}:${key}`
 }
 
+function hashToken(raw) {
+  return crypto.createHash('sha256').update(String(raw || ''), 'utf8').digest('hex')
+}
+
+function isCandidateRole(role) {
+  return CANDIDATE_ROLES.has(String(role || '').trim())
+}
+
+function parseIsoTs(value) {
+  const ts = Date.parse(String(value || ''))
+  return Number.isFinite(ts) ? ts : 0
+}
+
+function latestTs(...values) {
+  return values.reduce((max, value) => {
+    const n = Number(value || 0)
+    if (!Number.isFinite(n)) return max
+    return n > max ? n : max
+  }, 0)
+}
+
+function getCandidateActivityFromDashboard(dashboard) {
+  const recentLogs = Array.isArray(dashboard?.recentLogs) ? dashboard.recentLogs : []
+  const activeItems = Array.isArray(dashboard?.activeItems) ? dashboard.activeItems : []
+  const lastCheckInAt = parseIsoTs(recentLogs[0]?._lastEditedTime)
+  const lastEntityActivityAt = activeItems.reduce((max, item) => {
+    return Math.max(max, parseIsoTs(item?._lastEditedTime))
+  }, 0)
+  const lastActivityAt = latestTs(lastCheckInAt, lastEntityActivityAt)
+  return {
+    lastCheckInAt: lastCheckInAt || null,
+    lastEntityActivityAt: lastEntityActivityAt || null,
+    lastActivityAt: lastActivityAt || null
+  }
+}
+
+async function canUseByoAgentForRequest(req) {
+  const permissions = await getUserPermissionFlags(req.userId, { isAdmin: !!req.isAdmin })
+  return !!permissions.canUseByoAgent
+}
+
 async function getOnboardingStatus(userId, fallbackDisplayName = 'there') {
   const userOnboardingKey = userScopedSettingKey(userId, APP_SETTINGS_KEYS.onboardingComplete)
   const userDisplayNameKey = userScopedSettingKey(userId, APP_SETTINGS_KEYS.displayName)
   const settings = await getAppSettings([
     userOnboardingKey,
     userDisplayNameKey,
-    APP_SETTINGS_KEYS.onboardingComplete,
-    APP_SETTINGS_KEYS.displayName
+    APP_SETTINGS_KEYS.onboardingComplete
   ])
   const onboardingRaw = settings[userOnboardingKey] ?? settings[APP_SETTINGS_KEYS.onboardingComplete]
-  const displayNameRaw = settings[userDisplayNameKey] ?? settings[APP_SETTINGS_KEYS.displayName]
+  const displayNameRaw = settings[userDisplayNameKey]
   return {
     onboardingComplete: parseBool(onboardingRaw, false),
     displayName: (displayNameRaw || fallbackDisplayName).trim() || fallbackDisplayName
   }
+}
+
+async function getUserPermissionFlags(userId, { isAdmin = false } = {}) {
+  const key = userScopedSettingKey(userId, USER_PERMISSION_KEYS.canUseByoAgent)
+  const raw = await getAppSetting(key)
+  const canUseByoAgent = raw == null ? !!isAdmin : parseBool(raw, !!isAdmin)
+  return { canUseByoAgent }
 }
 
 async function getSheetsConfigOverrides(organizationId) {
@@ -324,6 +389,27 @@ async function consumeAndValidateGmailOauthState(organizationId, state) {
   return (Date.now() - createdAt) <= (10 * 60 * 1000)
 }
 
+async function getAgentConfig(userId) {
+  const keys = Object.values(AGENT_SETTINGS_KEYS).map(k => userScopedSettingKey(userId, k))
+  const settings = await getAppSettings(keys)
+  const get = (key) => settings[userScopedSettingKey(userId, key)] || ''
+  return {
+    enabled: parseBool(get(AGENT_SETTINGS_KEYS.enabled), false),
+    provider: get(AGENT_SETTINGS_KEYS.provider) || 'claude',
+    label: get(AGENT_SETTINGS_KEYS.label) || '',
+    endpointUrl: get(AGENT_SETTINGS_KEYS.endpointUrl) || '',
+    tokenHash: get(AGENT_SETTINGS_KEYS.tokenHash) || ''
+  }
+}
+
+async function saveAgentConfig(userId, next = {}) {
+  if (next.enabled != null) await setAppSetting(userScopedSettingKey(userId, AGENT_SETTINGS_KEYS.enabled), next.enabled ? 'true' : 'false')
+  if (next.provider != null) await setAppSetting(userScopedSettingKey(userId, AGENT_SETTINGS_KEYS.provider), String(next.provider || '').trim())
+  if (next.label != null) await setAppSetting(userScopedSettingKey(userId, AGENT_SETTINGS_KEYS.label), String(next.label || '').trim())
+  if (next.endpointUrl != null) await setAppSetting(userScopedSettingKey(userId, AGENT_SETTINGS_KEYS.endpointUrl), String(next.endpointUrl || '').trim())
+  if (next.tokenHash != null) await setAppSetting(userScopedSettingKey(userId, AGENT_SETTINGS_KEYS.tokenHash), String(next.tokenHash || '').trim())
+}
+
 function formatSyncRun(row) {
   let summary = null
   try {
@@ -408,7 +494,7 @@ function requireStaffOrAdmin(req, res, next) {
 }
 
 function requireJobSeeker(req, res, next) {
-  if (req.userRole === 'job_seeker' && !req.isAdmin) return next()
+  if (isCandidateRole(req.userRole) && !req.isAdmin) return next()
   return res.status(403).json({ error: 'Job seeker access required' })
 }
 
@@ -426,7 +512,7 @@ async function canAccessCandidate(req, candidateUserId) {
   if (!targetId || !req.organizationId) return false
   const orgUsers = await listOrganizationUsers(req.organizationId)
   const candidate = orgUsers.find(u => Number(u.id) === targetId)
-  if (!candidate || candidate.role !== 'job_seeker') return false
+  if (!candidate || !isCandidateRole(candidate.role)) return false
   if (req.isAdmin) return true
   if (req.userRole !== 'staff') return false
   return hasStaffAssignment({
@@ -495,7 +581,7 @@ async function requireAuth(req, res, next) {
     const membership = await getPrimaryMembershipForUser(session.user_id)
     req.userEmail = user?.email || null
     req.organizationId = membership?.organizationId || null
-    req.userRole = membership?.role || (user?.isAdmin ? 'admin' : 'job_seeker')
+    req.userRole = membership?.role || (user?.isAdmin ? 'admin' : DEFAULT_CANDIDATE_ROLE)
     req.isAdmin = !!user?.isAdmin || req.userRole === 'admin'
     req.mustChangePassword = !!user?.mustChangePassword
     req.authMode = 'session'
@@ -520,7 +606,8 @@ app.post('/api/login', async (req, res) => {
     return res.status(400).json({ error: 'Local login disabled (IAP mode)' })
   }
 
-  const { username, password } = req.body
+  const username = String(req.body?.username || '').trim().toLowerCase()
+  const { password } = req.body
   if (!username || !password) return res.status(400).json({ error: 'Missing fields' })
 
   let user = await getUserByUsername(username)
@@ -569,6 +656,7 @@ app.get('/api/me', requireAuth, async (req, res) => {
   try {
     const user = await getUserById(req.userId)
     const onboarding = await getOnboardingStatus(req.userId, user?.username || 'there')
+    const permissions = await getUserPermissionFlags(req.userId, { isAdmin: !!req.isAdmin })
     res.json({
       ok: true,
       authMode: req.authMode,
@@ -579,7 +667,8 @@ app.get('/api/me', requireAuth, async (req, res) => {
       role: req.userRole || null,
       mustChangePassword: !!req.mustChangePassword,
       onboardingComplete: onboarding.onboardingComplete,
-      displayName: onboarding.displayName
+      displayName: onboarding.displayName,
+      permissions
     })
   } catch (e) {
     console.error('me failed', e)
@@ -589,7 +678,32 @@ app.get('/api/me', requireAuth, async (req, res) => {
 
 app.get('/api/admin/users', requireAuth, requireAdmin, async (req, res) => {
   try {
-    const users = await listOrganizationUsers(req.organizationId)
+    const [orgUsers, allUsers] = await Promise.all([
+      listOrganizationUsers(req.organizationId),
+      listAllUsers()
+    ])
+    const byId = new Map((orgUsers || []).map(u => [Number(u.id), u]))
+    const users = await Promise.all((allUsers || []).map(async (u) => {
+      const orgScoped = byId.get(Number(u.id))
+      const permissions = await getUserPermissionFlags(Number(u.id), { isAdmin: !!u.isAdmin })
+      if (orgScoped) return orgScoped
+      return {
+        id: Number(u.id),
+        username: u.username,
+        email: u.email || null,
+        isAdmin: !!u.isAdmin,
+        mustChangePassword: !!u.mustChangePassword,
+        organizationId: null,
+        role: '',
+        createdAt: null,
+        permissions
+      }
+    }))
+    for (const u of users) {
+      if (!u.permissions) {
+        u.permissions = await getUserPermissionFlags(Number(u.id), { isAdmin: !!u.isAdmin })
+      }
+    }
     res.json({ ok: true, users })
   } catch (e) {
     console.error('admin.users.list failed', e)
@@ -636,7 +750,7 @@ app.post('/api/admin/users', requireAuth, requireAdmin, async (req, res) => {
     const username = String(req.body?.username || '').trim().toLowerCase()
     const password = String(req.body?.password || '').trim()
     const email = req.body?.email == null ? null : String(req.body.email).trim().toLowerCase()
-    const role = String(req.body?.role || 'job_seeker').trim()
+    const role = String(req.body?.role || DEFAULT_CANDIDATE_ROLE).trim()
 
     if (!/^[a-z0-9._-]{3,32}$/.test(username)) {
       return res.status(400).json({ error: 'Username must be 3-32 chars: letters, numbers, dot, dash, underscore' })
@@ -690,12 +804,12 @@ app.post('/api/admin/users/:id/memberships', requireAuth, requireAdmin, async (r
   try {
     const targetUserId = Number(req.params.id)
     const organizationId = String(req.body?.organizationId || '').trim()
-    const role = String(req.body?.role || 'job_seeker').trim()
+    const role = String(req.body?.role || DEFAULT_CANDIDATE_ROLE).trim()
     if (!Number.isFinite(targetUserId) || targetUserId <= 0) {
       return res.status(400).json({ error: 'Invalid target user' })
     }
     if (!organizationId) return res.status(400).json({ error: 'organizationId is required' })
-    if (!['admin', 'staff', 'job_seeker'].includes(role)) {
+    if (!['admin', 'staff', 'job_seeker', 'accelerator_user', 'premium_user', 'vip_user'].includes(role)) {
       return res.status(400).json({ error: 'Invalid role' })
     }
     const targetUser = await getUserById(targetUserId)
@@ -722,6 +836,38 @@ app.post('/api/admin/users/:id/memberships', requireAuth, requireAdmin, async (r
   }
 })
 
+app.delete('/api/admin/users/:id/memberships', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const targetUserId = Number(req.params.id)
+    const organizationId = String(req.body?.organizationId || '').trim()
+    if (!Number.isFinite(targetUserId) || targetUserId <= 0) {
+      return res.status(400).json({ error: 'Invalid target user' })
+    }
+    if (!organizationId) return res.status(400).json({ error: 'organizationId is required' })
+    if (targetUserId === Number(req.userId) && organizationId === String(req.organizationId || '')) {
+      return res.status(400).json({ error: 'You cannot remove your own active organization membership' })
+    }
+    const targetUser = await getUserById(targetUserId)
+    if (!targetUser) return res.status(404).json({ error: 'User not found' })
+    const deleted = await deleteUserMembership(targetUserId, { organizationId })
+    if (!deleted) return res.status(404).json({ error: 'Membership not found' })
+    const memberships = await listMembershipsForUser(targetUserId)
+    await createAuditLog({
+      organizationId: req.organizationId,
+      actorUserId: req.userId,
+      targetUserId,
+      action: 'admin.user.membership.deleted',
+      entityType: 'membership',
+      entityId: `${organizationId}:${targetUserId}`,
+      metadata: { username: targetUser.username, organizationId }
+    })
+    res.json({ ok: true, memberships })
+  } catch (e) {
+    console.error('admin.users.memberships.delete failed', e)
+    res.status(500).json({ error: 'Could not remove user membership' })
+  }
+})
+
 app.patch('/api/admin/users/:id/role', requireAuth, requireAdmin, async (req, res) => {
   try {
     const targetUserId = Number(req.params.id)
@@ -729,7 +875,7 @@ app.patch('/api/admin/users/:id/role', requireAuth, requireAdmin, async (req, re
     if (!Number.isFinite(targetUserId) || targetUserId <= 0) {
       return res.status(400).json({ error: 'Invalid target user' })
     }
-    if (!['admin', 'staff', 'job_seeker'].includes(role)) {
+    if (!['admin', 'staff', 'job_seeker', 'accelerator_user', 'premium_user', 'vip_user'].includes(role)) {
       return res.status(400).json({ error: 'Invalid role' })
     }
     if (targetUserId === Number(req.userId) && role !== 'admin') {
@@ -807,6 +953,64 @@ app.patch('/api/admin/users/:id/password-policy', requireAuth, requireAdmin, asy
   } catch (e) {
     console.error('admin.users.passwordPolicy failed', e)
     res.status(500).json({ error: 'Could not update password policy' })
+  }
+})
+
+app.delete('/api/admin/users/:id', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const targetUserId = Number(req.params.id)
+    if (!Number.isFinite(targetUserId) || targetUserId <= 0) {
+      return res.status(400).json({ error: 'Invalid target user' })
+    }
+    if (targetUserId === Number(req.userId)) {
+      return res.status(400).json({ error: 'You cannot delete your own account' })
+    }
+    const targetUser = await getUserById(targetUserId)
+    if (!targetUser) return res.status(404).json({ error: 'User not found' })
+    await deleteUserAccount(targetUserId)
+    await createAuditLog({
+      organizationId: req.organizationId,
+      actorUserId: req.userId,
+      targetUserId,
+      action: 'admin.user.deleted',
+      entityType: 'user',
+      entityId: String(targetUserId),
+      metadata: { username: targetUser.username }
+    })
+    res.json({ ok: true })
+  } catch (e) {
+    console.error('admin.users.delete failed', e)
+    res.status(500).json({ error: 'Could not delete user' })
+  }
+})
+
+app.put('/api/admin/users/:id/permissions', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const targetUserId = Number(req.params.id)
+    if (!Number.isFinite(targetUserId) || targetUserId <= 0) {
+      return res.status(400).json({ error: 'Invalid target user' })
+    }
+    const targetUser = await getUserById(targetUserId)
+    if (!targetUser) return res.status(404).json({ error: 'User not found' })
+    const canUseByoAgent = req.body?.canUseByoAgent
+    if (typeof canUseByoAgent !== 'boolean') {
+      return res.status(400).json({ error: 'canUseByoAgent must be a boolean' })
+    }
+    const key = userScopedSettingKey(targetUserId, USER_PERMISSION_KEYS.canUseByoAgent)
+    await setAppSetting(key, canUseByoAgent ? 'true' : 'false')
+    await createAuditLog({
+      organizationId: req.organizationId,
+      actorUserId: req.userId,
+      targetUserId,
+      action: 'admin.user.permissions.updated',
+      entityType: 'user',
+      entityId: String(targetUserId),
+      metadata: { username: targetUser.username, canUseByoAgent }
+    })
+    res.json({ ok: true, permissions: { canUseByoAgent } })
+  } catch (e) {
+    console.error('admin.users.permissions failed', e)
+    res.status(500).json({ error: 'Could not update user permissions' })
   }
 })
 
@@ -929,8 +1133,8 @@ app.post('/api/staff/users/:id/reset-password', requireAuth, requireStaffOrAdmin
 
     const orgUsers = await listOrganizationUsers(req.organizationId)
     const membership = orgUsers.find(u => Number(u.id) === targetUserId)
-    if (!membership || membership.role !== 'job_seeker') {
-      return res.status(403).json({ error: 'Staff can only reset passwords for job seeker users' })
+    if (!membership || !isCandidateRole(membership.role)) {
+      return res.status(403).json({ error: 'Staff can only reset passwords for candidate users' })
     }
     if (!req.isAdmin) {
       const hasAccess = await hasStaffAssignment({
@@ -977,15 +1181,40 @@ app.get('/api/staff/queue', requireAuth, requireStaffOrAdmin, async (req, res) =
         : listCandidateThreadsByScope({ organizationId: req.organizationId, staffUserId: req.userId, limit: 500 }),
       (req.isAdmin && scope === 'assigned') ? listOrganizationUsers(req.organizationId) : Promise.resolve([])
     ])
-    const candidates = (orgUsers || []).filter(u => u.role === 'job_seeker')
+    const candidates = (orgUsers || []).filter(u => isCandidateRole(u.role))
     const staffUsers = req.isAdmin
       ? ((scope === 'all' ? orgUsers : allOrgUsers) || []).filter(u => u.role === 'staff' || u.role === 'admin')
       : []
+
+    const startOfWeek = new Date()
+    startOfWeek.setHours(0, 0, 0, 0)
+    const dayOfWeek = startOfWeek.getDay()
+    const diffToMonday = (dayOfWeek + 6) % 7
+    startOfWeek.setDate(startOfWeek.getDate() - diffToMonday)
+    const startOfWeekTs = startOfWeek.getTime()
+    const postedThisWeekByUser = new Map()
+    for (const rec of recommendations) {
+      if (rec.status !== 'posted') continue
+      const postedTs = Number(rec.postedAt || rec.updatedAt || 0)
+      if (!postedTs || postedTs < startOfWeekTs) continue
+      const uid = Number(rec.jobSeekerUserId)
+      postedThisWeekByUser.set(uid, (postedThisWeekByUser.get(uid) || 0) + 1)
+    }
+    let weeklyRecommendationTarget = 0
+    let weeklyRecommendationPosted = 0
+    for (const candidate of candidates) {
+      const role = String(candidate.role || DEFAULT_CANDIDATE_ROLE)
+      weeklyRecommendationTarget += Number(WEEKLY_RECOMMENDATION_TARGETS[role] || WEEKLY_RECOMMENDATION_TARGETS.job_seeker)
+      weeklyRecommendationPosted += Number(postedThisWeekByUser.get(Number(candidate.id)) || 0)
+    }
 
     const summary = {
       candidates: candidates.length,
       recommendationsDraft: recommendations.filter(r => r.status === 'draft').length,
       recommendationsPosted: recommendations.filter(r => r.status === 'posted').length,
+      weeklyRecommendationTarget,
+      weeklyRecommendationPosted,
+      weeklyRecommendationRemaining: Math.max(0, weeklyRecommendationTarget - weeklyRecommendationPosted),
       tasksTodo: tasks.filter(t => t.status === 'todo').length,
       tasksInProgress: tasks.filter(t => t.status === 'in_progress').length,
       threadsOpen: threads.filter(t => t.status === 'open').length,
@@ -1001,18 +1230,32 @@ app.get('/api/staff/queue', requireAuth, requireStaffOrAdmin, async (req, res) =
       const prev = postedSinceByUser.get(uid) || 0
       if (ts > prev) postedSinceByUser.set(uid, ts)
     }
+    const latestThreadActivityByUser = new Map()
+    for (const thread of threads) {
+      const uid = Number(thread.jobSeekerUserId)
+      const ts = Number(thread.updatedAt || 0)
+      if (!uid || !ts) continue
+      latestThreadActivityByUser.set(uid, Math.max(latestThreadActivityByUser.get(uid) || 0, ts))
+    }
     const now = Date.now()
     const sevenDaysMs = 7 * 24 * 60 * 60 * 1000
     const threeDaysMs = 3 * 24 * 60 * 60 * 1000
+    const newUserGraceMs = 72 * 60 * 60 * 1000
     const candidateSignals = {}
     await Promise.all(candidates.map(async (candidate) => {
       const uid = Number(candidate.id)
       const dashboard = await getDashboardData({ organizationId: req.organizationId, userId: uid })
-      const staleFollowUps = Number(dashboard?.health?.stale?.pipeline || 0) > 0
+      const membershipCreatedAt = Number(candidate?.createdAt || 0)
+      const isNewCandidate = membershipCreatedAt > 0 && (now - membershipCreatedAt) < newUserGraceMs
+      const staleFollowUpsRaw = Number(dashboard?.health?.stale?.pipeline || 0) > 0
+      const staleFollowUps = isNewCandidate ? false : staleFollowUpsRaw
       const interviewActive = Number(dashboard?.upcomingInterviews?.length || 0) > 0 || Number(dashboard?.dueInterviewActions?.length || 0) > 0
-      const lastDailyIso = (dashboard?.recentLogs || [])[0]?._lastEditedTime || null
-      const lastDaily = lastDailyIso ? Date.parse(lastDailyIso) : 0
-      const noRecentActivity = !lastDaily || (now - lastDaily) > sevenDaysMs
+      const activity = getCandidateActivityFromDashboard(dashboard)
+      const lastThreadAt = Number(latestThreadActivityByUser.get(uid) || 0) || null
+      const lastActivityAt = latestTs(activity.lastActivityAt, lastThreadAt)
+      const noRecentActivity = !lastActivityAt
+        ? !isNewCandidate
+        : (now - lastActivityAt) > sevenDaysMs
       const latestPosted = postedSinceByUser.get(uid) || 0
       const rrPostedRecently = !!latestPosted && (now - latestPosted) <= threeDaysMs
       candidateSignals[uid] = {
@@ -1022,7 +1265,8 @@ app.get('/api/staff/queue', requireAuth, requireStaffOrAdmin, async (req, res) =
         rrPostedRecently,
         queueSize: Number(dashboard?.health?.queueSize || 0),
         staleTotal: Number(dashboard?.health?.staleTotal || 0),
-        lastCheckInAt: lastDaily || null
+        lastCheckInAt: activity.lastCheckInAt || null,
+        lastActivityAt: lastActivityAt || null
       }
     }))
     const signalValues = Object.values(candidateSignals)
@@ -1069,7 +1313,7 @@ app.patch('/api/staff/threads/:threadId', requireAuth, requireStaffOrAdmin, asyn
 })
 
 
-// Staff: create a job_seeker account and auto-assign to themselves
+// Staff: create a candidate account and auto-assign to themselves
 app.post('/api/staff/candidates', requireAuth, requireStaffOrAdmin, async (req, res) => {
   try {
     const username = String(req.body?.username || '').trim().toLowerCase()
@@ -1081,9 +1325,9 @@ app.post('/api/staff/candidates', requireAuth, requireStaffOrAdmin, async (req, 
     if (password.length < 10) {
       return res.status(400).json({ error: 'Temporary password must be at least 10 characters' })
     }
-    const user = await createUserAccount({ username, password, email, role: 'job_seeker', organizationId: req.organizationId, mustChangePassword: true })
+    const user = await createUserAccount({ username, password, email, role: DEFAULT_CANDIDATE_ROLE, organizationId: req.organizationId, mustChangePassword: true })
     await createStaffAssignment({ organizationId: req.organizationId, staffUserId: req.userId, jobSeekerUserId: user.id })
-    await createAuditLog({ organizationId: req.organizationId, actorUserId: req.userId, targetUserId: user.id, action: 'staff.candidate.created', entityType: 'user', entityId: String(user.id), metadata: { username: user.username, role: 'job_seeker', autoAssigned: true } })
+    await createAuditLog({ organizationId: req.organizationId, actorUserId: req.userId, targetUserId: user.id, action: 'staff.candidate.created', entityType: 'user', entityId: String(user.id), metadata: { username: user.username, role: DEFAULT_CANDIDATE_ROLE, autoAssigned: true } })
     res.json({ ok: true, id: Number(user.id), username: user.username })
   } catch (e) {
     console.error('staff.candidates.create failed', e)
@@ -1092,7 +1336,7 @@ app.post('/api/staff/candidates', requireAuth, requireStaffOrAdmin, async (req, 
   }
 })
 
-// Staff: self-assign to an existing unassigned job_seeker in the org
+// Staff: self-assign to an existing unassigned candidate in the org
 app.post('/api/staff/self-assign', requireAuth, requireStaffOrAdmin, async (req, res) => {
   try {
     const jobSeekerUserId = Number(req.body?.jobSeekerUserId)
@@ -1108,12 +1352,12 @@ app.post('/api/staff/self-assign', requireAuth, requireStaffOrAdmin, async (req,
   }
 })
 
-// Staff: list unassigned job_seekers in the org (for self-assign picker)
+// Staff: list unassigned candidates in the org (for self-assign picker)
 app.get('/api/staff/unassigned-candidates', requireAuth, requireStaffOrAdmin, async (req, res) => {
   try {
     const [allUsers, assignments] = await Promise.all([listOrganizationUsers(req.organizationId), listStaffAssignments(req.organizationId)])
     const assignedIds = new Set(assignments.map(a => String(a.jobSeekerUserId)))
-    const unassigned = allUsers.filter(u => u.role === 'job_seeker' && !assignedIds.has(String(u.id)))
+    const unassigned = allUsers.filter(u => isCandidateRole(u.role) && !assignedIds.has(String(u.id)))
     res.json({ ok: true, candidates: unassigned })
   } catch (e) {
     console.error('staff.unassignedCandidates failed', e)
@@ -1165,6 +1409,34 @@ app.post('/api/staff/recommendations', requireAuth, requireStaffOrAdmin, async (
   }
 })
 
+app.patch('/api/staff/recommendations/:id', requireAuth, requireStaffOrAdmin, async (req, res) => {
+  try {
+    const recommendation = await getJobRecommendationById(req.params.id)
+    if (!recommendation || recommendation.organizationId !== req.organizationId) {
+      return res.status(404).json({ error: 'Recommendation not found' })
+    }
+    if (!await canAccessCandidate(req, recommendation.jobSeekerUserId)) {
+      return res.status(403).json({ error: 'Not allowed to edit this recommendation' })
+    }
+    if (recommendation.status !== 'draft') {
+      return res.status(409).json({ error: 'Only draft recommendations can be edited' })
+    }
+    const company = String(req.body?.company || '').trim()
+    if (!company) return res.status(400).json({ error: 'company is required' })
+    const updated = await updateJobRecommendationDraft(recommendation.id, {
+      company,
+      role: req.body?.role || null,
+      jobUrl: req.body?.jobUrl || null,
+      source: req.body?.source || null,
+      fitNote: req.body?.fitNote || null
+    })
+    res.json({ ok: true, recommendation: updated })
+  } catch (e) {
+    console.error('staff.recommendations.update failed', e)
+    res.status(500).json({ error: 'Could not update recommendation' })
+  }
+})
+
 app.post('/api/staff/recommendations/:id/post-to-pipeline', requireAuth, requireStaffOrAdmin, async (req, res) => {
   try {
     const recommendation = await getJobRecommendationById(req.params.id)
@@ -1185,7 +1457,7 @@ app.post('/api/staff/recommendations/:id/post-to-pipeline', requireAuth, require
     const pipelineEntry = await createPipelineEntry({
       Company: recommendation.company,
       Role: recommendation.role || '',
-      Stage: 'Wishlist',
+      Stage: '🔍 Researching',
       'Job URL': recommendation.jobUrl || '',
       'Job Source': recommendation.source || '',
       Notes: recommendation.fitNote || '',
@@ -1201,7 +1473,7 @@ app.post('/api/staff/recommendations/:id/post-to-pipeline', requireAuth, require
       const topic = `New opportunity: ${recommendation.company}${recommendation.role ? ` — ${recommendation.role}` : ''}`
       const thread = await createCandidateThread({
         organizationId: req.organizationId,
-        staffUserId: req.userId,
+        createdByUserId: req.userId,
         jobSeekerUserId: recommendation.jobSeekerUserId,
         topic
       })
@@ -1241,6 +1513,101 @@ app.post('/api/staff/recommendations/:id/post-to-pipeline', requireAuth, require
   } catch (e) {
     console.error('staff.recommendations.post failed', e)
     res.status(500).json({ error: 'Could not post recommendation to pipeline' })
+  }
+})
+
+app.post('/api/staff/recommendations/bulk-post', requireAuth, requireStaffOrAdmin, async (req, res) => {
+  try {
+    const ids = Array.isArray(req.body?.recommendationIds) ? req.body.recommendationIds.map(String).filter(Boolean) : []
+    if (!ids.length) return res.status(400).json({ error: 'recommendationIds[] is required' })
+    const notifyCandidate = req.body?.notifyCandidate !== false
+    const posted = []
+    const skipped = []
+
+    for (const id of ids.slice(0, 50)) {
+      const recommendation = await getJobRecommendationById(id)
+      if (!recommendation || recommendation.organizationId !== req.organizationId) {
+        skipped.push({ id, reason: 'not_found' })
+        continue
+      }
+      if (!await canAccessCandidate(req, recommendation.jobSeekerUserId)) {
+        skipped.push({ id, reason: 'forbidden' })
+        continue
+      }
+      if (recommendation.status === 'posted' || recommendation.postedPipelineEntryId) {
+        skipped.push({ id, reason: 'already_posted' })
+        continue
+      }
+      const pipelineEntry = await createPipelineEntry({
+        Company: recommendation.company,
+        Role: recommendation.role || '',
+        Stage: '🔍 Researching',
+        'Job URL': recommendation.jobUrl || '',
+        'Job Source': recommendation.source || '',
+        Notes: recommendation.fitNote || '',
+        Priority: 'Medium'
+      }, {
+        organizationId: req.organizationId,
+        userId: recommendation.jobSeekerUserId
+      })
+
+      if (notifyCandidate) {
+        const topic = `New opportunity: ${recommendation.company}${recommendation.role ? ` — ${recommendation.role}` : ''}`
+        const thread = await createCandidateThread({
+          organizationId: req.organizationId,
+          createdByUserId: req.userId,
+          jobSeekerUserId: recommendation.jobSeekerUserId,
+          topic
+        })
+        const messageLines = [
+          `I added a new role to your pipeline: ${recommendation.company}${recommendation.role ? ` — ${recommendation.role}` : ''}.`,
+          recommendation.jobUrl ? `Job URL: ${recommendation.jobUrl}` : null,
+          recommendation.fitNote ? `Why this might fit: ${recommendation.fitNote}` : null
+        ].filter(Boolean)
+        await createCandidateMessage({
+          threadId: thread.id,
+          organizationId: req.organizationId,
+          authorUserId: req.userId,
+          visibility: 'shared_with_candidate',
+          body: messageLines.join('\n')
+        })
+      }
+
+      const updated = await markRecommendationPosted(recommendation.id, pipelineEntry.id)
+      posted.push({ id: recommendation.id, pipelineEntryId: pipelineEntry.id, recommendation: updated })
+    }
+
+    res.json({ ok: true, postedCount: posted.length, posted, skipped })
+  } catch (e) {
+    console.error('staff.recommendations.bulk-post failed', e)
+    res.status(500).json({ error: 'Could not bulk post recommendations to pipeline' })
+  }
+})
+
+app.post('/api/staff/recommendations/:id/delete-from-pipeline', requireAuth, requireStaffOrAdmin, async (req, res) => {
+  try {
+    const recommendation = await getJobRecommendationById(req.params.id)
+    if (!recommendation || recommendation.organizationId !== req.organizationId) {
+      return res.status(404).json({ error: 'Recommendation not found' })
+    }
+    if (!await canAccessCandidate(req, recommendation.jobSeekerUserId)) {
+      return res.status(403).json({ error: 'Not allowed to delete for this candidate' })
+    }
+    if (!recommendation.postedPipelineEntryId) {
+      return res.status(409).json({ error: 'Recommendation is not linked to a pipeline entry' })
+    }
+    const deleted = await deletePipelineEntry(recommendation.postedPipelineEntryId, {
+      organizationId: req.organizationId,
+      userId: recommendation.jobSeekerUserId
+    })
+    if (!deleted) {
+      return res.status(404).json({ error: 'Linked pipeline entry not found' })
+    }
+    const updated = await markRecommendationDraft(recommendation.id)
+    res.json({ ok: true, recommendation: updated, deletedPipelineEntryId: recommendation.postedPipelineEntryId })
+  } catch (e) {
+    console.error('staff.recommendations.delete-from-pipeline failed', e)
+    res.status(500).json({ error: 'Could not delete recommendation from pipeline' })
   }
 })
 
@@ -1404,14 +1771,24 @@ app.get('/api/staff/candidates/:candidateUserId/support-summary', requireAuth, r
       return res.status(403).json({ error: 'Not allowed to view this candidate' })
     }
 
-    const dashboard = await getDashboardData({ organizationId: req.organizationId, userId: candidateUserId })
+    const [dashboard, candidateThreads] = await Promise.all([
+      getDashboardData({ organizationId: req.organizationId, userId: candidateUserId }),
+      listCandidateThreadsByScope({
+        organizationId: req.organizationId,
+        staffUserId: req.isAdmin ? null : req.userId,
+        jobSeekerUserId: candidateUserId,
+        limit: 200
+      })
+    ])
     const recentLogs = dashboard?.recentLogs || []
     const lastLog = recentLogs[0] || null
-    const lastCheckInIso = lastLog?._lastEditedTime || null
-    const lastCheckInTs = lastCheckInIso ? Date.parse(lastCheckInIso) : null
+    const activity = getCandidateActivityFromDashboard(dashboard)
+    const lastThreadAt = (candidateThreads || []).reduce((max, thread) => Math.max(max, Number(thread.updatedAt || 0)), 0)
+    const lastActivityAt = latestTs(activity.lastActivityAt, lastThreadAt)
     const supportSummary = {
-      lastCheckInAt: Number.isFinite(lastCheckInTs) ? lastCheckInTs : null,
+      lastCheckInAt: activity.lastCheckInAt || null,
       lastCheckInDate: lastLog?.Date || null,
+      lastActivityAt: lastActivityAt || null,
       queueSize: Number(dashboard?.health?.queueSize || 0),
       staleTotal: Number(dashboard?.health?.staleTotal || 0),
       duePipelineFollowUps: Number(dashboard?.duePipelineFollowUps?.length || 0),
@@ -1542,6 +1919,9 @@ app.get('/api/member/threads/:threadId/messages', requireAuth, requireJobSeeker,
       return res.status(404).json({ error: 'Thread not found' })
     }
     const messages = await listCandidateMessagesForMember(thread.id, req.userId, 500)
+    if (!messages.length) {
+      return res.status(404).json({ error: 'Thread not found' })
+    }
     res.json({ ok: true, thread, messages })
   } catch (e) {
     console.error('member.messages.list failed', e)
@@ -1553,6 +1933,10 @@ app.post('/api/member/threads/:threadId/messages', requireAuth, requireJobSeeker
   try {
     const thread = await getCandidateThreadById(req.params.threadId)
     if (!thread || thread.organizationId !== req.organizationId || Number(thread.jobSeekerUserId) !== Number(req.userId)) {
+      return res.status(404).json({ error: 'Thread not found' })
+    }
+    const visibleMessages = await listCandidateMessagesForMember(thread.id, req.userId, 1)
+    if (!visibleMessages.length) {
       return res.status(404).json({ error: 'Thread not found' })
     }
     if (thread.status === 'closed') {
@@ -2038,7 +2422,7 @@ app.post('/api/internal/sheets/sync', async (req, res) => {
     const scope = {
       organizationId: membership?.organizationId,
       userId: serviceUser.id,
-      role: membership?.role || (serviceUser.isAdmin ? 'admin' : 'job_seeker'),
+      role: membership?.role || (serviceUser.isAdmin ? 'admin' : DEFAULT_CANDIDATE_ROLE),
       isAdmin: !!serviceUser.isAdmin
     }
     const overrides = await getSheetsConfigOverrides(scope.organizationId)
@@ -2337,6 +2721,146 @@ app.post('/api/gmail/import-events', requireAuth, async (req, res) => {
   } catch (e) {
     console.error('gmail.import-events failed', e)
     res.status(500).json({ error: e.message })
+  }
+})
+
+// ─── Bring Your Own Agent (BYO) ──────────────────────────────────────────────
+
+app.get('/api/agents/config', requireAuth, async (req, res) => {
+  try {
+    if (!await canUseByoAgentForRequest(req)) return res.status(403).json({ error: 'BYO agent is disabled for this account' })
+    const cfg = await getAgentConfig(req.userId)
+    res.json({
+      ok: true,
+      enabled: !!cfg.enabled,
+      provider: cfg.provider || 'claude',
+      label: cfg.label || '',
+      endpointUrl: cfg.endpointUrl || '',
+      hasToken: !!cfg.tokenHash,
+      ingestPath: '/api/agents/ingest'
+    })
+  } catch (e) {
+    console.error('agents.config.get failed', e)
+    res.status(500).json({ error: 'Could not load agent settings' })
+  }
+})
+
+app.put('/api/agents/config', requireAuth, async (req, res) => {
+  try {
+    if (!await canUseByoAgentForRequest(req)) return res.status(403).json({ error: 'BYO agent is disabled for this account' })
+    const enabled = req.body?.enabled == null ? null : !!req.body.enabled
+    const provider = req.body?.provider == null ? null : String(req.body.provider || '').trim()
+    const label = req.body?.label == null ? null : String(req.body.label || '').trim()
+    const endpointUrl = req.body?.endpointUrl == null ? null : String(req.body.endpointUrl || '').trim()
+    await saveAgentConfig(req.userId, { enabled, provider, label, endpointUrl })
+    const cfg = await getAgentConfig(req.userId)
+    res.json({ ok: true, enabled: !!cfg.enabled, provider: cfg.provider || 'claude', label: cfg.label || '', endpointUrl: cfg.endpointUrl || '', hasToken: !!cfg.tokenHash })
+  } catch (e) {
+    console.error('agents.config.put failed', e)
+    res.status(500).json({ error: 'Could not save agent settings' })
+  }
+})
+
+app.post('/api/agents/rotate-token', requireAuth, async (req, res) => {
+  try {
+    if (!await canUseByoAgentForRequest(req)) return res.status(403).json({ error: 'BYO agent is disabled for this account' })
+    const token = crypto.randomBytes(24).toString('hex')
+    const tokenHash = hashToken(token)
+    await saveAgentConfig(req.userId, { tokenHash })
+    res.json({ ok: true, token })
+  } catch (e) {
+    console.error('agents.rotate-token failed', e)
+    res.status(500).json({ error: 'Could not rotate token' })
+  }
+})
+
+app.post('/api/agents/ingest', async (req, res) => {
+  try {
+    const token = String(req.headers['x-agent-token'] || '').trim()
+    if (!token) return res.status(401).json({ error: 'Missing agent token' })
+    await initDb()
+
+    const users = await listAllUsers()
+
+    let actor = null
+    for (const user of users) {
+      const cfg = await getAgentConfig(user.id)
+      if (!cfg.enabled || !cfg.tokenHash) continue
+      if (cfg.tokenHash === hashToken(token)) {
+        actor = user
+        break
+      }
+    }
+    if (!actor) return res.status(401).json({ error: 'Invalid agent token' })
+
+    const membership = await getPrimaryMembershipForUser(actor.id)
+    if (!membership?.organizationId) return res.status(403).json({ error: 'Agent user has no organization membership' })
+    const scope = {
+      organizationId: membership.organizationId,
+      userId: Number(actor.id),
+      role: membership.role || (actor.isAdmin ? 'admin' : DEFAULT_CANDIDATE_ROLE),
+      isAdmin: !!actor.isAdmin
+    }
+
+    const entries = Array.isArray(req.body?.entries) ? req.body.entries : []
+    if (!entries.length) return res.status(400).json({ error: 'entries[] is required' })
+
+    const existingPipeline = await getPipeline(scope)
+    const existingByUrl = new Set()
+    const existingByCompanyRole = new Set()
+    for (const item of existingPipeline) {
+      const existingUrl = String(item?.['Job URL'] || '').trim().toLowerCase()
+      const existingCompany = String(item?.Company || '').trim().toLowerCase()
+      const existingRole = String(item?.Role || '').trim().toLowerCase()
+      if (existingUrl) existingByUrl.add(existingUrl)
+      if (existingCompany && existingRole) existingByCompanyRole.add(`${existingCompany}::${existingRole}`)
+    }
+
+    const createdIds = []
+    let skippedDuplicates = 0
+    for (const row of entries.slice(0, 25)) {
+      const company = String(row?.company || '').trim()
+      if (!company) continue
+      const role = String(row?.role || '').trim()
+      const jobUrl = String(row?.jobUrl || '').trim()
+      const companyRoleKey = `${company.toLowerCase()}::${role.toLowerCase()}`
+      const normalizedUrl = jobUrl.toLowerCase()
+      if (
+        (normalizedUrl && existingByUrl.has(normalizedUrl)) ||
+        (company && role && existingByCompanyRole.has(companyRoleKey))
+      ) {
+        skippedDuplicates += 1
+        continue
+      }
+      const payload = {
+        Company: company,
+        Role: role,
+        Stage: String(row?.stage || '🔍 Researching').trim() || '🔍 Researching',
+        'Job URL': jobUrl,
+        'Job Source': String(row?.source || '').trim(),
+        Notes: String(row?.notes || '').trim()
+      }
+      const created = await createPipelineEntry(payload, scope)
+      if (created?.id) {
+        createdIds.push(created.id)
+        if (normalizedUrl) existingByUrl.add(normalizedUrl)
+        if (company && role) existingByCompanyRole.add(companyRoleKey)
+      }
+    }
+
+    await createAuditLog({
+      organizationId: scope.organizationId,
+      actorUserId: scope.userId,
+      targetUserId: scope.userId,
+      action: 'agent.ingest.pipeline_entries',
+      entityType: 'pipeline_entry',
+      entityId: createdIds[0] || null,
+      metadata: { createdCount: createdIds.length }
+    })
+    res.json({ ok: true, createdCount: createdIds.length, skippedDuplicates, createdIds })
+  } catch (e) {
+    console.error('agents.ingest failed', e)
+    res.status(500).json({ error: 'Could not ingest agent results' })
   }
 })
 
