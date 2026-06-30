@@ -1,37 +1,18 @@
 import { useState, useEffect } from 'react'
 
-export const THEMES = [
-  { id: 'system', label: 'System', icon: '💻' },
-  { id: 'dark',   label: 'Dark',   icon: '🌑' },
-  { id: 'dim',    label: 'Dim',    icon: '🌘' },
-  { id: 'light',  label: 'Light',  icon: '☀️' },
-]
-
-function applyTheme(theme) {
-  const root = document.documentElement
-  if (theme === 'system') {
-    root.removeAttribute('data-theme')
-  } else {
-    root.dataset.theme = theme
-  }
-}
-
 export function useTheme() {
-  const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'system')
+  const [mode, setModeState] = useState(() => localStorage.getItem('theme-mode') || 'light')
+  const [accent, setAccentState] = useState(() => localStorage.getItem('theme-accent') || 'indigo')
 
-  useEffect(() => {
-    applyTheme(theme)
-    localStorage.setItem('theme', theme)
-  }, [theme])
+  function setMode(v) {
+    setModeState(v)
+    localStorage.setItem('theme-mode', v)
+  }
 
-  // Keep system theme in sync if OS setting changes
-  useEffect(() => {
-    if (theme !== 'system') return
-    const mq = window.matchMedia('(prefers-color-scheme: light)')
-    const handler = () => applyTheme('system')
-    mq.addEventListener('change', handler)
-    return () => mq.removeEventListener('change', handler)
-  }, [theme])
+  function setAccent(v) {
+    setAccentState(v)
+    localStorage.setItem('theme-accent', v)
+  }
 
-  return [theme, setTheme]
+  return { mode, accent, setMode, setAccent }
 }

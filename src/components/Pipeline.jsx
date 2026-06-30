@@ -1,5 +1,17 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { JOB_SOURCES } from '../constants/jobSources'
+import { Icon } from '../ui-icons.jsx'
+
+const STAGE_COLORS = {
+  '🔍 Researching':       'oklch(0.58 0.14 220)',
+  '📨 Applied':           'oklch(0.56 0.21 258)',
+  '🤝 Warm Outreach Sent':'oklch(0.64 0.16 232)',
+  '💬 In Conversation':   'oklch(0.70 0.12 75)',
+  '📞 Interview Scheduled':'oklch(0.62 0.17 32)',
+  '🎯 Interviewing':      'oklch(0.60 0.18 25)',
+  '📋 Offer':             'oklch(0.60 0.13 155)',
+  '❌ Closed':            'oklch(0.60 0.015 265)',
+}
 
 const STAGES = [
   '🔍 Researching',
@@ -26,14 +38,6 @@ function priorityColor(p) {
   return 'badge-gray'
 }
 
-function stageHeaderColor(stage) {
-  if (stage.includes('Conversation')) return 'var(--yellow)'
-  if (stage.includes('Interview Scheduled')) return 'var(--orange)'
-  if (stage.includes('Interviewing')) return 'var(--red)'
-  if (stage.includes('Offer')) return 'var(--green)'
-  if (stage.includes('Closed')) return 'var(--text-muted)'
-  return 'var(--text-muted)'
-}
 
 function emptyForm(defaults = {}) {
   return {
@@ -497,55 +501,67 @@ export default function Pipeline({ navIntent }) {
   if (loading) return <div className="loading"><div className="spin" /> Loading pipeline…</div>
 
   return (
-    <div>
-      <div className="page-header">
-        <div className="flex items-center justify-between pipeline-header-row">
-          <div>
-            <h1>Job Pipeline</h1>
-            <div className="subtitle">{items.length} total · {items.filter(i => !i.Stage?.includes('Closed')).length} active</div>
-          </div>
-          <button className="btn btn-primary btn-sm" onClick={() => setShowAdd(true)}>+ Add</button>
+    <div className="page">
+      <div className="page-head">
+        <div>
+          <h1>Pipeline</h1>
+          <div className="sub">{items.length} TOTAL · {items.filter(i => !i.Stage?.includes('Closed')).length} ACTIVE</div>
         </div>
+        <button className="btn btn-primary btn-sm" onClick={() => setShowAdd(true)}>
+          <Icon name="plus" /> Add role
+        </button>
       </div>
 
-      <div className="tabs">
-        <button className={`tab${filter === 'active' ? ' active' : ''}`} onClick={() => setFilter('active')}>Active</button>
-        <button className={`tab${filter === 'all' ? ' active' : ''}`} onClick={() => setFilter('all')}>All</button>
-        <button className={`tab${filter === 'due_followups' ? ' active' : ''}`} onClick={() => setFilter('due_followups')}>Due Follow-ups</button>
-        <button className={`tab${filter === 'incomplete' ? ' active' : ''}`} onClick={() => setFilter('incomplete')}>Incomplete Applications</button>
-        <button className={`tab${filter === 'stale_actions' ? ' active' : ''}`} onClick={() => setFilter('stale_actions')}>Missing Next Action</button>
-        {['💬 In Conversation', '📞 Interview Scheduled', '🎯 Interviewing'].map(s => (
-          <button key={s} className={`tab${filter === s ? ' active' : ''}`} onClick={() => setFilter(s)}>{s}</button>
-        ))}
-      </div>
-      <div className="quick-actions mb-16" style={{ alignItems: 'center' }}>
-        <label style={{ fontSize: 12, color: 'var(--text-muted)' }}>Source</label>
-        <select value={sourceFilter} onChange={e => setSourceFilter(e.target.value)} style={{ minWidth: 220 }}>
+      <div className="pipe-toolbar">
+        <div className="seg">
+          {[
+            { id: 'active', label: 'Active' },
+            { id: 'all', label: 'All' },
+            { id: 'due_followups', label: 'Due follow-ups' },
+            { id: 'stale_actions', label: 'Missing next action' },
+            { id: 'incomplete', label: 'Incomplete' },
+          ].map(f => (
+            <button key={f.id} className={filter === f.id ? 'active' : ''} onClick={() => setFilter(f.id)}>{f.label}</button>
+          ))}
+          {['💬 In Conversation', '📞 Interview Scheduled', '🎯 Interviewing'].map(s => (
+            <button key={s} className={filter === s ? 'active' : ''} onClick={() => setFilter(s)}>{s}</button>
+          ))}
+        </div>
+
+        <select
+          className="btn btn-ghost btn-sm"
+          value={sourceFilter}
+          onChange={e => setSourceFilter(e.target.value)}
+          style={{ minWidth: 160 }}
+        >
           <option value="all">All sources</option>
           <option value="__missing__">Missing source</option>
-          <option value="__custom__">Custom source values</option>
+          <option value="__custom__">Custom source</option>
           {sourceOptions.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
       </div>
-      <div className="quick-actions mb-16" style={{ alignItems: 'center', flexWrap: 'wrap' }}>
-        <label style={{ fontSize: 12, color: 'var(--text-muted)' }}>Saved views</label>
+
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 14, flexWrap: 'wrap' }}>
         <input
           value={viewName}
           onChange={e => setViewName(e.target.value)}
-          placeholder="e.g. RR Due Follow-ups"
-          style={{ minWidth: 220 }}
+          placeholder="Save current view as…"
+          style={{ fontSize: 13, background: 'var(--surface-2)', border: '1px solid var(--border-2)', borderRadius: 'var(--radius-sm)', padding: '6px 10px', color: 'var(--text)', outline: 'none', minWidth: 200 }}
         />
-        <button className="btn btn-ghost btn-sm" onClick={saveCurrentView} disabled={!viewName.trim()}>Save View</button>
-        {!!savedViews.length && savedViews.map(v => (
-          <span key={v.id} className="badge badge-blue" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <button className="btn btn-ghost btn-sm" onClick={() => applyView(v)} style={{ padding: 0, border: 'none' }}>{v.name}</button>
-            <button className="btn btn-ghost btn-sm" onClick={() => deleteView(v.id)} style={{ padding: 0, border: 'none' }}>×</button>
+        <button className="btn btn-ghost btn-sm" onClick={saveCurrentView} disabled={!viewName.trim()}>
+          <Icon name="save" /> Save view
+        </button>
+        {savedViews.map(v => (
+          <span key={v.id} className="chip chip-blue" style={{ gap: 6 }}>
+            <button onClick={() => applyView(v)} style={{ all: 'unset', cursor: 'pointer' }}>{v.name}</button>
+            <button onClick={() => deleteView(v.id)} style={{ all: 'unset', cursor: 'pointer', opacity: 0.6 }}>×</button>
           </span>
         ))}
       </div>
+
       {!!selectedIds.length && (
-        <div className="card mb-16" style={{ borderColor: 'var(--accent)' }}>
-          <div className="card-title">Bulk Actions ({selectedIds.length} selected)</div>
+        <div className="card" style={{ marginBottom: 16, borderColor: 'var(--accent-line)' }}>
+          <div className="card-title">Bulk Actions — {selectedIds.length} selected</div>
           <div className="checkin-grid">
             <div className="field">
               <label>Set Follow-Up Date</label>
@@ -556,22 +572,25 @@ export default function Pipeline({ navIntent }) {
               <input type="date" value={bulkNextActionDate} onChange={e => setBulkNextActionDate(e.target.value)} />
             </div>
           </div>
-          <div className="quick-actions">
+          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
             <button className="btn btn-primary btn-sm" onClick={applyBulkDates} disabled={bulkSaving || (!bulkFollowUpDate && !bulkNextActionDate)}>
-              {bulkSaving ? 'Applying…' : 'Apply to Selected'}
+              {bulkSaving ? 'Applying…' : 'Apply to selected'}
             </button>
-            <button className="btn btn-ghost btn-sm" onClick={clearSelection} disabled={bulkSaving}>Clear Selection</button>
+            <button className="btn btn-ghost btn-sm" onClick={clearSelection} disabled={bulkSaving}>Clear</button>
           </div>
         </div>
       )}
 
       {items.length === 0 && (
-        <div className="card mb-16">
-          <div className="card-title">Start Your Pipeline</div>
-          <div style={{ color: 'var(--text-muted)', marginBottom: 10 }}>
-            Add your first role to track status, notes, and follow-up dates.
+        <div className="placeholder">
+          <div className="placeholder-inner">
+            <div className="placeholder-icn"><Icon name="columns" /></div>
+            <h2>Start your pipeline</h2>
+            <p>Add your first role to track status, notes, and follow-ups.</p>
+            <button className="btn btn-primary" style={{ marginTop: 18 }} onClick={() => setShowAdd(true)}>
+              <Icon name="plus" /> Add first role
+            </button>
           </div>
-          <button className="btn btn-primary btn-sm" onClick={() => setShowAdd(true)}>+ Add First Role</button>
         </div>
       )}
 
@@ -580,70 +599,66 @@ export default function Pipeline({ navIntent }) {
           {visibleStages.map(stage => {
             const cards = byStage[stage] || []
             const isOver = dragOver === stage
+            const stageColor = STAGE_COLORS[stage] || 'var(--border-2)'
             return (
               <div
                 key={stage}
                 className="kanban-col"
-                style={{ borderColor: isOver ? 'var(--accent)' : undefined, background: isOver ? 'var(--accent-dim)' : undefined, transition: 'border-color 0.15s, background 0.15s' }}
                 onDragOver={e => onDragOver(e, stage)}
                 onDragLeave={onDragLeave}
                 onDrop={e => onDrop(e, stage)}
               >
-                <div className="kanban-col-header">
-                  <span style={{ color: stageHeaderColor(stage) }}>{stage}</span>
-                  <span className="kanban-count">{cards.length}</span>
+                <div className="kcol-head" style={{ '--stage-color': stageColor }}>
+                  <span className="kcol-dot" style={{ background: stageColor }} />
+                  <span>{stage}</span>
+                  <span className="kcol-count">{cards.length}</span>
                 </div>
-                {cards.length === 0 && (
-                  <div style={{ color: 'var(--text-muted)', fontSize: 12, padding: '8px 0', textAlign: 'center' }}>
-                    {isOver ? 'Drop here' : 'Empty'}
-                  </div>
-                )}
-                {cards.map(card => (
-                  <div
-                    key={card.id}
-                    className="kanban-card"
-                    draggable
-                    onDragStart={e => onDragStart(e, card)}
-                    onClick={() => setSelected(card)}
-                    style={{ cursor: 'grab' }}
-                  >
-                    <div style={{ marginBottom: 6 }} onClick={e => e.stopPropagation()}>
-                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-muted)' }}>
-                        <input
-                          type="checkbox"
-                          checked={selectedIds.includes(card.id)}
-                          onChange={() => toggleSelected(card.id)}
-                        />
-                        Select
-                      </label>
-                    </div>
-                    <div className="kanban-card-company">{card.Company}</div>
-                    {card.Role && <div className="kanban-card-role">{card.Role}</div>}
-                    {card['Next Action'] && (
-                      <div className="kanban-card-role" style={{ color: 'var(--text)', marginBottom: 6 }}>
-                        Next: {card['Next Action']}
-                        {card['Next Action Date'] ? ` (${card['Next Action Date']})` : ''}
+                <div className={`kcol-body${isOver ? ' over' : ''}`}>
+                  {cards.length === 0 && (
+                    <div className="kcol-empty">{isOver ? 'Drop here' : 'Empty'}</div>
+                  )}
+                  {cards.map(card => (
+                    <div
+                      key={card.id}
+                      className="kcard"
+                      draggable
+                      onDragStart={e => onDragStart(e, card)}
+                      onClick={() => setSelected(card)}
+                    >
+                      <div style={{ marginBottom: 6 }} onClick={e => e.stopPropagation()}>
+                        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-3)', cursor: 'pointer' }}>
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.includes(card.id)}
+                            onChange={() => toggleSelected(card.id)}
+                          />
+                          Select
+                        </label>
                       </div>
-                    )}
-                    <div className="kanban-card-meta">
-                      {card.Priority && <span className={`badge ${priorityColor(card.Priority)}`} style={{ fontSize: 10 }}>{card.Priority}</span>}
-                      {card['Follow-Up Date'] && <span className="text-muted text-sm">↩ {card['Follow-Up Date']}</span>}
-                      {filter === 'due_followups' && getDueSourceLabel(card) && (
-                        <span className="badge badge-blue" style={{ fontSize: 10 }}>{getDueSourceLabel(card)}</span>
+                      <div className="kcard-co">{card.Company}</div>
+                      {card.Role && <div className="kcard-role">{card.Role}</div>}
+                      {card['Next Action'] && (
+                        <div className="kcard-next">
+                          <Icon name="corner-down-right" />
+                          {card['Next Action']}{card['Next Action Date'] ? ` · ${card['Next Action Date']}` : ''}
+                        </div>
                       )}
-                      {card['Filed for Unemployment'] && <span className="badge badge-gray" style={{ fontSize: 10 }}>✓ UE Filed</span>}
-                      {isIncompleteApplication(card) && <span className="badge badge-yellow" style={{ fontSize: 10 }}>Incomplete</span>}
-                      {card.Outcome && <span className={`badge ${card.Outcome.includes('Accepted') ? 'badge-green' : card.Outcome.includes('Withdrew') ? 'badge-gray' : 'badge-red'}`} style={{ fontSize: 10 }}>{card.Outcome}</span>}
-                      {card['Work Location'] && <span className={`badge ${card['Work Location'].startsWith('Remote') ? 'badge-green' : 'badge-gray'}`} style={{ fontSize: 10 }}>{card['Work Location']}</span>}
-                      {card['Resume Version'] === 'Tailored' && card['Resume URL'] && (
-                        <a href={card['Resume URL']} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ fontSize: 11, color: 'var(--accent)', textDecoration: 'none' }} title="View tailored resume">📄 Resume</a>
-                      )}
-                      {card['Resume Version'] === 'Tailored' && card['Cover Letter'] && (
-                        <span style={{ fontSize: 11, color: 'var(--text-muted)' }} title={card['Cover Letter']}>✉️ Cover Letter</span>
-                      )}
+                      <div className="kcard-meta">
+                        {card.Priority && <span className={`chip ${priorityColor(card.Priority).replace('badge-', 'chip-').replace('yellow', 'amber')}`} style={{ fontSize: 10 }}>{card.Priority}</span>}
+                        {filter === 'due_followups' && getDueSourceLabel(card) && (
+                          <span className="chip chip-amber" style={{ fontSize: 10 }}>{getDueSourceLabel(card)}</span>
+                        )}
+                        {card['Work Location'] && <span className={`chip ${card['Work Location'].startsWith('Remote') ? 'chip-green' : 'chip-gray'}`} style={{ fontSize: 10 }}>{card['Work Location']}</span>}
+                        {isIncompleteApplication(card) && <span className="chip chip-amber" style={{ fontSize: 10 }}>Incomplete</span>}
+                        {card.Outcome && <span className={`chip ${card.Outcome.includes('Accepted') ? 'chip-green' : card.Outcome.includes('Withdrew') ? 'chip-gray' : 'chip-red'}`} style={{ fontSize: 10 }}>{card.Outcome}</span>}
+                        {card['Filed for Unemployment'] && <span className="chip chip-gray" style={{ fontSize: 10 }}>UE Filed</span>}
+                        {card['Resume Version'] === 'Tailored' && card['Resume URL'] && (
+                          <a href={card['Resume URL']} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="chip chip-blue" style={{ fontSize: 10, textDecoration: 'none' }}>Resume</a>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             )
           })}

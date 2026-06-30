@@ -1,4 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { Icon } from '../ui-icons.jsx'
+
+const ACCENT_SWATCHES = [
+  { name: 'Indigo',  val: 'indigo',  color: 'oklch(0.52 0.22 268)' },
+  { name: 'Teal',   val: 'teal',    color: 'oklch(0.56 0.16 200)' },
+  { name: 'Violet', val: 'violet',  color: 'oklch(0.52 0.22 292)' },
+  { name: 'Forest', val: 'forest',  color: 'oklch(0.50 0.16 155)' },
+]
+
+function Toggle({ on, onToggle }) {
+  return (
+    <div className={'settings-switch' + (on ? ' on' : '')} onClick={onToggle} role="switch" aria-checked={on}>
+      <i />
+    </div>
+  )
+}
 
 const BUNDLE_VERSION = String(import.meta.env.VITE_DEPLOY_VERSION || 'dev')
 const EXPECTED_SCHEDULER_JOBS = [
@@ -178,7 +194,7 @@ function ErrorCallout({ error }) {
   )
 }
 
-export default function Settings({ me, onProfileUpdated, onNavigate, mode = 'settings' }) {
+export default function Settings({ me, onProfileUpdated, onNavigate, settingsMode = 'settings', themeMode, accent, onModeChange, onAccentChange }) {
   const CANDIDATE_ROLES = ['job_seeker', 'accelerator_user', 'premium_user', 'vip_user']
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -244,14 +260,14 @@ export default function Settings({ me, onProfileUpdated, onNavigate, mode = 'set
   const [membershipRole, setMembershipRole] = useState(DEFAULT_CANDIDATE_ROLE)
   const [savingMembership, setSavingMembership] = useState(false)
   const canOpenPipelineCleanup = !(me?.role === 'staff' || me?.isAdmin)
-  const isAdminOperationsMode = mode === 'admin_operations'
-  const isAdminUsersMode = mode === 'admin_users'
-  const isAdminAssignmentsMode = mode === 'admin_assignments'
-  const showAccountSettings = mode === 'settings'
-  const showOperations = mode === 'settings' || isAdminOperationsMode
-  const showUserManagement = mode === 'settings' || isAdminUsersMode
-  const showAssignments = mode === 'settings' || isAdminAssignmentsMode
-  const showAssignedUsers = mode === 'settings' || isAdminUsersMode || isAdminAssignmentsMode
+  const isAdminOperationsMode = settingsMode === 'admin_operations'
+  const isAdminUsersMode = settingsMode === 'admin_users'
+  const isAdminAssignmentsMode = settingsMode === 'admin_assignments'
+  const showAccountSettings = settingsMode === 'settings'
+  const showOperations = settingsMode === 'settings' || isAdminOperationsMode
+  const showUserManagement = settingsMode === 'settings' || isAdminUsersMode
+  const showAssignments = settingsMode === 'settings' || isAdminAssignmentsMode
+  const showAssignedUsers = settingsMode === 'settings' || isAdminUsersMode || isAdminAssignmentsMode
   const canViewOperationalSettings = !!me?.isAdmin
   const canUseByoAgent = !!me?.permissions?.canUseByoAgent
 
@@ -709,7 +725,7 @@ export default function Settings({ me, onProfileUpdated, onNavigate, mode = 'set
     try {
       const staffUserId = Number(assignStaffUserId)
       const jobSeekerUserId = Number(assignJobSeekerUserId)
-      if (!staffUserId || !jobSeekerUserId) throw new Error('Select both staff and candidate users')
+      if (!staffUserId || !jobSeekerUserId) throw new Error('Select both staff and job seeker users')
       await api('/api/admin/staff-assignments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -902,6 +918,45 @@ export default function Settings({ me, onProfileUpdated, onNavigate, mode = 'set
     }
   }
 
+  async function exportBackup() {
+    setExportingBackup(true)
+    setError(null)
+    setSuccess('')
+    try {
+      const snapshot = await api('/api/admin/backup/export')
+      const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `job-hunt-backup-${new Date().toISOString().replace(/[:.]/g, '-')}.json`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+      setSuccess('Backup exported.')
+      await load()
+    } catch (e) {
+      setError(e.payload || { error: e.message })
+    } finally {
+      setExportingBackup(false)
+    }
+  }
+
+  async function runCostSnapshotNow() {
+    setRunningCostSnapshot(true)
+    setError(null)
+    setSuccess('')
+    try {
+      await api('/api/admin/cost-snapshots/run', { method: 'POST' })
+      setSuccess('Cost snapshot collected.')
+      await load()
+    } catch (e) {
+      setError(e.payload || { error: e.message })
+    } finally {
+      setRunningCostSnapshot(false)
+    }
+  }
+
   async function saveAgentSettings() {
     setSavingAgentConfig(true)
     setError(null)
@@ -939,45 +994,6 @@ export default function Settings({ me, onProfileUpdated, onNavigate, mode = 'set
       setError(e.payload || { error: e.message })
     } finally {
       setRotatingAgentToken(false)
-    }
-  }
-
-  async function exportBackup() {
-    setExportingBackup(true)
-    setError(null)
-    setSuccess('')
-    try {
-      const snapshot = await api('/api/admin/backup/export')
-      const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `job-hunt-backup-${new Date().toISOString().replace(/[:.]/g, '-')}.json`
-      document.body.appendChild(a)
-      a.click()
-      a.remove()
-      URL.revokeObjectURL(url)
-      setSuccess('Backup exported.')
-      await load()
-    } catch (e) {
-      setError(e.payload || { error: e.message })
-    } finally {
-      setExportingBackup(false)
-    }
-  }
-
-  async function runCostSnapshotNow() {
-    setRunningCostSnapshot(true)
-    setError(null)
-    setSuccess('')
-    try {
-      await api('/api/admin/cost-snapshots/run', { method: 'POST' })
-      setSuccess('Cost snapshot collected.')
-      await load()
-    } catch (e) {
-      setError(e.payload || { error: e.message })
-    } finally {
-      setRunningCostSnapshot(false)
     }
   }
 
@@ -1066,28 +1082,29 @@ export default function Settings({ me, onProfileUpdated, onNavigate, mode = 'set
         : 'Profile, integrations, and administration'
 
   return (
-    <div>
-      <div className="page-header">
-        <h1>{pageTitle}</h1>
-        <div className="subtitle">{pageSubtitle}</div>
-      </div>
-      {me?.isAdmin && showAccountSettings && (
-        <div className="quick-actions" style={{ marginBottom: 10 }}>
-          <a className="btn btn-ghost btn-sm" href="#settings-profile">Profile</a>
-          <a className="btn btn-ghost btn-sm" href="#settings-integrations">Integrations</a>
-          <a className="btn btn-ghost btn-sm" href="#settings-users">User Management</a>
-          <a className="btn btn-ghost btn-sm" href="#settings-assignments">Assignments</a>
-          <a className="btn btn-ghost btn-sm" href="#settings-ops">Operations</a>
-          <a className="btn btn-ghost btn-sm" href="#settings-backups">Backups</a>
+    <div className="page">
+      <div className="page-head">
+        <div>
+          <h1>{pageTitle}</h1>
+          <div className="sub">{pageSubtitle}</div>
         </div>
-      )}
+      </div>
 
       {success && <div className="success-msg">{success}</div>}
       <ErrorCallout error={error} />
 
+      <div className="settings-layout">
+
       {/* ── Build Info ── */}
-      {canViewOperationalSettings && showAccountSettings && <div className="card mb-16" id="settings-profile">
-        <div className="card-title">Build Info</div>
+      {canViewOperationalSettings && showAccountSettings && <div className="settings-card" id="settings-profile">
+        <div className="settings-card-head">
+          <div className="settings-card-ico"><Icon name="info" /></div>
+          <div>
+            <div className="settings-card-title">Build Info</div>
+            <div className="settings-card-sub">Version, auth mode, and diagnostics</div>
+          </div>
+        </div>
+        <div className="settings-body">
         <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Frontend bundle: <code>{BUNDLE_VERSION}</code></div>
         <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Server deploy: <code>{serverDeployVersion || 'unknown'}</code></div>
         <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Auth mode: <code>{healthMeta?.authMode || 'unknown'}</code></div>
@@ -1108,11 +1125,19 @@ export default function Settings({ me, onProfileUpdated, onNavigate, mode = 'set
             </button>
           </div>
         )}
+        </div>
       </div>}
 
       {/* ── Profile ── */}
-      {showAccountSettings && <div className="card mb-16" id="settings-integrations">
-        <div className="card-title">Profile</div>
+      {showAccountSettings && <div className="settings-card" id="settings-integrations">
+        <div className="settings-card-head">
+          <div className="settings-card-ico"><Icon name="user" /></div>
+          <div>
+            <div className="settings-card-title">Profile</div>
+            <div className="settings-card-sub">Display name and role</div>
+          </div>
+        </div>
+        <div className="settings-body">
         <div className="field">
           <label>Display Name</label>
           <input
@@ -1130,11 +1155,19 @@ export default function Settings({ me, onProfileUpdated, onNavigate, mode = 'set
             Role: {me?.role || DEFAULT_CANDIDATE_ROLE} {me?.isAdmin ? '• Admin' : ''}
           </div>
         </div>
+        </div>
       </div>}
 
       {/* ── Google Sheets Sync (merged: health + details + config + runs) ── */}
-      {canViewOperationalSettings && showOperations && <div className="card mb-16" id="settings-ops">
-        <div className="card-title">Google Sheets Sync</div>
+      {canViewOperationalSettings && showOperations && <div className="settings-card" id="settings-ops">
+        <div className="settings-card-head">
+          <div className="settings-card-ico"><Icon name="table-2" /></div>
+          <div>
+            <div className="settings-card-title">Google Sheets Sync</div>
+            <div className="settings-card-sub">Two-way sync with your tracking spreadsheet</div>
+          </div>
+        </div>
+        <div className="settings-body">
 
         {/* Health summary */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
@@ -1337,11 +1370,19 @@ export default function Settings({ me, onProfileUpdated, onNavigate, mode = 'set
             </div>
           )}
         </div>
+        </div>
       </div>}
 
       {/* ── Email Event Import (Gmail) ── */}
-      {canViewOperationalSettings && showOperations && <div className="card mb-16">
-        <div className="card-title">Email Event Import (Gmail)</div>
+      {canViewOperationalSettings && showOperations && <div className="settings-card">
+        <div className="settings-card-head">
+          <div className="settings-card-ico"><Icon name="mail" /></div>
+          <div>
+            <div className="settings-card-title">Email Event Import (Gmail)</div>
+            <div className="settings-card-sub">Import interview/calendar events from Gmail</div>
+          </div>
+        </div>
+        <div className="settings-body">
         <div style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 10 }}>
           Imports interview/calendar invite events from Gmail into the Events section.
         </div>
@@ -1378,52 +1419,60 @@ export default function Settings({ me, onProfileUpdated, onNavigate, mode = 'set
             Disconnect
           </button>
         </div>
+        </div>
       </div>}
 
-      {canUseByoAgent && showOperations && <div className="card mb-16">
-        <div className="card-title">Bring Your Own AI Agent</div>
-        <div style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 10 }}>
-          Connect your external agent (for example a Claude workflow) to push job results into your pipeline using your own model/account costs.
-        </div>
-        <div className="settings-grid">
-          <div className="field">
-            <label>Provider</label>
-            <select value={agentConfig.provider || 'claude'} onChange={e => setAgentConfig(prev => ({ ...prev, provider: e.target.value }))}>
-              <option value="claude">Claude</option>
-              <option value="custom">Custom</option>
-            </select>
-          </div>
-          <div className="field">
-            <label>Agent Label</label>
-            <input value={agentConfig.label || ''} onChange={e => setAgentConfig(prev => ({ ...prev, label: e.target.value }))} placeholder="My Job Search Agent" />
-          </div>
-          <div className="field">
-            <label>External Agent URL (optional)</label>
-            <input value={agentConfig.endpointUrl || ''} onChange={e => setAgentConfig(prev => ({ ...prev, endpointUrl: e.target.value }))} placeholder="https://..." />
+      {canUseByoAgent && showOperations && <div className="settings-card">
+        <div className="settings-card-head">
+          <div className="settings-card-ico"><Icon name="sparkles" /></div>
+          <div>
+            <div className="settings-card-title">Bring Your Own AI Agent</div>
+            <div className="settings-card-sub">Connect your own external job-search workflow</div>
           </div>
         </div>
-        <div className="check-row" style={{ marginBottom: 10 }}>
-          <input id="agent-enabled" type="checkbox" checked={!!agentConfig.enabled} onChange={e => setAgentConfig(prev => ({ ...prev, enabled: e.target.checked }))} />
-          <label htmlFor="agent-enabled">Enable ingest for this account</label>
-        </div>
-        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>
-          Ingest endpoint: <code>{window.location.origin}{agentConfig.ingestPath || '/api/agents/ingest'}</code>
-        </div>
-        <div className="quick-actions" style={{ marginBottom: 8 }}>
-          <button className="btn btn-primary" onClick={saveAgentSettings} disabled={savingAgentConfig}>
-            {savingAgentConfig ? 'Saving…' : 'Save Agent Settings'}
-          </button>
-          <button className="btn btn-ghost" onClick={rotateAgentToken} disabled={rotatingAgentToken}>
-            {rotatingAgentToken ? 'Rotating…' : (agentConfig.hasToken ? 'Rotate Token' : 'Generate Token')}
-          </button>
-        </div>
-        {!!latestAgentToken && (
-          <div className="success-msg" style={{ marginBottom: 8 }}>
-            <div style={{ fontWeight: 700, marginBottom: 4 }}>New Agent Token (copy now)</div>
-            <code style={{ userSelect: 'all', wordBreak: 'break-all' }}>{latestAgentToken}</code>
+        <div className="settings-body">
+          <div style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 10 }}>
+            Connect your external agent (for example a Claude workflow) to push job results into your pipeline using your own model/account costs.
           </div>
-        )}
-        <pre style={{ fontSize: 12, whiteSpace: 'pre-wrap' }}>{`POST ${agentConfig.ingestPath || '/api/agents/ingest'}
+          <div className="settings-grid">
+            <div className="field">
+              <label>Provider</label>
+              <select value={agentConfig.provider || 'claude'} onChange={e => setAgentConfig(prev => ({ ...prev, provider: e.target.value }))}>
+                <option value="claude">Claude</option>
+                <option value="custom">Custom</option>
+              </select>
+            </div>
+            <div className="field">
+              <label>Agent Label</label>
+              <input value={agentConfig.label || ''} onChange={e => setAgentConfig(prev => ({ ...prev, label: e.target.value }))} placeholder="My Job Search Agent" />
+            </div>
+            <div className="field">
+              <label>External Agent URL (optional)</label>
+              <input value={agentConfig.endpointUrl || ''} onChange={e => setAgentConfig(prev => ({ ...prev, endpointUrl: e.target.value }))} placeholder="https://..." />
+            </div>
+          </div>
+          <div className="check-row" style={{ marginBottom: 10 }}>
+            <input id="agent-enabled" type="checkbox" checked={!!agentConfig.enabled} onChange={e => setAgentConfig(prev => ({ ...prev, enabled: e.target.checked }))} />
+            <label htmlFor="agent-enabled">Enable ingest for this account</label>
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>
+            Ingest endpoint: <code>{window.location.origin}{agentConfig.ingestPath || '/api/agents/ingest'}</code>
+          </div>
+          <div className="quick-actions" style={{ marginBottom: 8 }}>
+            <button className="btn btn-primary" onClick={saveAgentSettings} disabled={savingAgentConfig}>
+              {savingAgentConfig ? 'Saving…' : 'Save Agent Settings'}
+            </button>
+            <button className="btn btn-ghost" onClick={rotateAgentToken} disabled={rotatingAgentToken}>
+              {rotatingAgentToken ? 'Rotating…' : (agentConfig.hasToken ? 'Rotate Token' : 'Generate Token')}
+            </button>
+          </div>
+          {!!latestAgentToken && (
+            <div className="success-msg" style={{ marginBottom: 8 }}>
+              <div style={{ fontWeight: 700, marginBottom: 4 }}>New Agent Token (copy now)</div>
+              <code style={{ userSelect: 'all', wordBreak: 'break-all' }}>{latestAgentToken}</code>
+            </div>
+          )}
+          <pre style={{ fontSize: 12, whiteSpace: 'pre-wrap' }}>{`POST ${agentConfig.ingestPath || '/api/agents/ingest'}
 Headers:
   x-agent-token: <YOUR_TOKEN>
   Content-Type: application/json
@@ -1439,12 +1488,20 @@ Body:
     }
   ]
 }`}</pre>
+        </div>
       </div>}
 
       {/* ── Assigned Users (staff/admin) ── */}
       {(me?.isAdmin || me?.role === 'staff') && showAssignedUsers && (
-        <div className="card mb-16" id="settings-assigned-users">
-          <div className="card-title">Assigned Users</div>
+        <div className="settings-card" id="settings-assigned-users">
+          <div className="settings-card-head">
+            <div className="settings-card-ico"><Icon name="users" /></div>
+            <div>
+              <div className="settings-card-title">Assigned Users</div>
+              <div className="settings-card-sub">Candidates assigned to you</div>
+            </div>
+          </div>
+          <div className="settings-body">
           {!assignedUsers.length && (
             <div style={{ color: 'var(--text-muted)' }}>
               {me?.isAdmin ? 'No users in this organization yet.' : 'No users assigned to you yet.'}
@@ -1484,13 +1541,21 @@ Body:
               </tbody>
             </table>
           )}
+          </div>
         </div>
       )}
 
       {/* ── Admin: Team Access ── */}
       {me?.isAdmin && showUserManagement && (
-        <div className="card mb-16" id="settings-users">
-          <div className="card-title">User Management</div>
+        <div className="settings-card" id="settings-users">
+          <div className="settings-card-head">
+            <div className="settings-card-ico"><Icon name="shield" /></div>
+            <div>
+              <div className="settings-card-title">User Management</div>
+              <div className="settings-card-sub">Create users, roles, and password policy</div>
+            </div>
+          </div>
+          <div className="settings-body">
           <div style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 10 }}>
             Create users, change roles, reset passwords, and control force-reset policy.
           </div>
@@ -1561,15 +1626,15 @@ Body:
             <input value={newUserEmail} onChange={e => setNewUserEmail(e.target.value)} placeholder="name@example.com" />
           </div>
           <div className="field">
-            <label>Role</label>
-            <select value={newUserRole} onChange={e => setNewUserRole(e.target.value)}>
-              <option value="accelerator_user">accelerator_user</option>
-              <option value="premium_user">premium_user</option>
-              <option value="vip_user">vip_user</option>
-              <option value="job_seeker">job_seeker (legacy)</option>
-              <option value="staff">staff</option>
-              <option value="admin">admin</option>
-            </select>
+              <label>Role</label>
+              <select value={newUserRole} onChange={e => setNewUserRole(e.target.value)}>
+                <option value="accelerator_user">accelerator_user</option>
+                <option value="premium_user">premium_user</option>
+                <option value="vip_user">vip_user</option>
+                <option value="job_seeker">job_seeker (legacy)</option>
+                <option value="staff">staff</option>
+                <option value="admin">admin</option>
+              </select>
           </div>
           <div className="field">
             <label>Temporary Password</label>
@@ -1582,87 +1647,95 @@ Body:
           </div>
           <div style={{ fontWeight: 600, marginBottom: 8 }}>Manage Existing Users</div>
           <div className="table-scroll">
-            <table className="data-table data-table-users">
-              <thead>
-                <tr>
-                  <th>Username</th>
-                  <th>Email</th>
-                  <th>Role</th>
-                  <th>Password Reset</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {adminUsers.map(user => (
-                  <tr key={`org-user-${user.id}`}>
-                    <td>{user.username}</td>
-                    <td>{user.email || '—'}</td>
-                    <td>
-                      <select
-                        value={user.role || ''}
-                        disabled={updatingRoleUserId === String(user.id) || user.username === me?.username || !user.role}
-                        onChange={(e) => changeUserRole(user.id, e.target.value)}
+          <table className="data-table data-table-users">
+            <thead>
+              <tr>
+                <th>Username</th>
+                <th>Email</th>
+                <th>Role</th>
+                <th>Password Reset</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {adminUsers.map(user => (
+                <tr key={`org-user-${user.id}`}>
+                  <td>{user.username}</td>
+                  <td>{user.email || '—'}</td>
+                  <td>
+                    <select
+                      value={user.role || ''}
+                      disabled={updatingRoleUserId === String(user.id) || user.username === me?.username || !user.role}
+                      onChange={(e) => changeUserRole(user.id, e.target.value)}
+                    >
+                      {!user.role && <option value="">No membership</option>}
+                      <option value="accelerator_user">accelerator_user</option>
+                      <option value="premium_user">premium_user</option>
+                      <option value="vip_user">vip_user</option>
+                      <option value="job_seeker">job_seeker (legacy)</option>
+                      <option value="staff">staff</option>
+                      <option value="admin">admin</option>
+                    </select>
+                  </td>
+                  <td>{user.mustChangePassword ? 'Required' : 'No'}</td>
+                  <td>
+                    <div className="table-actions">
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => resetUserPassword(user)}
+                        disabled={resettingPasswordUserId === String(user.id)}
                       >
-                        {!user.role && <option value="">No membership</option>}
-                        <option value="accelerator_user">accelerator_user</option>
-                        <option value="premium_user">premium_user</option>
-                        <option value="vip_user">vip_user</option>
-                        <option value="job_seeker">job_seeker (legacy)</option>
-                        <option value="staff">staff</option>
-                        <option value="admin">admin</option>
-                      </select>
-                    </td>
-                    <td>{user.mustChangePassword ? 'Required' : 'No'}</td>
-                    <td>
-                      <div className="table-actions">
+                        {resettingPasswordUserId === String(user.id) ? 'Resetting…' : 'Reset Password'}
+                      </button>
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => toggleForceReset(user)}
+                        disabled={togglingMustResetUserId === String(user.id)}
+                      >
+                        {togglingMustResetUserId === String(user.id)
+                          ? 'Saving…'
+                          : (user.mustChangePassword ? 'Clear Force Reset' : 'Force Reset')}
+                      </button>
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => toggleByoPermission(user)}
+                        disabled={togglingByoPermissionUserId === String(user.id)}
+                      >
+                        {togglingByoPermissionUserId === String(user.id)
+                          ? 'Saving…'
+                          : (user?.permissions?.canUseByoAgent ? 'Disable BYO Agent' : 'Enable BYO Agent')}
+                      </button>
+                      {user.username !== me?.username && (
                         <button
                           className="btn btn-ghost btn-sm"
-                          onClick={() => resetUserPassword(user)}
-                          disabled={resettingPasswordUserId === String(user.id)}
+                          style={{ color: 'var(--red)' }}
+                          onClick={() => deleteUser(user)}
                         >
-                          {resettingPasswordUserId === String(user.id) ? 'Resetting…' : 'Reset Password'}
+                          Delete User
                         </button>
-                        <button
-                          className="btn btn-ghost btn-sm"
-                          onClick={() => toggleForceReset(user)}
-                          disabled={togglingMustResetUserId === String(user.id)}
-                        >
-                          {togglingMustResetUserId === String(user.id)
-                            ? 'Saving…'
-                            : (user.mustChangePassword ? 'Clear Force Reset' : 'Force Reset')}
-                        </button>
-                        <button
-                          className="btn btn-ghost btn-sm"
-                          onClick={() => toggleByoPermission(user)}
-                          disabled={togglingByoPermissionUserId === String(user.id)}
-                        >
-                          {togglingByoPermissionUserId === String(user.id)
-                            ? 'Saving…'
-                            : (user?.permissions?.canUseByoAgent ? 'Disable BYO Agent' : 'Enable BYO Agent')}
-                        </button>
-                        {user.username !== me?.username && (
-                          <button
-                            className="btn btn-ghost btn-sm"
-                            style={{ color: 'var(--red)' }}
-                            onClick={() => deleteUser(user)}
-                          >
-                            Delete User
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          </div>
           </div>
         </div>
       )}
 
       {/* ── Admin: Staff Assignments ── */}
       {me?.isAdmin && showAssignments && (
-        <div className="card mb-16" id="settings-assignments">
-          <div className="card-title">Staff Assignments</div>
+        <div className="settings-card" id="settings-assignments">
+          <div className="settings-card-head">
+            <div className="settings-card-ico"><Icon name="link" /></div>
+            <div>
+              <div className="settings-card-title">Staff Assignments</div>
+              <div className="settings-card-sub">Staff-to-job-seeker ownership mapping</div>
+            </div>
+          </div>
+          <div className="settings-body">
           <div className="settings-grid">
             <div className="field">
               <label>Staff User</label>
@@ -1719,13 +1792,21 @@ Body:
               </tbody>
             </table>
           )}
+          </div>
         </div>
       )}
 
       {/* ── Admin: Audit Log ── */}
       {me?.isAdmin && showOperations && (
-        <div className="card mb-16">
-          <div className="card-title">Audit Log</div>
+        <div className="settings-card">
+          <div className="settings-card-head">
+            <div className="settings-card-ico"><Icon name="scroll-text" /></div>
+            <div>
+              <div className="settings-card-title">Audit Log</div>
+              <div className="settings-card-sub">Admin action history</div>
+            </div>
+          </div>
+          <div className="settings-body">
           {!auditLogs.length && <div style={{ color: 'var(--text-muted)' }}>No audit activity yet.</div>}
           {!!auditLogs.length && (
             <table className="data-table">
@@ -1753,12 +1834,20 @@ Body:
               </tbody>
             </table>
           )}
+          </div>
         </div>
       )}
 
       {me?.isAdmin && showOperations && (
-        <div className="card mb-16">
-          <div className="card-title">Admin Ops Status</div>
+        <div className="settings-card">
+          <div className="settings-card-head">
+            <div className="settings-card-ico"><Icon name="zap" /></div>
+            <div>
+              <div className="settings-card-title">Admin Ops Status</div>
+              <div className="settings-card-sub">Background job health and sync status</div>
+            </div>
+          </div>
+          <div className="settings-body">
           <div style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 8 }}>
             Quick view of background/operational job health from recent run history.
           </div>
@@ -1877,12 +1966,20 @@ Body:
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 
       {me?.isAdmin && showOperations && (
-        <div className="card mb-16">
-          <div className="card-title">Deployment Profile</div>
+        <div className="settings-card">
+          <div className="settings-card-head">
+            <div className="settings-card-ico"><Icon name="server" /></div>
+            <div>
+              <div className="settings-card-title">Deployment Profile</div>
+              <div className="settings-card-sub">Production readiness guardrails</div>
+            </div>
+          </div>
+          <div className="settings-body">
           <div style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 8 }}>
             Lightweight production guardrails check (dev/prod split readiness).
           </div>
@@ -1919,12 +2016,20 @@ Body:
               </ul>
             </div>
           )}
+          </div>
         </div>
       )}
 
       {me?.isAdmin && showOperations && (
-        <div className="card mb-16">
-          <div className="card-title">Cost Snapshot</div>
+        <div className="settings-card">
+          <div className="settings-card-head">
+            <div className="settings-card-ico"><Icon name="trending-up" /></div>
+            <div>
+              <div className="settings-card-title">Cost Snapshot</div>
+              <div className="settings-card-sub">Cloud Run, scheduler, and budget overview</div>
+            </div>
+          </div>
+          <div className="settings-body">
           <div style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 10 }}>
             Snapshot includes Cloud Run scaling, scheduler jobs, artifact image count, logging exclusions, and budgets (when permitted).
           </div>
@@ -1946,42 +2051,96 @@ Body:
               </pre>
             </div>
           )}
+          </div>
         </div>
       )}
 
-      {/* ── Backup & Restore (admin only) ── */}
-      {canViewOperationalSettings && showOperations && <div className="card" id="settings-backups">
-        <div className="card-title">Backup & Restore</div>
-        <div style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 10 }}>
-          Export your current app data to a JSON file and restore it later.
-        </div>
-        <div className="quick-actions" style={{ marginBottom: 14 }}>
-          <button className="btn btn-primary" onClick={exportBackup} disabled={exportingBackup || !me?.isAdmin}>
-            {exportingBackup ? 'Exporting…' : 'Export Backup'}
-          </button>
-          <button className="btn btn-ghost" onClick={exportDbFile} disabled={exportingDbFile || !me?.isAdmin}>
-            {exportingDbFile ? 'Exporting…' : 'Export DB File (.db)'}
-          </button>
-          <button className="btn btn-ghost" onClick={chooseBackupFile} disabled={restoringBackup || !me?.isAdmin}>
-            {restoringBackup ? 'Restoring…' : 'Restore Backup'}
-          </button>
-          <input
-            ref={backupFileInputRef}
-            type="file"
-            accept=".json,application/json"
-            style={{ display: 'none' }}
-            onChange={restoreBackupFromFile}
-          />
-        </div>
-        {!me?.isAdmin && (
-          <div style={{ color: 'var(--text-muted)', fontSize: 12, marginBottom: 10 }}>
-            Backup and restore are available to admin users only.
+      {/* ── Appearance ── */}
+      {showAccountSettings && (
+        <div className="settings-card">
+          <div className="settings-card-head">
+            <div className="settings-card-ico"><Icon name="sun" /></div>
+            <div>
+              <div className="settings-card-title">Appearance</div>
+              <div className="settings-card-sub">Theme, accent color, and display</div>
+            </div>
           </div>
-        )}
-        <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>
-          `.db` export works only in local SQLite mode (for example `DATABASE_URL=file:./data/app.db`).
+          <div className="settings-body">
+            <div className="settings-toggle-row">
+              <div className="settings-toggle-label">
+                <div className="settings-toggle-name">Dark mode</div>
+                <div className="settings-toggle-desc">Switch between light and dark interface</div>
+              </div>
+              <Toggle on={themeMode === 'dark'} onToggle={() => onModeChange && onModeChange(themeMode === 'dark' ? 'light' : 'dark')} />
+            </div>
+            <div className="settings-divider" />
+            <div className="settings-row">
+              <div className="settings-row-label">
+                Accent color
+                <div className="sr-sub">Applied across the UI</div>
+              </div>
+              <div className="settings-row-control">
+                <div className="accent-swatches">
+                  {ACCENT_SWATCHES.map(a => (
+                    <div
+                      key={a.val}
+                      className={'accent-swatch' + (accent === a.val ? ' active' : '')}
+                      style={{ background: a.color }}
+                      title={a.name}
+                      onClick={() => onAccentChange && onAccentChange(a.val)}
+                    />
+                  ))}
+                </div>
+                <div className="settings-hint">Current: {ACCENT_SWATCHES.find(a => a.val === accent)?.name || accent || 'Indigo'}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Backup & Restore ── */}
+      {canViewOperationalSettings && showOperations && <div className="settings-card" id="settings-backups">
+        <div className="settings-card-head">
+          <div className="settings-card-ico"><Icon name="file-text" /></div>
+          <div>
+            <div className="settings-card-title">Backup &amp; Restore</div>
+            <div className="settings-card-sub">Export or restore your job search data</div>
+          </div>
+        </div>
+        <div className="settings-body">
+          <div style={{ color: 'var(--text-3)', fontSize: 13, marginBottom: 10 }}>
+            Export your current app data to a JSON file and restore it later.
+          </div>
+          <div className="quick-actions" style={{ marginBottom: 14 }}>
+            <button className="btn btn-primary" onClick={exportBackup} disabled={exportingBackup || !me?.isAdmin}>
+              {exportingBackup ? 'Exporting…' : 'Export Backup'}
+            </button>
+            <button className="btn btn-ghost" onClick={exportDbFile} disabled={exportingDbFile || !me?.isAdmin}>
+              {exportingDbFile ? 'Exporting…' : 'Export DB File (.db)'}
+            </button>
+            <button className="btn btn-ghost" onClick={chooseBackupFile} disabled={restoringBackup || !me?.isAdmin}>
+              {restoringBackup ? 'Restoring…' : 'Restore Backup'}
+            </button>
+            <input
+              ref={backupFileInputRef}
+              type="file"
+              accept=".json,application/json"
+              style={{ display: 'none' }}
+              onChange={restoreBackupFromFile}
+            />
+          </div>
+          {!me?.isAdmin && (
+            <div style={{ color: 'var(--text-3)', fontSize: 12, marginBottom: 10 }}>
+              Backup and restore are available to admin users only.
+            </div>
+          )}
+          <div style={{ color: 'var(--text-3)', fontSize: 12 }}>
+            `.db` export works only in local SQLite mode (for example `DATABASE_URL=file:./data/app.db`).
+          </div>
         </div>
       </div>}
+
+      </div>
     </div>
   )
 }
