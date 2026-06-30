@@ -222,13 +222,19 @@ export default function App() {
     setNavIntent(intent ? { ...intent, _ts: Date.now() } : { _ts: Date.now() })
   }
 
-  async function refreshMe() {
+  function resetShellView(nextView = 'dashboard') {
+    setView(nextView)
+    setNavIntent(null)
+  }
+
+  async function refreshMe({ resetView = false } = {}) {
     try {
       const r = await fetch('/api/me', { credentials: 'include' })
       if (!r.ok) { setAuthed(false); setMe(null); return }
       const data = await r.json()
       setMe(data)
       setAuthed(true)
+      if (resetView) resetShellView()
     } catch {
       setAuthed(false)
       setMe(null)
@@ -340,15 +346,18 @@ export default function App() {
 
   useEffect(() => {
     if (authed !== true || !me?.onboardingComplete || me?.mustChangePassword) return
-    if (view === 'staff_ops') setView('operations')
-    if (view === 'staff_tasks' || view === 'staff_threads') setView('operations')
-    if (!allNavIds.has(view)) setView(isStaffLike ? 'operations' : 'dashboard')
+    if (view === 'staff_ops') {
+      resetShellView(isStaff ? 'operations' : 'dashboard')
+      return
+    }
+    if (!allNavIds.has(view)) resetShellView()
   }, [authed, me, isStaffLike, view, allNavIds])
 
   async function logout() {
     await fetch('/api/logout', { method: 'POST', credentials: 'include' })
     setAuthed(false)
     setMe(null)
+    resetShellView()
   }
 
   if (authed === null) {
@@ -359,9 +368,9 @@ export default function App() {
     )
   }
 
-  if (!authed) return <Login onLogin={refreshMe} />
-  if (me?.mustChangePassword) return <ForcePasswordChange onDone={refreshMe} onLogout={logout} />
-  if (!me?.onboardingComplete) return <SetupWizard me={me} onComplete={refreshMe} onLogout={logout} />
+  if (!authed) return <Login onLogin={() => refreshMe({ resetView: true })} />
+  if (me?.mustChangePassword) return <ForcePasswordChange onDone={() => refreshMe({ resetView: true })} onLogout={logout} />
+  if (!me?.onboardingComplete) return <SetupWizard me={me} onComplete={() => refreshMe({ resetView: true })} onLogout={logout} />
 
   return (
     <div className="stage" data-mode={mode} data-accent={accent} data-nav="full">
@@ -394,7 +403,7 @@ export default function App() {
         {(view === 'settings' || view === 'admin_operations' || view === 'admin_users' || view === 'admin_assignments') && (
           <Settings
             me={me}
-            onProfileUpdated={refreshMe}
+            onProfileUpdated={() => refreshMe({ resetView: true })}
             onNavigate={navigate}
             settingsMode={settingsMode}
             themeMode={mode}
