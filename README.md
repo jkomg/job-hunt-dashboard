@@ -111,6 +111,7 @@ From `Settings`:
 
 ## Docs Index
 
+- Job seeker walkthrough: `docs/JOB_SEEKER_USAGE_GUIDE.md`
 - Staff + admin operations: `docs/STAFF_ADMIN_RUNBOOK.md`
 - Staff product scope/spec: `docs/STAFF_OPS_MVP_SPEC.md`
 - Hosted rollout plan: `docs/RR_PLATFORM_RELEASE_PLAN.md`
