@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import ReactMarkdown from 'react-markdown'
 import { Icon } from '../ui-icons.jsx'
+import MessageMarkdown from './MessageMarkdown.jsx'
 
 async function api(path, options = {}) {
   const res = await fetch(path, { credentials: 'include', ...options })
@@ -171,7 +171,7 @@ export default function Inbox() {
 
                 <div className="conv-messages">
                   {messages.map(m => {
-                    const isYou = m.authorRole === 'job_seeker' || m.fromJobSeeker
+                    const isYou = String(m.authorUserId) === String(selectedThread.jobSeekerUserId) || !!m.fromJobSeeker
                     return (
                       <div key={m.id} className={'msg-row ' + (isYou ? 'you' : 'them')}>
                         <div className="msg-avatar">{initials(m.authorUsername || (isYou ? 'Me' : 'Staff'))}</div>
@@ -179,13 +179,7 @@ export default function Inbox() {
                           <div className="msg-name">{m.authorUsername || (isYou ? 'You' : 'Staff')} · {fmt(m.createdAt)}</div>
                           <div className="msg-bubble">
                             <div className="inbox-message-body">
-                              <ReactMarkdown
-                                components={{
-                                  a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>
-                                }}
-                              >
-                                {m.body}
-                              </ReactMarkdown>
+                              <MessageMarkdown text={m.body} />
                             </div>
                           </div>
                         </div>

@@ -13,6 +13,7 @@ import Templates from './components/Templates.jsx'
 import Watchlist from './components/Watchlist.jsx'
 import Settings from './components/Settings.jsx'
 import StaffOps from './components/StaffOps.jsx'
+import Guides from './components/Guides.jsx'
 import { Icon } from './ui-icons.jsx'
 import { useTheme } from './useTheme.js'
 
@@ -39,6 +40,7 @@ const JOB_SEEKER_GROUPS = [
     items: [
       { id: 'inbox',      label: 'Inbox',      icon: 'message',       ico: 'oklch(0.58 0.20 246)' },
       { id: 'templates',  label: 'Templates',  icon: 'mail',          ico: 'oklch(0.54 0.13 262)' },
+      { id: 'guides',     label: 'Guides',     icon: 'book-open',     ico: 'oklch(0.62 0.10 220)' },
     ]
   },
 ]
@@ -56,6 +58,7 @@ const STAFF_GROUPS = [
     items: [
       { id: 'staff_tasks',    label: 'Tasks',       icon: 'list-checks',    ico: 'oklch(0.60 0.17 200)' },
       { id: 'staff_threads',  label: 'Threads',     icon: 'message-square', ico: 'oklch(0.64 0.16 232)' },
+      { id: 'guides',         label: 'Guides',      icon: 'book-open',      ico: 'oklch(0.62 0.10 220)' },
     ]
   },
 ]
@@ -68,6 +71,7 @@ const ADMIN_GROUPS = [
       { id: 'admin_operations',   label: 'Operations',      icon: 'zap',            ico: 'oklch(0.60 0.18 28)'  },
       { id: 'admin_users',        label: 'User Mgmt',       icon: 'users',          ico: 'oklch(0.56 0.22 268)' },
       { id: 'admin_assignments',  label: 'Assignments',     icon: 'link',           ico: 'oklch(0.62 0.14 300)' },
+      { id: 'guides',             label: 'Guides',          icon: 'book-open',      ico: 'oklch(0.62 0.10 220)' },
     ]
   },
 ]
@@ -90,14 +94,18 @@ const MOBILE_NAV_ITEMS_STAFF = [
   { id: 'settings',      label: 'Settings',   icon: 'settings'       },
 ]
 
-function Sidebar({ view, go, groups, staffBadges, isStaffLike, me, onLogout }) {
+function Sidebar({ view, go, groups, staffBadges, memberBadges, pipelineBadgeCount, isStaffLike, me, onLogout }) {
   const allItems = groups.flatMap(g => g.items)
   const activeItem = allItems.find(it => it.id === view) || SETTINGS_ITEM
 
   function getBadge(id) {
-    if (!isStaffLike) return 0
-    if (id === 'staff_tasks') return staffBadges.tasksOpen
-    if (id === 'staff_threads') return staffBadges.threadsOpen
+    if (isStaffLike) {
+      if (id === 'staff_tasks') return staffBadges.tasksOpen
+      if (id === 'staff_threads') return staffBadges.threadsOpen
+      return 0
+    }
+    if (id === 'inbox') return memberBadges.inboxOpenThreads
+    if (id === 'pipeline') return pipelineBadgeCount
     return 0
   }
 
@@ -167,11 +175,15 @@ function Sidebar({ view, go, groups, staffBadges, isStaffLike, me, onLogout }) {
   )
 }
 
-function MobileNav({ view, go, items, staffBadges, isStaffLike }) {
+function MobileNav({ view, go, items, staffBadges, memberBadges, pipelineBadgeCount, isStaffLike }) {
   function getBadge(id) {
-    if (!isStaffLike) return 0
-    if (id === 'staff_tasks') return staffBadges.tasksOpen
-    if (id === 'staff_threads') return staffBadges.threadsOpen
+    if (isStaffLike) {
+      if (id === 'staff_tasks') return staffBadges.tasksOpen
+      if (id === 'staff_threads') return staffBadges.threadsOpen
+      return 0
+    }
+    if (id === 'inbox') return memberBadges.inboxOpenThreads
+    if (id === 'pipeline') return pipelineBadgeCount
     return 0
   }
 
@@ -201,6 +213,8 @@ export default function App() {
   const [view, setView] = useState('dashboard')
   const [navIntent, setNavIntent] = useState(null)
   const [staffBadges, setStaffBadges] = useState({ tasksOpen: 0, threadsOpen: 0 })
+  const [memberBadges, setMemberBadges] = useState({ inboxOpenThreads: 0 })
+  const [pipelineBadgeCount, setPipelineBadgeCount] = useState(0)
   const { mode, accent, setMode, setAccent } = useTheme()
 
   function navigate(nextView, intent = null) {
@@ -259,10 +273,77 @@ export default function App() {
   }, [authed, isStaffLike])
 
   useEffect(() => {
+    if (!authed || isStaffLike || !me?.id) return
+    let active = true
+    const seenKey = `pipeline_seen_ids_user_${me.id}`
+    async function loadPipelineBadge() {
+      try {
+        const r = await fetch('/api/pipeline', { credentials: 'include' })
+        if (!r.ok) return
+        const rows = await r.json()
+        const ids = Array.isArray(rows) ? rows.map(x => String(x?.id || '')).filter(Boolean) : []
+        let seen = []
+        try { seen = JSON.parse(localStorage.getItem(seenKey) || '[]') } catch { seen = [] }
+        const seenSet = new Set((Array.isArray(seen) ? seen : []).map(String))
+        const unseen = ids.filter(id => !seenSet.has(id))
+        if (!active) return
+        setPipelineBadgeCount(unseen.length)
+      } catch {
+        // ignore pipeline badge refresh errors
+      }
+    }
+    loadPipelineBadge()
+    const id = setInterval(loadPipelineBadge, 60000)
+    return () => {
+      active = false
+      clearInterval(id)
+    }
+  }, [authed, isStaffLike, me?.id])
+
+  useEffect(() => {
+    if (isStaffLike || view !== 'pipeline' || !me?.id) return
+    const seenKey = `pipeline_seen_ids_user_${me.id}`
+    fetch('/api/pipeline', { credentials: 'include' })
+      .then(r => r.ok ? r.json() : [])
+      .then(rows => {
+        const ids = Array.isArray(rows) ? rows.map(x => String(x?.id || '')).filter(Boolean) : []
+        localStorage.setItem(seenKey, JSON.stringify(ids))
+        setPipelineBadgeCount(0)
+      })
+      .catch(() => {})
+  }, [view, isStaffLike, me?.id])
+
+  useEffect(() => {
+    if (!authed || isStaffLike) return
+    let active = true
+    async function loadMemberBadges() {
+      try {
+        const r = await fetch('/api/member/threads', { credentials: 'include' })
+        if (!r.ok) return
+        const data = await r.json()
+        const threads = Array.isArray(data?.threads) ? data.threads : []
+        if (!active) return
+        setMemberBadges({
+          inboxOpenThreads: threads.filter(t => t.status === 'open').length
+        })
+      } catch {
+        // ignore member badge refresh errors
+      }
+    }
+    loadMemberBadges()
+    const id = setInterval(loadMemberBadges, 60000)
+    return () => {
+      active = false
+      clearInterval(id)
+    }
+  }, [authed, isStaffLike])
+
+  useEffect(() => {
     if (authed !== true || !me?.onboardingComplete || me?.mustChangePassword) return
     if (view === 'staff_ops') setView('operations')
+    if (view === 'staff_tasks' || view === 'staff_threads') setView('operations')
     if (!allNavIds.has(view)) setView(isStaffLike ? 'operations' : 'dashboard')
-  }, [authed, me, isStaffLike])
+  }, [authed, me, isStaffLike, view, allNavIds])
 
   async function logout() {
     await fetch('/api/logout', { method: 'POST', credentials: 'include' })
@@ -289,6 +370,8 @@ export default function App() {
         go={navigate}
         groups={navGroups}
         staffBadges={staffBadges}
+        memberBadges={memberBadges}
+        pipelineBadgeCount={pipelineBadgeCount}
         isStaffLike={isStaffLike}
         me={me}
         onLogout={logout}
@@ -296,9 +379,9 @@ export default function App() {
 
       <main className="main">
         {view === 'dashboard'      && <Dashboard onNavigate={navigate} me={me} />}
-        {isStaff && view === 'operations'     && <StaffOps me={me} mode="operations" />}
-        {isStaff && view === 'staff_tasks'    && <StaffOps me={me} mode="tasks" />}
-        {isStaff && view === 'staff_threads'  && <StaffOps me={me} mode="threads" />}
+        {isStaff && view === 'operations'     && <StaffOps me={me} mode="operations" navIntent={navIntent} />}
+        {isStaff && view === 'staff_tasks'    && <StaffOps me={me} mode="tasks" navIntent={navIntent} />}
+        {isStaff && view === 'staff_threads'  && <StaffOps me={me} mode="threads" navIntent={navIntent} />}
         {!isStaffLike && view === 'checkin'       && <DailyCheckin />}
         {!isStaffLike && view === 'pipeline'      && <Pipeline navIntent={navIntent} />}
         {!isStaffLike && view === 'contacts'      && <Contacts />}
@@ -307,6 +390,7 @@ export default function App() {
         {!isStaffLike && view === 'events'        && <Events />}
         {!isStaffLike && view === 'templates'     && <Templates />}
         {!isStaffLike && view === 'watchlist'     && <Watchlist />}
+        {view === 'guides'                        && <Guides />}
         {(view === 'settings' || view === 'admin_operations' || view === 'admin_users' || view === 'admin_assignments') && (
           <Settings
             me={me}
@@ -326,6 +410,8 @@ export default function App() {
         go={navigate}
         items={mobileItems}
         staffBadges={staffBadges}
+        memberBadges={memberBadges}
+        pipelineBadgeCount={pipelineBadgeCount}
         isStaffLike={isStaffLike}
       />
     </div>

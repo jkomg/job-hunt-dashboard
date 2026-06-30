@@ -49,7 +49,7 @@ const STAGE_TO_SHEET_STATUS = new Map([
   ['❌ Closed', 'Closed']
 ])
 
-const DEFAULT_PIPELINE_TABS = 'Jobs & Applications,Found'
+const DEFAULT_PIPELINE_TABS = 'Jobs & Applications'
 const DEFAULT_CONTACTS_TABS = 'Networking Tracker'
 const DEFAULT_INTERVIEWS_TABS = 'Interview Tracker'
 const DEFAULT_EVENTS_TABS = 'Events'

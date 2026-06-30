@@ -125,7 +125,7 @@ export default function Dashboard({ onNavigate, me }) {
         <div className="page-head">
           <div>
             <h1>Staff Briefing</h1>
-            <div className="sub">{todayDate.toUpperCase()}</div>
+            <div className="sub">{todayDate.toUpperCase()} · @{me?.username || 'unknown'} ({me?.role || 'unknown'})</div>
           </div>
           {me?.isAdmin && (
             <div style={{ display: 'flex', gap: 6 }}>
@@ -135,35 +135,48 @@ export default function Dashboard({ onNavigate, me }) {
           )}
         </div>
 
-        <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)', marginBottom: 22 }}>
-          <div className="stat-card"><div className="stat-value">{summary.candidates || candidates.length}</div><div className="stat-label">Candidates</div></div>
-          <div className="stat-card"><div className="stat-value">{draftRecommendations.length}</div><div className="stat-label">Draft Jobs</div></div>
-          <div className="stat-card"><div className="stat-value">{(todoTasks.length) + (inProgressTasks.length)}</div><div className="stat-label">Open Tasks</div></div>
-          <div className="stat-card"><div className="stat-value">{openThreads}</div><div className="stat-label">Open Threads</div></div>
-        </div>
-
-        <div className="card" style={{ marginBottom: 16, borderColor: 'var(--accent-line)' }}>
-          <div className="card-title">Daily Ops Checklist</div>
-          {[
-            { label: 'Review candidate queue', meta: `${candidates.length} candidate${candidates.length === 1 ? '' : 's'}`, view: 'operations', cta: 'Open Ops' },
-            { label: 'Post researched jobs', meta: `${draftRecommendations.length} draft${draftRecommendations.length === 1 ? '' : 's'} pending`, view: 'operations', cta: 'Post Jobs' },
-            { label: 'Resolve tasks', meta: `${todoTasks.length} todo · ${overdueTasks.length} overdue · ${dueTodayTasks.length} due today`, view: 'staff_tasks', cta: 'Open Tasks' },
-            { label: 'Clear thread inbox', meta: `${openThreads} open · ${staleThreads} stale 48h+`, view: 'staff_threads', cta: 'Open Threads' },
-            { label: 'Review audit & sync', meta: 'Keep org integrations healthy', view: 'settings', cta: 'Open Settings' },
-          ].map(row => (
-            <div key={row.label} className="contact-row" style={{ padding: '8px 0' }}>
-              <div className="contact-info">
-                <div className="contact-name">{row.label}</div>
-                <div className="contact-meta">{row.meta}</div>
-              </div>
-              <button className="btn btn-ghost btn-sm" onClick={() => onNavigate(row.view)}>{row.cta}</button>
+        <div className="card mb-16" style={{ borderColor: 'var(--accent)' }}>
+          <div className="card-title" style={{ color: 'var(--accent)' }}>Today Focus</div>
+          <div style={{ color: 'var(--text-muted)', fontSize: 12, marginBottom: 10 }}>
+            Viewing: {scopeLabel}
+          </div>
+          <div className="stats-grid" style={{ marginBottom: 12 }}>
+            <div className="stat-card"><div className="stat-value">{summary.candidates || candidates.length}</div><div className="stat-label">{summary.scope === 'all' ? 'Total Candidates' : 'Assigned Candidates'}</div></div>
+            <div className="stat-card">
+              <div className="stat-value">{summary.weeklyRecommendationPosted || 0}/{summary.weeklyRecommendationTarget || 0}</div>
+              <div className="stat-label">Weekly Job Posts</div>
             </div>
-          ))}
+            <div className="stat-card"><div className="stat-value">{(summary.tasksTodo || todoTasks.length) + (summary.tasksInProgress || inProgressTasks.length)}</div><div className="stat-label">Open Tasks</div></div>
+            <div className="stat-card"><div className="stat-value">{openThreads}</div><div className="stat-label">Open Threads</div></div>
+          </div>
+          <div className="quick-actions">
+            <button className="btn btn-primary" onClick={() => onNavigate('operations', { staffFocus: 'candidates' })}>
+              Review Queue
+            </button>
+            <button className="btn btn-ghost" onClick={() => onNavigate('operations', { staffFocus: 'recommendations' })}>
+              Post Jobs ({summary.weeklyRecommendationRemaining || 0} due)
+            </button>
+            <button className="btn btn-ghost" onClick={() => onNavigate('operations', { staffFocus: 'tasks' })}>
+              Tasks ({todoTasks.length + inProgressTasks.length})
+            </button>
+            <button className="btn btn-ghost" onClick={() => onNavigate('operations', { staffFocus: 'threads' })}>
+              Threads ({openThreads})
+            </button>
+            {me?.isAdmin && (
+              <button className="btn btn-ghost" onClick={() => onNavigate('admin_operations')}>
+                Admin Operations
+              </button>
+            )}
+          </div>
+          <div style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 10 }}>
+            Overdue tasks: {overdueTasks.length} · Due today: {dueTodayTasks.length} · Stale threads 48h+: {staleThreads}
+          </div>
         </div>
 
-        {!!sourcePerformance.length && (
-          <div className="card">
-            <div className="card-title">Source Performance</div>
+        <div className="card">
+          <div className="card-title">Source Performance</div>
+          {!sourcePerformance.length && <div style={{ color: 'var(--text-muted)' }}>No source data yet.</div>}
+          {!!sourcePerformance.length && (
             <table className="data-table">
               <thead><tr><th>Source</th><th>Active</th><th>Response %</th><th>Interview %</th><th>Offers</th></tr></thead>
               <tbody>
@@ -174,8 +187,8 @@ export default function Dashboard({ onNavigate, me }) {
                 ))}
               </tbody>
             </table>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     )
   }

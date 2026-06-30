@@ -21,6 +21,7 @@ const EXPECTED_SCHEDULER_JOBS = [
   { name: 'job-hunt-daily-sheets-sync', cadence: 'daily', purpose: 'Google Sheets sync' },
   { name: 'job-hunt-daily-backup-export', cadence: 'daily', purpose: 'Backup export to GCS' }
 ]
+const DEFAULT_CANDIDATE_ROLE = 'accelerator_user'
 
 function tabsToText(tabs) {
   return (tabs || []).join(', ')
@@ -86,7 +87,7 @@ function describeAuditAction(log) {
   const md = log?.metadata || {}
   if (log?.action === 'admin.user.created') {
     const username = md.username || log.targetUsername || log.targetUserId || 'unknown'
-    const role = md.role || 'job_seeker'
+    const role = md.role || DEFAULT_CANDIDATE_ROLE
     return `Created user ${username} (${role})`
   }
   if (log?.action === 'admin.staff_assignment.created') {
@@ -194,6 +195,7 @@ function ErrorCallout({ error }) {
 }
 
 export default function Settings({ me, onProfileUpdated, onNavigate, settingsMode = 'settings', themeMode, accent, onModeChange, onAccentChange }) {
+  const CANDIDATE_ROLES = ['job_seeker', 'accelerator_user', 'premium_user', 'vip_user']
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [savingProfile, setSavingProfile] = useState(false)
@@ -208,6 +210,10 @@ export default function Settings({ me, onProfileUpdated, onNavigate, settingsMod
   const [gmailStatus, setGmailStatus] = useState(null)
   const [gmailConnecting, setGmailConnecting] = useState(false)
   const [gmailImporting, setGmailImporting] = useState(false)
+  const [agentConfig, setAgentConfig] = useState({ enabled: false, provider: 'claude', label: '', endpointUrl: '', hasToken: false, ingestPath: '/api/agents/ingest' })
+  const [savingAgentConfig, setSavingAgentConfig] = useState(false)
+  const [rotatingAgentToken, setRotatingAgentToken] = useState(false)
+  const [latestAgentToken, setLatestAgentToken] = useState('')
   const [status, setStatus] = useState(null)
   const [costSnapshots, setCostSnapshots] = useState([])
   const [schemaReport, setSchemaReport] = useState(null)
@@ -221,7 +227,7 @@ export default function Settings({ me, onProfileUpdated, onNavigate, settingsMod
 
   const [enabled, setEnabled] = useState(true)
   const [sheetId, setSheetId] = useState('')
-  const [pipelineTabsText, setPipelineTabsText] = useState('Jobs & Applications, Found')
+  const [pipelineTabsText, setPipelineTabsText] = useState('Jobs & Applications')
   const [contactsTabsText, setContactsTabsText] = useState('Networking Tracker')
   const [interviewsTabsText, setInterviewsTabsText] = useState('Interview Tracker')
   const [eventsTabsText, setEventsTabsText] = useState('Events')
@@ -233,12 +239,13 @@ export default function Settings({ me, onProfileUpdated, onNavigate, settingsMod
   const [auditLogs, setAuditLogs] = useState([])
   const [newUsername, setNewUsername] = useState('')
   const [newUserEmail, setNewUserEmail] = useState('')
-  const [newUserRole, setNewUserRole] = useState('job_seeker')
+  const [newUserRole, setNewUserRole] = useState(DEFAULT_CANDIDATE_ROLE)
   const [newUserPassword, setNewUserPassword] = useState('')
   const [creatingUser, setCreatingUser] = useState(false)
   const [updatingRoleUserId, setUpdatingRoleUserId] = useState('')
   const [resettingPasswordUserId, setResettingPasswordUserId] = useState('')
   const [togglingMustResetUserId, setTogglingMustResetUserId] = useState('')
+  const [togglingByoPermissionUserId, setTogglingByoPermissionUserId] = useState('')
   const [staffResettingPasswordUserId, setStaffResettingPasswordUserId] = useState('')
   const [assignStaffUserId, setAssignStaffUserId] = useState('')
   const [assignJobSeekerUserId, setAssignJobSeekerUserId] = useState('')
@@ -250,7 +257,7 @@ export default function Settings({ me, onProfileUpdated, onNavigate, settingsMod
   const [creatingOrg, setCreatingOrg] = useState(false)
   const [membershipUserId, setMembershipUserId] = useState('')
   const [membershipOrgId, setMembershipOrgId] = useState('')
-  const [membershipRole, setMembershipRole] = useState('job_seeker')
+  const [membershipRole, setMembershipRole] = useState(DEFAULT_CANDIDATE_ROLE)
   const [savingMembership, setSavingMembership] = useState(false)
   const canOpenPipelineCleanup = !(me?.role === 'staff' || me?.isAdmin)
   const isAdminOperationsMode = settingsMode === 'admin_operations'
@@ -261,6 +268,8 @@ export default function Settings({ me, onProfileUpdated, onNavigate, settingsMod
   const showUserManagement = settingsMode === 'settings' || isAdminUsersMode
   const showAssignments = settingsMode === 'settings' || isAdminAssignmentsMode
   const showAssignedUsers = settingsMode === 'settings' || isAdminUsersMode || isAdminAssignmentsMode
+  const canViewOperationalSettings = !!me?.isAdmin
+  const canUseByoAgent = !!me?.permissions?.canUseByoAgent
 
   const healthState = status?.health?.status || 'unknown'
   const healthColor = useMemo(() => {
@@ -385,21 +394,23 @@ export default function Settings({ me, onProfileUpdated, onNavigate, settingsMod
     setLoading(true)
     setError(null)
     try {
-      const [statusRes, runsRes, gmailRes] = await Promise.all([
+      const [statusRes, runsRes, gmailRes, agentRes] = await Promise.all([
         api('/api/sheets/status'),
         api('/api/sheets/sync/runs'),
-        api('/api/gmail/status')
+        canViewOperationalSettings ? api('/api/gmail/status') : Promise.resolve(null),
+        canUseByoAgent ? api('/api/agents/config') : Promise.resolve(null)
       ])
       const healthRes = await api('/api/health')
       setStatus(statusRes)
       setRuns(runsRes || [])
       setGmailStatus(gmailRes || null)
+      setAgentConfig(agentRes || { enabled: false, provider: 'claude', label: '', endpointUrl: '', hasToken: false, ingestPath: '/api/agents/ingest' })
       setHealthMeta(healthRes || null)
 
       const cfg = statusRes?.config || {}
       setEnabled(cfg.enabled !== false)
       setSheetId(cfg.sheetId || '')
-      setPipelineTabsText(tabsToText(cfg.pipelineTabs || ['Jobs & Applications', 'Found']))
+      setPipelineTabsText(tabsToText(cfg.pipelineTabs || ['Jobs & Applications']))
       setContactsTabsText(tabsToText(cfg.contactsTabs || ['Networking Tracker']))
       setInterviewsTabsText(tabsToText(cfg.interviewsTabs || ['Interview Tracker']))
       setEventsTabsText(tabsToText(cfg.eventsTabs || ['Events']))
@@ -518,7 +529,7 @@ export default function Settings({ me, onProfileUpdated, onNavigate, settingsMod
       setNewUsername('')
       setNewUserEmail('')
       setNewUserPassword('')
-      setNewUserRole('job_seeker')
+      setNewUserRole(DEFAULT_CANDIDATE_ROLE)
       await load()
     } catch (e) {
       setError(e.payload || { error: e.message })
@@ -563,6 +574,28 @@ export default function Settings({ me, onProfileUpdated, onNavigate, settingsMod
         body: JSON.stringify({ organizationId: membershipOrgId, role: membershipRole })
       })
       setSuccess('Membership saved.')
+      await load()
+    } catch (e) {
+      setError(e.payload || { error: e.message })
+    } finally {
+      setSavingMembership(false)
+    }
+  }
+
+  async function removeMembership() {
+    setSavingMembership(true)
+    setError(null)
+    setSuccess('')
+    try {
+      const userId = Number(membershipUserId)
+      if (!Number.isFinite(userId) || userId <= 0) throw new Error('Select a user')
+      if (!membershipOrgId) throw new Error('Select an organization')
+      await api(`/api/admin/users/${userId}/memberships`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ organizationId: membershipOrgId })
+      })
+      setSuccess('Membership removed.')
       await load()
     } catch (e) {
       setError(e.payload || { error: e.message })
@@ -627,6 +660,40 @@ export default function Settings({ me, onProfileUpdated, onNavigate, settingsMod
       setError(e.payload || { error: e.message })
     } finally {
       setTogglingMustResetUserId('')
+    }
+  }
+
+  async function toggleByoPermission(user) {
+    const current = !!user?.permissions?.canUseByoAgent
+    setTogglingByoPermissionUserId(String(user.id))
+    setError(null)
+    setSuccess('')
+    try {
+      await api(`/api/admin/users/${user.id}/permissions`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ canUseByoAgent: !current })
+      })
+      setSuccess(`BYO agent access ${current ? 'removed' : 'granted'} for ${user.username}.`)
+      await load()
+    } catch (e) {
+      setError(e.payload || { error: e.message })
+    } finally {
+      setTogglingByoPermissionUserId('')
+    }
+  }
+
+  async function deleteUser(user) {
+    const confirmed = window.confirm(`Delete user ${user.username}? This removes account data and cannot be undone.`)
+    if (!confirmed) return
+    setError(null)
+    setSuccess('')
+    try {
+      await api(`/api/admin/users/${user.id}`, { method: 'DELETE' })
+      setSuccess(`Deleted user ${user.username}.`)
+      await load()
+    } catch (e) {
+      setError(e.payload || { error: e.message })
     }
   }
 
@@ -890,6 +957,46 @@ export default function Settings({ me, onProfileUpdated, onNavigate, settingsMod
     }
   }
 
+  async function saveAgentSettings() {
+    setSavingAgentConfig(true)
+    setError(null)
+    setSuccess('')
+    try {
+      await api('/api/agents/config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          enabled: !!agentConfig.enabled,
+          provider: String(agentConfig.provider || 'claude'),
+          label: String(agentConfig.label || '').trim(),
+          endpointUrl: String(agentConfig.endpointUrl || '').trim()
+        })
+      })
+      setSuccess('Agent settings saved.')
+      await load()
+    } catch (e) {
+      setError(e.payload || { error: e.message })
+    } finally {
+      setSavingAgentConfig(false)
+    }
+  }
+
+  async function rotateAgentToken() {
+    setRotatingAgentToken(true)
+    setError(null)
+    setSuccess('')
+    try {
+      const res = await api('/api/agents/rotate-token', { method: 'POST' })
+      setLatestAgentToken(String(res.token || ''))
+      setSuccess('Agent token rotated. Copy it now; it will not be shown again.')
+      await load()
+    } catch (e) {
+      setError(e.payload || { error: e.message })
+    } finally {
+      setRotatingAgentToken(false)
+    }
+  }
+
   async function exportDbFile() {
     setExportingDbFile(true)
     setError(null)
@@ -958,7 +1065,7 @@ export default function Settings({ me, onProfileUpdated, onNavigate, settingsMod
   }
 
   const staffCandidates = adminUsers.filter(user => user.role === 'staff' || user.role === 'admin')
-  const jobSeekerCandidates = adminUsers.filter(user => user.role === 'job_seeker')
+  const jobSeekerCandidates = adminUsers.filter(user => CANDIDATE_ROLES.includes(user.role))
   const pageTitle = isAdminOperationsMode
     ? 'Operations'
     : isAdminUsersMode
@@ -989,7 +1096,7 @@ export default function Settings({ me, onProfileUpdated, onNavigate, settingsMod
       <div className="settings-layout">
 
       {/* ── Build Info ── */}
-      {showAccountSettings && <div className="settings-card" id="settings-profile">
+      {canViewOperationalSettings && showAccountSettings && <div className="settings-card" id="settings-profile">
         <div className="settings-card-head">
           <div className="settings-card-ico"><Icon name="info" /></div>
           <div>
@@ -1045,14 +1152,14 @@ export default function Settings({ me, onProfileUpdated, onNavigate, settingsMod
             {savingProfile ? 'Saving…' : 'Save Profile'}
           </button>
           <div style={{ fontSize: 12, color: 'var(--text-muted)', alignSelf: 'center' }}>
-            Role: {me?.role || 'job_seeker'} {me?.isAdmin ? '• Admin' : ''}
+            Role: {me?.role || DEFAULT_CANDIDATE_ROLE} {me?.isAdmin ? '• Admin' : ''}
           </div>
         </div>
         </div>
       </div>}
 
       {/* ── Google Sheets Sync (merged: health + details + config + runs) ── */}
-      {showOperations && <div className="settings-card" id="settings-ops">
+      {canViewOperationalSettings && showOperations && <div className="settings-card" id="settings-ops">
         <div className="settings-card-head">
           <div className="settings-card-ico"><Icon name="table-2" /></div>
           <div>
@@ -1267,7 +1374,7 @@ export default function Settings({ me, onProfileUpdated, onNavigate, settingsMod
       </div>}
 
       {/* ── Email Event Import (Gmail) ── */}
-      {showOperations && <div className="settings-card">
+      {canViewOperationalSettings && showOperations && <div className="settings-card">
         <div className="settings-card-head">
           <div className="settings-card-ico"><Icon name="mail" /></div>
           <div>
@@ -1315,6 +1422,75 @@ export default function Settings({ me, onProfileUpdated, onNavigate, settingsMod
         </div>
       </div>}
 
+      {canUseByoAgent && showOperations && <div className="settings-card">
+        <div className="settings-card-head">
+          <div className="settings-card-ico"><Icon name="sparkles" /></div>
+          <div>
+            <div className="settings-card-title">Bring Your Own AI Agent</div>
+            <div className="settings-card-sub">Connect your own external job-search workflow</div>
+          </div>
+        </div>
+        <div className="settings-body">
+          <div style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 10 }}>
+            Connect your external agent (for example a Claude workflow) to push job results into your pipeline using your own model/account costs.
+          </div>
+          <div className="settings-grid">
+            <div className="field">
+              <label>Provider</label>
+              <select value={agentConfig.provider || 'claude'} onChange={e => setAgentConfig(prev => ({ ...prev, provider: e.target.value }))}>
+                <option value="claude">Claude</option>
+                <option value="custom">Custom</option>
+              </select>
+            </div>
+            <div className="field">
+              <label>Agent Label</label>
+              <input value={agentConfig.label || ''} onChange={e => setAgentConfig(prev => ({ ...prev, label: e.target.value }))} placeholder="My Job Search Agent" />
+            </div>
+            <div className="field">
+              <label>External Agent URL (optional)</label>
+              <input value={agentConfig.endpointUrl || ''} onChange={e => setAgentConfig(prev => ({ ...prev, endpointUrl: e.target.value }))} placeholder="https://..." />
+            </div>
+          </div>
+          <div className="check-row" style={{ marginBottom: 10 }}>
+            <input id="agent-enabled" type="checkbox" checked={!!agentConfig.enabled} onChange={e => setAgentConfig(prev => ({ ...prev, enabled: e.target.checked }))} />
+            <label htmlFor="agent-enabled">Enable ingest for this account</label>
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>
+            Ingest endpoint: <code>{window.location.origin}{agentConfig.ingestPath || '/api/agents/ingest'}</code>
+          </div>
+          <div className="quick-actions" style={{ marginBottom: 8 }}>
+            <button className="btn btn-primary" onClick={saveAgentSettings} disabled={savingAgentConfig}>
+              {savingAgentConfig ? 'Saving…' : 'Save Agent Settings'}
+            </button>
+            <button className="btn btn-ghost" onClick={rotateAgentToken} disabled={rotatingAgentToken}>
+              {rotatingAgentToken ? 'Rotating…' : (agentConfig.hasToken ? 'Rotate Token' : 'Generate Token')}
+            </button>
+          </div>
+          {!!latestAgentToken && (
+            <div className="success-msg" style={{ marginBottom: 8 }}>
+              <div style={{ fontWeight: 700, marginBottom: 4 }}>New Agent Token (copy now)</div>
+              <code style={{ userSelect: 'all', wordBreak: 'break-all' }}>{latestAgentToken}</code>
+            </div>
+          )}
+          <pre style={{ fontSize: 12, whiteSpace: 'pre-wrap' }}>{`POST ${agentConfig.ingestPath || '/api/agents/ingest'}
+Headers:
+  x-agent-token: <YOUR_TOKEN>
+  Content-Type: application/json
+Body:
+{
+  "entries": [
+    {
+      "company": "Acme",
+      "role": "Product Manager",
+      "jobUrl": "https://...",
+      "source": "LinkedIn",
+      "notes": "Matched from AI search"
+    }
+  ]
+}`}</pre>
+        </div>
+      </div>}
+
       {/* ── Assigned Users (staff/admin) ── */}
       {(me?.isAdmin || me?.role === 'staff') && showAssignedUsers && (
         <div className="settings-card" id="settings-assigned-users">
@@ -1350,7 +1526,7 @@ export default function Settings({ me, onProfileUpdated, onNavigate, settingsMod
                     <td>{user.role}</td>
                     <td>{user.mustChangePassword ? 'Required' : 'No'}</td>
                     <td>
-                      {me?.role === 'staff' && user.role === 'job_seeker' && (
+                      {me?.role === 'staff' && CANDIDATE_ROLES.includes(user.role) && (
                         <button
                           className="btn btn-ghost btn-sm"
                           onClick={() => staffResetAssignedUserPassword(user)}
@@ -1423,7 +1599,10 @@ export default function Settings({ me, onProfileUpdated, onNavigate, settingsMod
             <div className="field">
               <label>Role</label>
               <select value={membershipRole} onChange={e => setMembershipRole(e.target.value)}>
-                <option value="job_seeker">job_seeker</option>
+                <option value="accelerator_user">accelerator_user</option>
+                <option value="premium_user">premium_user</option>
+                <option value="vip_user">vip_user</option>
+                <option value="job_seeker">job_seeker (legacy)</option>
                 <option value="staff">staff</option>
                 <option value="admin">admin</option>
               </select>
@@ -1432,6 +1611,9 @@ export default function Settings({ me, onProfileUpdated, onNavigate, settingsMod
           <div className="quick-actions" style={{ marginBottom: 14 }}>
             <button className="btn btn-ghost" onClick={saveMembership} disabled={savingMembership}>
               {savingMembership ? 'Saving…' : 'Save Membership'}
+            </button>
+            <button className="btn btn-ghost" onClick={removeMembership} disabled={savingMembership || !membershipUserId || !membershipOrgId}>
+              {savingMembership ? 'Working…' : 'Remove Membership'}
             </button>
           </div>
           <div style={{ fontWeight: 600, marginBottom: 8 }}>Create User</div>
@@ -1444,12 +1626,15 @@ export default function Settings({ me, onProfileUpdated, onNavigate, settingsMod
             <input value={newUserEmail} onChange={e => setNewUserEmail(e.target.value)} placeholder="name@example.com" />
           </div>
           <div className="field">
-            <label>Role</label>
-            <select value={newUserRole} onChange={e => setNewUserRole(e.target.value)}>
-              <option value="job_seeker">job_seeker</option>
-              <option value="staff">staff</option>
-              <option value="admin">admin</option>
-            </select>
+              <label>Role</label>
+              <select value={newUserRole} onChange={e => setNewUserRole(e.target.value)}>
+                <option value="accelerator_user">accelerator_user</option>
+                <option value="premium_user">premium_user</option>
+                <option value="vip_user">vip_user</option>
+                <option value="job_seeker">job_seeker (legacy)</option>
+                <option value="staff">staff</option>
+                <option value="admin">admin</option>
+              </select>
           </div>
           <div className="field">
             <label>Temporary Password</label>
@@ -1461,7 +1646,8 @@ export default function Settings({ me, onProfileUpdated, onNavigate, settingsMod
             </button>
           </div>
           <div style={{ fontWeight: 600, marginBottom: 8 }}>Manage Existing Users</div>
-          <table className="data-table">
+          <div className="table-scroll">
+          <table className="data-table data-table-users">
             <thead>
               <tr>
                 <th>Username</th>
@@ -1478,39 +1664,63 @@ export default function Settings({ me, onProfileUpdated, onNavigate, settingsMod
                   <td>{user.email || '—'}</td>
                   <td>
                     <select
-                      value={user.role}
-                      disabled={updatingRoleUserId === String(user.id) || user.username === me?.username}
+                      value={user.role || ''}
+                      disabled={updatingRoleUserId === String(user.id) || user.username === me?.username || !user.role}
                       onChange={(e) => changeUserRole(user.id, e.target.value)}
                     >
-                      <option value="job_seeker">job_seeker</option>
+                      {!user.role && <option value="">No membership</option>}
+                      <option value="accelerator_user">accelerator_user</option>
+                      <option value="premium_user">premium_user</option>
+                      <option value="vip_user">vip_user</option>
+                      <option value="job_seeker">job_seeker (legacy)</option>
                       <option value="staff">staff</option>
                       <option value="admin">admin</option>
                     </select>
                   </td>
                   <td>{user.mustChangePassword ? 'Required' : 'No'}</td>
-                  <td style={{ whiteSpace: 'nowrap' }}>
-                    <button
-                      className="btn btn-ghost btn-sm"
-                      onClick={() => resetUserPassword(user)}
-                      disabled={resettingPasswordUserId === String(user.id)}
-                    >
-                      {resettingPasswordUserId === String(user.id) ? 'Resetting…' : 'Reset Password'}
-                    </button>
-                    <button
-                      className="btn btn-ghost btn-sm"
-                      style={{ marginLeft: 8 }}
-                      onClick={() => toggleForceReset(user)}
-                      disabled={togglingMustResetUserId === String(user.id)}
-                    >
-                      {togglingMustResetUserId === String(user.id)
-                        ? 'Saving…'
-                        : (user.mustChangePassword ? 'Clear Force Reset' : 'Force Reset')}
-                    </button>
+                  <td>
+                    <div className="table-actions">
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => resetUserPassword(user)}
+                        disabled={resettingPasswordUserId === String(user.id)}
+                      >
+                        {resettingPasswordUserId === String(user.id) ? 'Resetting…' : 'Reset Password'}
+                      </button>
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => toggleForceReset(user)}
+                        disabled={togglingMustResetUserId === String(user.id)}
+                      >
+                        {togglingMustResetUserId === String(user.id)
+                          ? 'Saving…'
+                          : (user.mustChangePassword ? 'Clear Force Reset' : 'Force Reset')}
+                      </button>
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => toggleByoPermission(user)}
+                        disabled={togglingByoPermissionUserId === String(user.id)}
+                      >
+                        {togglingByoPermissionUserId === String(user.id)
+                          ? 'Saving…'
+                          : (user?.permissions?.canUseByoAgent ? 'Disable BYO Agent' : 'Enable BYO Agent')}
+                      </button>
+                      {user.username !== me?.username && (
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          style={{ color: 'var(--red)' }}
+                          onClick={() => deleteUser(user)}
+                        >
+                          Delete User
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+          </div>
           </div>
         </div>
       )}
@@ -1537,9 +1747,9 @@ export default function Settings({ me, onProfileUpdated, onNavigate, settingsMod
               </select>
             </div>
             <div className="field">
-              <label>Job Seeker</label>
+              <label>Candidate</label>
               <select value={assignJobSeekerUserId} onChange={e => setAssignJobSeekerUserId(e.target.value)}>
-                <option value="">Select job seeker</option>
+                <option value="">Select candidate</option>
                 {jobSeekerCandidates.map(user => (
                   <option key={`seeker-${user.id}`} value={user.id}>{user.username}</option>
                 ))}
@@ -1557,7 +1767,7 @@ export default function Settings({ me, onProfileUpdated, onNavigate, settingsMod
               <thead>
                 <tr>
                   <th>Staff</th>
-                  <th>Job Seeker</th>
+                  <th>Candidate</th>
                   <th>Updated</th>
                   <th />
                 </tr>
@@ -1889,7 +2099,7 @@ export default function Settings({ me, onProfileUpdated, onNavigate, settingsMod
       )}
 
       {/* ── Backup & Restore ── */}
-      {showOperations && <div className="settings-card" id="settings-backups">
+      {canViewOperationalSettings && showOperations && <div className="settings-card" id="settings-backups">
         <div className="settings-card-head">
           <div className="settings-card-ico"><Icon name="file-text" /></div>
           <div>

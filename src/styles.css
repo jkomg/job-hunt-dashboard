@@ -1202,6 +1202,9 @@ body {
 .data-table th { text-align: left; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text-3); padding: 8px 12px; border-bottom: 1px solid var(--border); }
 .data-table td { padding: 10px 12px; font-size: 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
 .data-table tr:last-child td { border-bottom: none; }
+.table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.data-table-users { min-width: 960px; }
+.table-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 
 /* Old kanban card classes (used inside modals) */
 .kanban-col-header { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-3); margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; }
@@ -1276,8 +1279,89 @@ body {
 .inbox-message-body a { color: var(--accent); }
 .inbox-message-body code { font-family: var(--font-mono); font-size: 12.5px; background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
 
+.message-markdown p { margin: 0 0 6px; }
+.message-markdown h1,
+.message-markdown h2,
+.message-markdown h3,
+.message-markdown h4,
+.message-markdown h5,
+.message-markdown h6 { margin: 0 0 8px; line-height: 1.3; }
+.message-markdown h2 { font-size: 16px; }
+.message-markdown h3 { font-size: 15px; }
+.message-markdown p:last-child { margin-bottom: 0; }
+.message-markdown ul { margin: 0 0 6px 18px; }
+.message-markdown code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1px 4px;
+}
+.message-markdown pre {
+  margin: 6px 0;
+  padding: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow-x: auto;
+}
+.message-markdown pre code { border: none; background: transparent; padding: 0; }
+.message-markdown hr { border: none; border-top: 1px solid var(--border); margin: 8px 0; }
+
+.chat-shell { display: grid; grid-template-columns: 260px 1fr; gap: 12px; }
+.chat-thread-list { border-right: 1px solid var(--border); padding-right: 10px; max-height: 72vh; overflow: auto; }
+.chat-thread-item {
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 10px;
+  margin-bottom: 8px;
+  cursor: pointer;
+}
+.chat-thread-item.active { border-color: var(--accent); background: var(--accent-soft); }
+.chat-main { display: flex; flex-direction: column; min-height: 60vh; }
+.chat-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.chat-messages { flex: 1; overflow: auto; display: flex; flex-direction: column; gap: 8px; padding: 6px 2px; margin-bottom: 8px; }
+.chat-bubble-row { display: flex; justify-content: flex-start; }
+.chat-bubble-row.mine { justify-content: flex-end; }
+.chat-bubble {
+  max-width: 85%;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.chat-line { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 10px; width: 100%; align-items: start; }
+.chat-author-col {
+  font-size: 12px;
+  color: var(--text-3);
+  padding-top: 8px;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.chat-bubble.mine { border-color: var(--accent-line); background: var(--accent-soft); }
+.chat-meta { font-size: 11px; color: var(--text-3); margin-bottom: 6px; }
+.chat-composer { border-top: 1px solid var(--border); padding-top: 10px; }
+
 @media (max-width: 640px) {
   .checkin-grid { grid-template-columns: 1fr; }
   .modal-overlay { align-items: flex-end; }
   .modal { border-radius: var(--radius) var(--radius) 0 0; max-height: 92dvh; }
+  .chat-shell { grid-template-columns: 1fr; }
+  .chat-thread-list {
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    padding-right: 0;
+    padding-bottom: 10px;
+    max-height: 200px;
+  }
+  .chat-main { min-height: 50vh; }
+  .chat-line { grid-template-columns: 1fr; gap: 4px; }
+  .chat-author-col { padding-top: 0; }
 }
