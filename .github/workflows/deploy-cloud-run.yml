@@ -1,0 +1,39 @@
+name: Deploy Cloud Run
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-cloud-run-main
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy to Cloud Run
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          REGION: ${{ vars.GCP_REGION }}
+          SERVICE_NAME: ${{ vars.GCP_SERVICE_NAME }}
+          REPO_NAME: ${{ vars.GCP_ARTIFACT_REPO }}
+          AUTH_MODE: ${{ vars.AUTH_MODE }}
+          ADMIN_EMAILS: ${{ vars.ADMIN_EMAILS }}
+          DEPLOY_VERSION: ${{ github.sha }}
+        run: ./deploy.sh

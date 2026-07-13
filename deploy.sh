@@ -10,6 +10,7 @@ AUTH_MODE="${AUTH_MODE:-session}"
 ADMIN_EMAILS="${ADMIN_EMAILS:-kennjason@gmail.com}"
 
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
+DEPLOY_VERSION="${DEPLOY_VERSION:-$(git -C "$ROOT_DIR" rev-parse --short HEAD 2>/dev/null || echo manual)}"
 
 gcloud config set project "$PROJECT_ID" >/dev/null
 
@@ -95,7 +96,7 @@ gcloud run deploy "$SERVICE_NAME" \
   --region "$REGION" \
   --platform managed \
   --allow-unauthenticated \
-  --set-env-vars "AUTH_MODE=${AUTH_MODE},ADMIN_EMAILS=${ADMIN_EMAILS},GMAIL_IMPORT_QUERY=newer_than:60d (filename:ics OR subject:(interview OR recruiter OR hiring))" \
+  --set-env-vars "AUTH_MODE=${AUTH_MODE},ADMIN_EMAILS=${ADMIN_EMAILS},DEPLOY_VERSION=${DEPLOY_VERSION},GMAIL_IMPORT_QUERY=newer_than:60d (filename:ics OR subject:(interview OR recruiter OR hiring))" \
   --cpu 1 \
   --memory 512Mi \
   --min-instances 0 \
