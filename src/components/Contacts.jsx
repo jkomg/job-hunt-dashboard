@@ -48,30 +48,73 @@ function emptyContactForm(defaults = {}) {
 }
 
 function ContactForm({ form, set }) {
+  const [showRelationshipDetails, setShowRelationshipDetails] = useState(false)
   return (
     <>
+      <div className="form-intro">
+        <div className="form-intro-title">Log the person first, classify later</div>
+        <div className="form-intro-copy">
+          For a good first entry, you mainly need the person, the company, and when you want to follow up. You can refine warmth, status, and relationship details after you have a real interaction.
+        </div>
+      </div>
+
+      <div className="helper-grid">
+        <div className="helper-card">
+          <div className="helper-card-title">Minimum to save</div>
+          <div className="helper-card-copy">`Name` is required. `Company`, `Next Follow-Up`, and `Next Action` make the contact useful right away.</div>
+        </div>
+        <div className="helper-card">
+          <div className="helper-card-title">Use the dates like this</div>
+          <div className="helper-card-copy">`Next Follow-Up` is when this person should reappear on your radar. `Next Action Date` is when you plan to do a specific outreach step yourself.</div>
+        </div>
+      </div>
+
       <div className="checkin-grid">
         <div className="field"><label>Name *</label><input value={form.Name} onChange={e => set('Name', e.target.value)} /></div>
         <div className="field"><label>Title</label><input value={form.Title} onChange={e => set('Title', e.target.value)} /></div>
         <div className="field"><label>Company</label><input value={form.Company} onChange={e => set('Company', e.target.value)} /></div>
         <div className="field"><label>Email</label><input type="email" value={form.Email} onChange={e => set('Email', e.target.value)} placeholder="name@company.com" /></div>
         <div className="field"><label>Phone</label><input type="tel" value={form.Phone} onChange={e => set('Phone', e.target.value)} placeholder="(555) 555-5555" /></div>
-        <div className="field"><label>Warmth</label><select value={form.Warmth} onChange={e => set('Warmth', e.target.value)}>{WARMTH_OPTIONS.map(o => <option key={o}>{o}</option>)}</select></div>
-        <div className="field"><label>Status</label><select value={form.Status} onChange={e => set('Status', e.target.value)}>{STATUS_OPTIONS.map(o => <option key={o}>{o}</option>)}</select></div>
-        <div className="field"><label>How We Know Each Other</label><select value={form['How We Know Each Other']} onChange={e => set('How We Know Each Other', e.target.value)}><option value="">—</option>{HOW_OPTIONS.map(o => <option key={o}>{o}</option>)}</select></div>
         <div className="field">
           <label>Next Follow-Up</label>
           <input type="date" value={form['Next Follow-Up']} onChange={e => set('Next Follow-Up', e.target.value)} />
-          <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 4 }}>Set this so the contact appears in "Due" when it's time.</div>
+          <div className="field-note">Set this when you want the contact to appear in `Needs follow-up`, even if you have not planned the exact message yet.</div>
         </div>
         <div className="field"><label>LinkedIn URL</label><input value={form['LinkedIn URL']} onChange={e => set('LinkedIn URL', e.target.value)} placeholder="https://linkedin.com/in/…" /></div>
       </div>
-      <div className="field"><label>Resume / Cover Letter Used</label><input value={form['Resume Used']} onChange={e => set('Resume Used', e.target.value)} placeholder="e.g. CS General + Healthcare tailored CL" /></div>
+
       <div className="checkin-grid">
-        <div className="field"><label>Next Action</label><input value={form['Next Action']} onChange={e => set('Next Action', e.target.value)} placeholder="What is the next outreach step?" /></div>
-        <div className="field"><label>Next Action Date</label><input type="date" value={form['Next Action Date']} onChange={e => set('Next Action Date', e.target.value)} /></div>
+        <div className="field"><label>Next Action</label><input value={form['Next Action']} onChange={e => set('Next Action', e.target.value)} placeholder="Send intro note, follow up, thank them, ask one question..." /></div>
+        <div className="field">
+          <label>Next Action Date</label>
+          <input type="date" value={form['Next Action Date']} onChange={e => set('Next Action Date', e.target.value)} />
+          <div className="field-note">Use this when you already know the outreach step you plan to take and when you want to do it.</div>
+        </div>
       </div>
-      <div className="field"><label>Notes</label><textarea value={form.Notes} onChange={e => set('Notes', e.target.value)} /></div>
+      <details className="details-card" open={showRelationshipDetails} onToggle={e => setShowRelationshipDetails(e.currentTarget.open)}>
+        <summary>
+          <span>Relationship details</span>
+          <span className="details-card-sub">Useful after the first conversation</span>
+        </summary>
+        <div className="details-card-body">
+          <div className="checkin-grid">
+            <div className="field">
+              <label>Warmth</label>
+              <select value={form.Warmth} onChange={e => set('Warmth', e.target.value)}>{WARMTH_OPTIONS.map(o => <option key={o}>{o}</option>)}</select>
+              <div className="field-note">Think of this as relationship temperature: `Cold` if you have not connected yet, `Warm` if they replied, `Hot` if the conversation is active.</div>
+            </div>
+            <div className="field">
+              <label>Status</label>
+              <select value={form.Status} onChange={e => set('Status', e.target.value)}>{STATUS_OPTIONS.map(o => <option key={o}>{o}</option>)}</select>
+              <div className="field-note">Use status for what is happening now. Use warmth for how strong the relationship feels.</div>
+            </div>
+            <div className="field"><label>How We Know Each Other</label><select value={form['How We Know Each Other']} onChange={e => set('How We Know Each Other', e.target.value)}><option value="">—</option>{HOW_OPTIONS.map(o => <option key={o}>{o}</option>)}</select></div>
+            <div className="field"><label>Resume / Cover Letter Used</label><input value={form['Resume Used']} onChange={e => set('Resume Used', e.target.value)} placeholder="e.g. CS General + Healthcare tailored CL" /></div>
+          </div>
+        </div>
+      </details>
+
+      <div className="field"><label>Notes</label><textarea value={form.Notes} onChange={e => set('Notes', e.target.value)} placeholder="Add context after real messages or conversations." /></div>
     </>
   )
 }

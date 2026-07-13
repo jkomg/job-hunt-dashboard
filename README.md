@@ -111,7 +111,10 @@ From `Settings`:
 
 ## Docs Index
 
+- Job seeker start here: `docs/JOB_SEEKER_START_HERE.md`
 - Job seeker walkthrough: `docs/JOB_SEEKER_USAGE_GUIDE.md`
+- Job seeker UX audit + testing plan: `docs/JOB_SEEKER_UX_AUDIT_AND_TESTING_PLAN.md`
+- Job seeker UX cleanup checklist: `docs/JOB_SEEKER_UX_CLEANUP_CHECKLIST.md`
 - Staff + admin operations: `docs/STAFF_ADMIN_RUNBOOK.md`
 - Staff product scope/spec: `docs/STAFF_OPS_MVP_SPEC.md`
 - Hosted rollout plan: `docs/RR_PLATFORM_RELEASE_PLAN.md`

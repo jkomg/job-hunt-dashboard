@@ -1,19 +1,97 @@
 import { useMemo, useState } from 'react'
 import { Icon } from '../ui-icons.jsx'
 
+const START_HERE_GUIDE = {
+  id: 'start-here',
+  title: 'Start Here',
+  subtitle: 'The shortest useful way to start using Job Hunt well.',
+  badge: 'Best first read',
+  icon: 'sparkles',
+  accent: 'oklch(0.64 0.15 170)',
+  audience: 'New users',
+  sections: [
+    {
+      title: 'The 4 Things To Start With',
+      text: 'You do not need to fill every field or set up every feature on day one. Start with the smallest routine that makes the app useful.',
+      bullets: [
+        'Open Briefing to see what needs attention today.',
+        'Add your active jobs to Pipeline.',
+        'Add your important people to Outreach.',
+        'Use Check-in at the end of the day.',
+      ],
+    },
+    {
+      title: 'What To Put In Pipeline',
+      text: 'For a strong first role, keep it simple.',
+      bullets: [
+        'Company',
+        'Role',
+        'Stage',
+        'Next Action',
+        'Next Action Date or Follow-Up Date',
+      ],
+      tip: 'Use Next Action Date when you already know what you plan to do. Use Follow-Up Date when you are waiting on them and want a reminder if nothing happens.',
+    },
+    {
+      title: 'What To Put In Outreach',
+      text: 'Use Outreach for recruiters, hiring managers, alumni, referrals, and anyone you want to remember to follow up with.',
+      bullets: [
+        'Name',
+        'Company',
+        'Next Follow-Up',
+        'Next Action',
+      ],
+      tip: 'If you are not sure how to classify someone yet, save the contact first and refine warmth or status later.',
+    },
+    {
+      title: 'What To Ignore On Day One',
+      bullets: [
+        'Google Sheets sync',
+        'Advanced role details',
+        'Relationship classification details',
+        'Templates',
+        'Watchlist',
+        'BYO agent setup',
+      ],
+      text: 'Those features are useful later, but they are not required to get value from the app right away.',
+    },
+    {
+      title: 'The Daily Rhythm',
+      bullets: [
+        'Morning: open Briefing.',
+        'During the day: update Pipeline and Outreach.',
+        'End of day: complete Check-in.',
+      ],
+      text: 'That simple loop is the core workflow.',
+    },
+    {
+      title: 'If You Forget Where Something Goes',
+      bullets: [
+        'Pipeline = jobs',
+        'Outreach = people',
+        'Interviews = scheduled interview conversations',
+        'Events = networking events, meetups, webinars, and job fairs',
+        'Watchlist = companies you care about before they become active applications',
+        'Inbox = staff or program messages',
+      ],
+    },
+  ],
+}
+
 const JOB_SEEKER_GUIDE = {
   id: 'job-seeker',
-  title: 'Getting Started as a Job Seeker',
-  subtitle: 'A first-time walkthrough for Briefing, Check-in, Pipeline, Outreach, and the rest.',
-  badge: 'Recommended first',
+  title: 'Full Job Seeker Walkthrough',
+  subtitle: 'A deeper walkthrough for Briefing, Check-in, Pipeline, Outreach, and the rest.',
+  badge: 'Deeper guide',
   icon: 'map',
   accent: 'var(--accent)',
-  audience: 'New users',
+  audience: 'All users',
   sections: [
     {
       title: 'Start Here',
       text: 'The app works best when you use it as a command center instead of a storage closet. Your goal is not to fill in every field. Your goal is to always know what needs attention next.',
       bullets: [
+        'Finish setup, then start with four things: Briefing, Pipeline, Outreach, and Check-in.',
         'Use Briefing first each day to see what needs attention now.',
         'Use Check-in at the end of the day to capture progress and set tomorrow\'s Top 3.',
         'Use Pipeline for roles and Outreach for people.',
@@ -27,6 +105,7 @@ const JOB_SEEKER_GUIDE = {
         'Add the jobs you are already actively pursuing in Pipeline.',
         'Add recruiters, referrals, alumni, and other useful contacts in Outreach.',
         'Log any scheduled interviews or networking events so they stop living in your head.',
+        'Skip Google Sheets sync unless you already know you want it on day one.',
       ],
     },
     {
@@ -52,11 +131,11 @@ const JOB_SEEKER_GUIDE = {
       title: 'Pipeline',
       text: 'Pipeline is the center of the search. Track every role you actually care about and keep the next action current.',
       bullets: [
-        'For each role, focus on company, role, stage, next action, next date, and notes.',
+        'For each role, focus on company, role, stage, next action, next action date, follow-up date, and notes.',
         'Move the stage as soon as something changes.',
         'If you only update one thing after an interaction, update the next action and date.',
       ],
-      tip: 'A role with no next action usually becomes a stale role.',
+      tip: 'A role with no next action usually becomes a stale role. Use Next Action Date for what you plan to do; use Follow-Up Date for when you want a reminder if you are waiting on them.',
     },
     {
       title: 'Outreach',
@@ -66,6 +145,7 @@ const JOB_SEEKER_GUIDE = {
         'Log how you know them, what happened, and when to follow up next.',
         'Update the contact right after each real conversation while details are fresh.',
       ],
+      tip: 'If you are not sure how to classify someone yet, save the contact first and refine warmth or status later.',
     },
     {
       title: 'Interviews, Events, Watchlist, Inbox, and Templates',
@@ -152,7 +232,7 @@ Body:
   ],
 }
 
-const GUIDES = [JOB_SEEKER_GUIDE, BYO_GUIDE]
+const GUIDES = [START_HERE_GUIDE, JOB_SEEKER_GUIDE, BYO_GUIDE]
 
 function GuideCard({ guide, active, onClick }) {
   return (
@@ -201,9 +281,9 @@ function GuideSection({ section }) {
 }
 
 export default function Guides() {
-  const [selectedId, setSelectedId] = useState(JOB_SEEKER_GUIDE.id)
+  const [selectedId, setSelectedId] = useState(START_HERE_GUIDE.id)
   const selectedGuide = useMemo(
-    () => GUIDES.find(guide => guide.id === selectedId) || JOB_SEEKER_GUIDE,
+    () => GUIDES.find(guide => guide.id === selectedId) || START_HERE_GUIDE,
     [selectedId]
   )
 
@@ -228,6 +308,8 @@ export default function Guides() {
           <div className="guide-hero-quick-body">
             {selectedGuide.id === 'job-seeker'
               ? 'Open Briefing, then make sure every active role in Pipeline has a next action and a date.'
+              : selectedGuide.id === 'start-here'
+                ? 'Open Briefing, then add one real job to Pipeline and one real person to Outreach.'
               : 'Generate your ingest token in Settings before touching the external agent configuration.'}
           </div>
         </div>

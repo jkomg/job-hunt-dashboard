@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Icon } from '../ui-icons.jsx'
 
 function textToTabs(value) {
   return String(value || '')
@@ -29,6 +30,7 @@ export default function SetupWizard({ me, onComplete, onLogout }) {
   const [contactsTabsText, setContactsTabsText] = useState('Networking Tracker')
   const [interviewsTabsText, setInterviewsTabsText] = useState('Interview Tracker')
   const [eventsTabsText, setEventsTabsText] = useState('Events')
+  const [showSheetsDetails, setShowSheetsDetails] = useState(false)
 
   async function saveSheetsConfig(enabled) {
     const res = await fetch('/api/sheets/config', {
@@ -125,6 +127,16 @@ export default function SetupWizard({ me, onComplete, onLogout }) {
         {success && <div className="success-msg">{success}</div>}
 
         <form onSubmit={completeSetup}>
+          <div className="card" style={{ marginBottom: 14 }}>
+            <div className="card-title">Start with these 4 things</div>
+            <div className="setup-start-list">
+              <div><strong>1.</strong> Finish setup and land on your `Briefing`.</div>
+              <div><strong>2.</strong> Add the jobs you are already actively pursuing in `Pipeline`.</div>
+              <div><strong>3.</strong> Add the people tied to that search in `Outreach`.</div>
+              <div><strong>4.</strong> Use `Briefing` in the morning and `Check-in` at the end of the day.</div>
+            </div>
+          </div>
+
           <div className="field">
             <label>What should we call you on the dashboard?</label>
             <input
@@ -153,6 +165,9 @@ export default function SetupWizard({ me, onComplete, onLogout }) {
 
           <div className="card" style={{ marginBottom: 14 }}>
             <div className="card-title">Google Sheets Sync (optional)</div>
+            <div className="setup-optional-note">
+              Skip this if you just want to start using the app. You can always connect Sheets later in `Settings`.
+            </div>
             <div className="check-row" style={{ marginBottom: 10 }}>
               <input
                 id="connect-sheets-onboarding"
@@ -169,34 +184,51 @@ export default function SetupWizard({ me, onComplete, onLogout }) {
             )}
             {connectSheets && (
               <div>
-                <div className="field">
-                  <label>Google Sheet URL or ID</label>
-                  <input
-                    type="text"
-                    value={sheetId}
-                    onChange={e => setSheetId(e.target.value)}
-                    placeholder="Paste your Remote Rebellion sheet URL here"
-                  />
+                <div className="setup-tip" style={{ marginBottom: 12 }}>
+                  <Icon name="info" />
+                  <span>Only do this now if your sheet setup is ready. Otherwise, finish setup first and connect it later.</span>
                 </div>
-                <div className="field">
-                  <label>Pipeline Tabs (comma-separated)</label>
-                  <input value={pipelineTabsText} onChange={e => setPipelineTabsText(e.target.value)} />
-                </div>
-                <div className="field">
-                  <label>Networking Tabs (comma-separated)</label>
-                  <input value={contactsTabsText} onChange={e => setContactsTabsText(e.target.value)} />
-                </div>
-                <div className="field">
-                  <label>Interview Tabs (comma-separated)</label>
-                  <input value={interviewsTabsText} onChange={e => setInterviewsTabsText(e.target.value)} />
-                </div>
-                <div className="field">
-                  <label>Events Tabs (comma-separated)</label>
-                  <input value={eventsTabsText} onChange={e => setEventsTabsText(e.target.value)} />
-                </div>
-                <div style={{ color: 'var(--text-muted)', fontSize: 12, marginBottom: 10 }}>
-                  Before testing: share your sheet with the service account email shown in Settings, or test will fail.
-                </div>
+                <button
+                  className="btn btn-ghost btn-sm"
+                  type="button"
+                  style={{ marginBottom: 12 }}
+                  onClick={() => setShowSheetsDetails(v => !v)}
+                >
+                  <Icon name={showSheetsDetails ? 'chevron-up' : 'chevron-down'} />
+                  {showSheetsDetails ? 'Hide sheet details' : 'Show sheet details'}
+                </button>
+                {showSheetsDetails && (
+                  <>
+                    <div className="field">
+                      <label>Google Sheet URL or ID</label>
+                      <input
+                        type="text"
+                        value={sheetId}
+                        onChange={e => setSheetId(e.target.value)}
+                        placeholder="Paste your Remote Rebellion sheet URL here"
+                      />
+                    </div>
+                    <div className="field">
+                      <label>Pipeline Tabs (comma-separated)</label>
+                      <input value={pipelineTabsText} onChange={e => setPipelineTabsText(e.target.value)} />
+                    </div>
+                    <div className="field">
+                      <label>Networking Tabs (comma-separated)</label>
+                      <input value={contactsTabsText} onChange={e => setContactsTabsText(e.target.value)} />
+                    </div>
+                    <div className="field">
+                      <label>Interview Tabs (comma-separated)</label>
+                      <input value={interviewsTabsText} onChange={e => setInterviewsTabsText(e.target.value)} />
+                    </div>
+                    <div className="field">
+                      <label>Events Tabs (comma-separated)</label>
+                      <input value={eventsTabsText} onChange={e => setEventsTabsText(e.target.value)} />
+                    </div>
+                    <div style={{ color: 'var(--text-muted)', fontSize: 12, marginBottom: 10 }}>
+                      Before testing: share your sheet with the service account email shown in Settings, or test will fail.
+                    </div>
+                  </>
+                )}
                 <button className="btn btn-ghost btn-full" type="button" onClick={testSheetsConnection} disabled={testing || loading}>
                   {testing ? 'Testing connection…' : 'Test Google connection'}
                 </button>
@@ -208,8 +240,9 @@ export default function SetupWizard({ me, onComplete, onLogout }) {
             <div className="card-title">What happens next</div>
             <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>
               <div>1. You land on your daily briefing.</div>
-              <div>2. Use Today Queue to focus interviews and follow-ups first.</div>
-              <div>3. Open Settings any time to adjust sync and troubleshooting.</div>
+              <div>2. Open `Pipeline` for jobs and `Outreach` for people.</div>
+              <div>3. Use `Briefing` in the morning and `Check-in` at the end of the day.</div>
+              <div>4. Open `Settings` later if you want to connect Sheets or adjust advanced options.</div>
             </div>
           </div>
 
