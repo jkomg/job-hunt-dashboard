@@ -276,6 +276,11 @@ export default function Events() {
         </button>
       </div>
 
+      <div className="page-explainer">
+        <div className="page-explainer-title">What belongs here</div>
+        <div className="page-explainer-copy">Use Events for group sessions like meetups, webinars, networking events, and job fairs. If it is not a one-on-one hiring conversation, it probably belongs here instead of Interviews.</div>
+      </div>
+
       <div className="ev-layout">
         {registered.length > 0 && (
           <div>
@@ -334,6 +339,13 @@ export default function Events() {
               <div className="placeholder-inner">
                 <div className="placeholder-icn"><Icon name="calendar" /></div>
                 <p>Track meetups, webinars, and fairs so opportunities don't slip.</p>
+                <div className="empty-hint">Use Events for group sessions and networking events. Use Interviews for one-on-one hiring conversations.</div>
+                <div className="example-card">
+                  <div className="example-label">Example</div>
+                  <div className="example-title">Women in SaaS Networking Night</div>
+                  <div className="example-copy">Status: Registered · Date: August 6</div>
+                  <div className="example-copy">Follow-up goal: add new contacts to Outreach the same night</div>
+                </div>
                 <button className="btn btn-primary btn-sm" onClick={() => setShowAdd(true)}>
                   <Icon name="plus" /> Add first event
                 </button>
@@ -343,6 +355,7 @@ export default function Events() {
             <div className="or-empty">
               <Icon name="calendar" />
               <div>No events in this view.</div>
+              <div className="empty-hint">Try another filter or add an event you want to revisit later.</div>
             </div>
           ) : groups.map(g => (
             <div className="ev-group" key={g.label}>

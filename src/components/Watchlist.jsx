@@ -214,6 +214,11 @@ export default function Watchlist() {
         </button>
       </div>
 
+      <div className="page-explainer">
+        <div className="page-explainer-title">What belongs here</div>
+        <div className="page-explainer-copy">Use Watchlist for target companies you care about before they become real applications. Once there is an actual role or active process, move that work into Pipeline.</div>
+      </div>
+
       <div className="wl-layout">
         <div>
           <div className="ev-section-head" style={{ marginBottom: 12 }}>
@@ -231,6 +236,22 @@ export default function Watchlist() {
               <div className="or-empty">
                 <Icon name="eye" />
                 <div>{filter === 'Active' ? 'No companies on your watchlist yet.' : 'No companies match this filter.'}</div>
+                <div className="empty-hint">
+                  {filter === 'Active'
+                    ? 'Use Watchlist for companies you care about before they become real applications in Pipeline.'
+                    : 'Try another filter or add a company you want to revisit later.'}
+                </div>
+                {filter === 'Active' && (
+                  <div className="example-card">
+                    <div className="example-label">Example</div>
+                    <div className="example-title">Notion</div>
+                    <div className="example-copy">Status: Watching · Follow-up: check careers page in two weeks</div>
+                    <div className="example-copy">Reason: strong company target, but no active role in Pipeline yet</div>
+                  </div>
+                )}
+                <button className="btn btn-primary btn-sm" onClick={() => setShowAdd(true)}>
+                  <Icon name="plus" /> Add company
+                </button>
               </div>
             ) : filtered.map(c => {
               const col = IND_COLORS[c.Industry] || 'var(--text-3)'
@@ -322,6 +343,7 @@ export default function Watchlist() {
             <div className="or-empty">
               <Icon name="eye" />
               <div>Select a company to see details.</div>
+              <div className="empty-hint">Watchlist is best for target companies you want to track before you apply or reach out.</div>
             </div>
           </div>
         )}

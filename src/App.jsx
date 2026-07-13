@@ -83,7 +83,7 @@ const MOBILE_NAV_ITEMS_SEEKER = [
   { id: 'pipeline',   label: 'Pipeline',   icon: 'columns'      },
   { id: 'contacts',   label: 'Outreach',   icon: 'users'        },
   { id: 'inbox',      label: 'Inbox',      icon: 'message'      },
-  { id: 'settings',   label: 'Settings',   icon: 'settings'     },
+  { id: 'more',       label: 'More',       icon: 'ellipsis'     },
 ]
 
 const MOBILE_NAV_ITEMS_STAFF = [
@@ -207,28 +207,78 @@ function MobileNav({ view, go, items, staffBadges, memberBadges, pipelineBadgeCo
   )
 }
 
+function MobileMoreSheet({ open, onClose, go, groups, view }) {
+  const items = groups.flatMap(group => group.items)
+  const extraItems = [...items, SETTINGS_ITEM].filter(it => !['dashboard', 'pipeline', 'contacts', 'inbox'].includes(it.id))
+
+  if (!open) return null
+
+  return (
+    <div className="mobile-sheet-overlay" onClick={onClose}>
+      <div className="mobile-sheet" onClick={e => e.stopPropagation()}>
+        <div className="mobile-sheet-handle" />
+        <div className="mobile-sheet-head">
+          <div>
+            <div className="mobile-sheet-title">More</div>
+            <div className="mobile-sheet-sub">Quick access to the rest of your workspace</div>
+          </div>
+          <button className="btn btn-quiet btn-sm" onClick={onClose}>
+            <Icon name="x" />
+          </button>
+        </div>
+        <div className="mobile-sheet-list">
+          {extraItems.map(it => (
+            <button
+              key={it.id}
+              className={'mobile-sheet-item' + (view === it.id ? ' active' : '')}
+              onClick={() => { go(it.id); onClose() }}
+            >
+              <span className="mobile-sheet-ico"><Icon name={it.icon} /></span>
+              <span>{it.label}</span>
+              <Icon name="arrow-right" />
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function App() {
   const [authed, setAuthed] = useState(null)
   const [me, setMe] = useState(null)
   const [view, setView] = useState('dashboard')
   const [navIntent, setNavIntent] = useState(null)
+  const [mobileMoreOpen, setMobileMoreOpen] = useState(false)
   const [staffBadges, setStaffBadges] = useState({ tasksOpen: 0, threadsOpen: 0 })
   const [memberBadges, setMemberBadges] = useState({ inboxOpenThreads: 0 })
   const [pipelineBadgeCount, setPipelineBadgeCount] = useState(0)
   const { mode, accent, setMode, setAccent } = useTheme()
 
   function navigate(nextView, intent = null) {
+    if (nextView === 'more') {
+      setMobileMoreOpen(true)
+      return
+    }
     setView(nextView)
     setNavIntent(intent ? { ...intent, _ts: Date.now() } : { _ts: Date.now() })
+    setMobileMoreOpen(false)
   }
 
-  async function refreshMe() {
+  function resetShellView(nextView = 'dashboard') {
+    setView(nextView)
+    setNavIntent(null)
+    setMobileMoreOpen(false)
+  }
+
+  async function refreshMe({ resetView = false } = {}) {
     try {
       const r = await fetch('/api/me', { credentials: 'include' })
       if (!r.ok) { setAuthed(false); setMe(null); return }
       const data = await r.json()
       setMe(data)
       setAuthed(true)
+      if (resetView) resetShellView()
     } catch {
       setAuthed(false)
       setMe(null)
@@ -340,15 +390,18 @@ export default function App() {
 
   useEffect(() => {
     if (authed !== true || !me?.onboardingComplete || me?.mustChangePassword) return
-    if (view === 'staff_ops') setView('operations')
-    if (view === 'staff_tasks' || view === 'staff_threads') setView('operations')
-    if (!allNavIds.has(view)) setView(isStaffLike ? 'operations' : 'dashboard')
+    if (view === 'staff_ops') {
+      resetShellView(isStaff ? 'operations' : 'dashboard')
+      return
+    }
+    if (!allNavIds.has(view)) resetShellView()
   }, [authed, me, isStaffLike, view, allNavIds])
 
   async function logout() {
     await fetch('/api/logout', { method: 'POST', credentials: 'include' })
     setAuthed(false)
     setMe(null)
+    resetShellView()
   }
 
   if (authed === null) {
@@ -359,9 +412,9 @@ export default function App() {
     )
   }
 
-  if (!authed) return <Login onLogin={refreshMe} />
-  if (me?.mustChangePassword) return <ForcePasswordChange onDone={refreshMe} onLogout={logout} />
-  if (!me?.onboardingComplete) return <SetupWizard me={me} onComplete={refreshMe} onLogout={logout} />
+  if (!authed) return <Login onLogin={() => refreshMe({ resetView: true })} />
+  if (me?.mustChangePassword) return <ForcePasswordChange onDone={() => refreshMe({ resetView: true })} onLogout={logout} />
+  if (!me?.onboardingComplete) return <SetupWizard me={me} onComplete={() => refreshMe({ resetView: true })} onLogout={logout} />
 
   return (
     <div className="stage" data-mode={mode} data-accent={accent} data-nav="full">
@@ -394,7 +447,7 @@ export default function App() {
         {(view === 'settings' || view === 'admin_operations' || view === 'admin_users' || view === 'admin_assignments') && (
           <Settings
             me={me}
-            onProfileUpdated={refreshMe}
+            onProfileUpdated={() => refreshMe({ resetView: true })}
             onNavigate={navigate}
             settingsMode={settingsMode}
             themeMode={mode}
@@ -414,6 +467,15 @@ export default function App() {
         pipelineBadgeCount={pipelineBadgeCount}
         isStaffLike={isStaffLike}
       />
+      {!isStaffLike && (
+        <MobileMoreSheet
+          open={mobileMoreOpen}
+          onClose={() => setMobileMoreOpen(false)}
+          go={navigate}
+          groups={JOB_SEEKER_GROUPS}
+          view={view}
+        />
+      )}
     </div>
   )
 }

@@ -1051,7 +1051,14 @@ app.post('/api/admin/staff-assignments', requireAuth, requireAdmin, async (req, 
   } catch (e) {
     console.error('admin.staffAssignments.create failed', e)
     const message = String(e?.message || '')
-    if (message.includes('required') || message.includes('different') || message.includes('belong') || message.includes('staff') || message.includes('job_seeker')) {
+    if (
+      message.includes('required') ||
+      message.includes('different') ||
+      message.includes('belong') ||
+      message.includes('staff') ||
+      message.includes('job_seeker') ||
+      message.includes('candidate role')
+    ) {
       return res.status(400).json({ error: message })
     }
     res.status(500).json({ error: 'Could not create staff assignment' })
@@ -2792,6 +2799,10 @@ app.post('/api/agents/ingest', async (req, res) => {
       }
     }
     if (!actor) return res.status(401).json({ error: 'Invalid agent token' })
+    const permissions = await getUserPermissionFlags(actor.id, { isAdmin: !!actor.isAdmin })
+    if (!permissions.canUseByoAgent) {
+      return res.status(403).json({ error: 'BYO agent is disabled for this account' })
+    }
 
     const membership = await getPrimaryMembershipForUser(actor.id)
     if (!membership?.organizationId) return res.status(403).json({ error: 'Agent user has no organization membership' })

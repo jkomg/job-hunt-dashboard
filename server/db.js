@@ -599,6 +599,17 @@ export async function deleteUserAccount(userId) {
   await db.execute({ sql: 'DELETE FROM memberships WHERE user_id = ?', args: [uid] })
   await db.execute({ sql: 'DELETE FROM staff_assignments WHERE staff_user_id = ? OR job_seeker_user_id = ?', args: [uid, uid] })
   await db.execute({ sql: 'DELETE FROM candidate_messages WHERE author_user_id = ?', args: [uid] })
+  await db.execute({
+    sql: `
+      DELETE FROM candidate_messages
+      WHERE thread_id IN (
+        SELECT id
+        FROM candidate_threads
+        WHERE created_by_user_id = ? OR job_seeker_user_id = ?
+      )
+    `,
+    args: [uid, uid]
+  })
   await db.execute({ sql: 'DELETE FROM candidate_threads WHERE created_by_user_id = ? OR job_seeker_user_id = ?', args: [uid, uid] })
   await db.execute({ sql: 'DELETE FROM job_recommendations WHERE staff_user_id = ? OR job_seeker_user_id = ?', args: [uid, uid] })
   await db.execute({ sql: 'DELETE FROM staff_tasks WHERE assignee_user_id = ? OR related_user_id = ? OR created_by_user_id = ?', args: [uid, uid, uid] })
@@ -785,7 +796,7 @@ export async function createStaffAssignment({ organizationId = DEFAULT_ORG_ID, s
   const seekerMembership = await getMembership(orgId, seekerId)
   if (!staffMembership || !seekerMembership) throw new Error('Both users must belong to the organization')
   if (!['staff', 'admin'].includes(staffMembership.role)) throw new Error('Assigned staff user must have staff or admin role')
-  if (!isCandidateRole(seekerMembership.role)) throw new Error('Assigned user must have a candidate role')
+  if (!isCandidateRole(seekerMembership.role)) throw new Error('Assigned job_seeker user must have a candidate role')
 
   const ts = now()
   const id = `${orgId}:${staffId}:${seekerId}`

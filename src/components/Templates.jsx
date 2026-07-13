@@ -207,6 +207,9 @@ export default function Templates() {
               <div className="placeholder-inner">
                 <div className="placeholder-icn"><Icon name="mail" /></div>
                 <p>{cat === 'all' ? 'No templates yet — add your first one.' : `No ${cat} templates yet.`}</p>
+                <div className="empty-hint">
+                  Start after you notice yourself sending the same outreach pattern twice. Good first templates are connection requests, follow-ups, and thank-you notes.
+                </div>
                 <button className="btn btn-primary btn-sm" onClick={() => setShowAdd(true)}>New template</button>
               </div>
             </div>

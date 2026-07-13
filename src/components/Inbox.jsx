@@ -124,6 +124,7 @@ export default function Inbox() {
           <div className="placeholder-inner">
             <div className="placeholder-icn"><Icon name="inbox" /></div>
             <p>No messages yet. Your support staff can reach you here.</p>
+            <div className="empty-hint">You do not need to set anything up here. Come back when a staff member or program thread appears.</div>
           </div>
         </div>
       ) : (
@@ -213,6 +214,7 @@ export default function Inbox() {
               <div className="conv-empty">
                 <Icon name="inbox" />
                 <div>Select a thread to read</div>
+                <div className="empty-hint">Open any thread on the left to read updates or reply to support.</div>
               </div>
             )}
           </div>
