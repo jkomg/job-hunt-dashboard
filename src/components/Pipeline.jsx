@@ -636,7 +636,7 @@ export default function Pipeline({ navIntent }) {
           <div className="placeholder-inner">
             <div className="placeholder-icn"><Icon name="columns" /></div>
             <h2>Start your pipeline</h2>
-            <p>Add your first role to track status, notes, and follow-ups.</p>
+            <p>Add the roles you are already seriously tracking. Start with company, role, stage, and either a next action date or a follow-up date.</p>
             <button className="btn btn-primary" style={{ marginTop: 18 }} onClick={() => setShowAdd(true)}>
               <Icon name="plus" /> Add first role
             </button>
@@ -665,7 +665,7 @@ export default function Pipeline({ navIntent }) {
                 </div>
                 <div className={`kcol-body${isOver ? ' over' : ''}`}>
                   {cards.length === 0 && (
-                    <div className="kcol-empty">{isOver ? 'Drop here' : 'Empty'}</div>
+                    <div className="kcol-empty">{isOver ? 'Drop here' : filter === 'active' ? 'No roles here yet' : 'Empty'}</div>
                   )}
                   {cards.map(card => (
                     <div

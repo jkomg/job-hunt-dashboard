@@ -264,6 +264,11 @@ export default function Interviews() {
         </button>
       </div>
 
+      <div className="page-explainer">
+        <div className="page-explainer-title">What belongs here</div>
+        <div className="page-explainer-copy">Use Interviews for scheduled hiring conversations like recruiter screens, hiring manager calls, panels, and final rounds. If it is part of an application process, it belongs here.</div>
+      </div>
+
       <div className="iv-layout">
         {upcoming.length > 0 && (
           <div>
@@ -317,6 +322,13 @@ export default function Interviews() {
               <div className="placeholder-inner">
                 <div className="placeholder-icn"><Icon name="phone" /></div>
                 <p>Log your first interview to start tracking rounds and prep.</p>
+                <div className="empty-hint">Use Interviews for scheduled recruiter screens, hiring manager calls, and round-by-round follow-through.</div>
+                <div className="example-card">
+                  <div className="example-label">Example</div>
+                  <div className="example-title">BrightPath Health</div>
+                  <div className="example-copy">2nd Interview · Video Call · Hiring Manager</div>
+                  <div className="example-copy">Next action: send thank-you note and prep customer retention story</div>
+                </div>
                 <button className="btn btn-primary btn-sm" onClick={() => setShowAdd(true)}>
                   <Icon name="plus" /> Log interview
                 </button>

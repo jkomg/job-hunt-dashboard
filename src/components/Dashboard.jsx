@@ -110,6 +110,11 @@ export default function Dashboard({ onNavigate, me }) {
     const candidates = staffQueue?.candidates || []
     const recommendations = staffQueue?.recommendations || []
     const tasks = staffQueue?.tasks || []
+    const scopeLabel = summary.scope === 'all'
+      ? 'All candidates'
+      : me?.isAdmin
+        ? 'My assigned candidates'
+        : 'My assigned candidates'
     const draftRecommendations = recommendations.filter(r => r.status === 'draft')
     const todoTasks = tasks.filter(t => t.status === 'todo')
     const inProgressTasks = tasks.filter(t => t.status === 'in_progress')
@@ -241,6 +246,8 @@ export default function Dashboard({ onNavigate, me }) {
     { label: 'Applications', val: weekStats.applications, target: WEEKLY_TARGETS.applications, color: 'var(--amber)' },
     { label: 'LinkedIn', val: weekStats.linkedInPosts, target: WEEKLY_TARGETS.linkedInPosts, color: 'var(--purple, oklch(0.55 0.15 295))' },
   ]
+  const weekActivityTotal = Number(weekStats.outreach || 0) + Number(weekStats.responses || 0) + Number(weekStats.applications || 0) + Number(weekStats.linkedInPosts || 0)
+  const needsGettingStartedHelp = !focusTasks.length && followUpsTotal === 0 && upcomingInterviews.length === 0 && Number(health?.staleTotal || 0) === 0 && openMemberThreads.length === 0 && weekActivityTotal === 0
 
   return (
     <div className="page">
@@ -258,6 +265,29 @@ export default function Dashboard({ onNavigate, me }) {
           </button>
         </div>
       </div>
+
+      {needsGettingStartedHelp && (
+        <div className="start-here-banner">
+          <div className="start-here-copy">
+            <div className="start-here-eyebrow">New here?</div>
+            <div className="start-here-title">Start with one real job, one real person, and tonight&apos;s Check-in.</div>
+            <div className="start-here-text">
+              If your Briefing feels empty, that is normal. Open the `Start Here` guide, then add your active roles in `Pipeline` and your important contacts in `Outreach`.
+            </div>
+          </div>
+          <div className="start-here-actions">
+            <button className="btn btn-primary btn-sm" onClick={() => onNavigate('guides')}>
+              <Icon name="book-open" /> Open Start Here
+            </button>
+            <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('pipeline')}>
+              <Icon name="columns" /> Add first job
+            </button>
+            <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('contacts')}>
+              <Icon name="users" /> Add first contact
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Focus block */}
       <div className="focus">
@@ -303,11 +333,16 @@ export default function Dashboard({ onNavigate, me }) {
             <div className="focus-row">
               <div className="focus-body">
                 <div className="focus-task" style={{ color: 'var(--text-3)', fontWeight: 500 }}>No focus tasks set yet</div>
-                <div className="focus-meta">Complete yesterday's check-in to set today's Top 3</div>
+                <div className="focus-meta">Use tonight&apos;s Check-in to set tomorrow&apos;s Top 3, or open `Start Here` if you are still setting up the app.</div>
               </div>
-              <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('checkin')}>
-                <Icon name="pen-line" /> Set plan
-              </button>
+              <div className="focus-empty-actions">
+                <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('guides')}>
+                  <Icon name="book-open" /> Start Here
+                </button>
+                <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('checkin')}>
+                  <Icon name="pen-line" /> Set plan
+                </button>
+              </div>
             </div>
           )}
         </div>

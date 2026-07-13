@@ -151,9 +151,9 @@ const JOB_SEEKER_GUIDE = {
       title: 'Interviews, Events, Watchlist, Inbox, and Templates',
       text: 'These sections support the core search and keep details from slipping through the cracks.',
       bullets: [
-        'Use Interviews for scheduled conversations, prep notes, and post-call follow-through.',
-        'Use Events for job fairs, meetups, webinars, and networking sessions.',
-        'Use Watchlist for companies you care about before they become active applications.',
+        'Use Interviews for one-on-one hiring conversations like recruiter screens, hiring manager calls, and later-round interviews.',
+        'Use Events for group sessions like job fairs, meetups, webinars, and networking events.',
+        'Use Watchlist for companies you care about before there is a real application or active process in Pipeline.',
         'Use Inbox for program or staff messages tied to your account.',
         'Use Templates for reusable outreach notes that still leave room for personalization.',
       ],

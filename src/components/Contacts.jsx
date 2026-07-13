@@ -412,8 +412,18 @@ export default function Contacts() {
           <div className="or-list">
             {filtered.length === 0 ? (
               <div className="or-empty">
-                <Icon name="check" />
+                <Icon name={filter === 'due' ? 'check' : 'users'} />
                 <div>{filter === 'due' ? 'All caught up — no follow-ups due.' : 'No contacts match this filter.'}</div>
+                <div className="empty-hint">
+                  {filter === 'due'
+                    ? 'Add a next follow-up date when you want someone to come back onto your radar.'
+                    : 'Try another filter or add a contact you want to remember to follow up with.'}
+                </div>
+                {filter !== 'due' && (
+                  <button className="btn btn-primary btn-sm" onClick={() => setShowAdd(true)}>
+                    <Icon name="user-plus" /> Add contact
+                  </button>
+                )}
               </div>
             ) : filtered.map(c => {
               const dot = warmthDot(c.Warmth)
@@ -458,6 +468,7 @@ export default function Contacts() {
             <div className="or-empty">
               <Icon name="users" />
               <div>Select a contact to see details.</div>
+              <div className="empty-hint">Use Outreach for recruiters, referrals, alumni, and anyone you want to remember to follow up with.</div>
             </div>
           </div>
         )}
