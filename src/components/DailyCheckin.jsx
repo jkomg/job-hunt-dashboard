@@ -360,6 +360,15 @@ export default function DailyCheckin({ navIntent = null }) {
                 </div>
               </div>
             )}
+            <div className="guide-example-block" style={{ marginTop: 0, marginBottom: 14 }}>
+              <div className="guide-example-label">Strong Top 3 examples</div>
+              <div className="guide-example-body">
+                Good: &ldquo;Follow up with Acme recruiter about Tuesday&apos;s screen,&rdquo; &ldquo;Tailor resume for Brightwell CSM role,&rdquo; &ldquo;Send thank-you note after product interview.&rdquo;
+              </div>
+              <div className="guide-example-body" style={{ marginTop: 8, color: 'var(--text-2)' }}>
+                Too vague: &ldquo;Job search,&rdquo; &ldquo;Networking,&rdquo; or &ldquo;Apply more.&rdquo;
+              </div>
+            </div>
             <div className="top3-rows">
               {[0, 1, 2].map(i => (
                 <div className="top3-row" key={i}>
