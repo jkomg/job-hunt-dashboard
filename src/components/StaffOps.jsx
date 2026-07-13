@@ -27,6 +27,11 @@ function rel(ts) {
   return `${Math.floor(hrs / 24)}d ago`
 }
 
+function opsTabFromMode(mode) {
+  if (mode === 'tasks' || mode === 'threads') return 'support'
+  return 'queue'
+}
+
 function SignalBadges({ signals }) {
   if (!signals) return null
   return (
@@ -94,7 +99,7 @@ export default function StaffOps({ me, mode = 'operations', navIntent = null }) 
   const [threadStatusFilter, setThreadStatusFilter] = useState('open')
   const [threadActivityFilter, setThreadActivityFilter] = useState('all')
   const [composerExpanded, setComposerExpanded] = useState(true)
-  const [opsTab, setOpsTab] = useState('queue')
+  const [opsTab, setOpsTab] = useState(() => opsTabFromMode(mode))
   const candidateSectionRef = useRef(null)
   const recSectionRef = useRef(null)
   const tasksSectionRef = useRef(null)
@@ -133,6 +138,13 @@ export default function StaffOps({ me, mode = 'operations', navIntent = null }) 
   useEffect(() => {
     try { localStorage.setItem('staff_scope', staffScope) } catch {}
   }, [staffScope])
+
+  useEffect(() => {
+    setOpsTab(prev => {
+      if (navIntent?.staffFocus) return prev
+      return opsTabFromMode(mode)
+    })
+  }, [mode, navIntent?.staffFocus])
 
   useEffect(() => {
     if (!selectedCandidateId) { setThreads([]); setSelectedThreadId(''); setThreadMessages([]); return }
