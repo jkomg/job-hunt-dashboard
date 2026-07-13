@@ -785,7 +785,7 @@ export async function createStaffAssignment({ organizationId = DEFAULT_ORG_ID, s
   const seekerMembership = await getMembership(orgId, seekerId)
   if (!staffMembership || !seekerMembership) throw new Error('Both users must belong to the organization')
   if (!['staff', 'admin'].includes(staffMembership.role)) throw new Error('Assigned staff user must have staff or admin role')
-  if (!isCandidateRole(seekerMembership.role)) throw new Error('Assigned user must have a candidate role')
+  if (!isCandidateRole(seekerMembership.role)) throw new Error('Assigned job_seeker user must have a candidate role')
 
   const ts = now()
   const id = `${orgId}:${staffId}:${seekerId}`

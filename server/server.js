@@ -1051,7 +1051,14 @@ app.post('/api/admin/staff-assignments', requireAuth, requireAdmin, async (req, 
   } catch (e) {
     console.error('admin.staffAssignments.create failed', e)
     const message = String(e?.message || '')
-    if (message.includes('required') || message.includes('different') || message.includes('belong') || message.includes('staff') || message.includes('job_seeker')) {
+    if (
+      message.includes('required') ||
+      message.includes('different') ||
+      message.includes('belong') ||
+      message.includes('staff') ||
+      message.includes('job_seeker') ||
+      message.includes('candidate role')
+    ) {
       return res.status(400).json({ error: message })
     }
     res.status(500).json({ error: 'Could not create staff assignment' })
