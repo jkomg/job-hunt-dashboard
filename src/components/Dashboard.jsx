@@ -258,7 +258,7 @@ export default function Dashboard({ onNavigate, me }) {
         </div>
         <div className="topline-actions">
           <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('checkin')}>
-            <Icon name="circle-check" /> Log today
+            <Icon name="circle-check" /> Check-in + plan
           </button>
           <button className="btn btn-primary btn-sm" onClick={() => onNavigate('pipeline')}>
             <Icon name="columns" /> Pipeline
@@ -301,7 +301,7 @@ export default function Dashboard({ onNavigate, me }) {
               </div>
             </div>
           </div>
-          <button className="btn btn-quiet btn-sm" onClick={() => onNavigate('checkin')}>
+          <button className="btn btn-quiet btn-sm" onClick={() => onNavigate('checkin', { checkinFocus: 'plan' })}>
             <Icon name="pen-line" /> Edit
           </button>
         </div>
@@ -339,7 +339,7 @@ export default function Dashboard({ onNavigate, me }) {
                 <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('guides')}>
                   <Icon name="book-open" /> Start Here
                 </button>
-                <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('checkin')}>
+                <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('checkin', { checkinFocus: 'plan' })}>
                   <Icon name="pen-line" /> Set plan
                 </button>
               </div>
@@ -348,7 +348,7 @@ export default function Dashboard({ onNavigate, me }) {
         </div>
 
         <div className="focus-foot">
-          <button className="btn btn-quiet btn-sm" onClick={() => onNavigate('checkin')}>
+          <button className="btn btn-quiet btn-sm" onClick={() => onNavigate('checkin', { checkinFocus: 'plan' })}>
             <Icon name="rotate-ccw" /> Update Top 3
           </button>
           {focusTasks.length > 0 && (
