@@ -310,7 +310,7 @@ export default function Guides() {
               ? 'Open Briefing, then make sure every active role in Pipeline has a next action and a date.'
               : selectedGuide.id === 'start-here'
                 ? 'Open Briefing, then add one real job to Pipeline and one real person to Outreach.'
-              : 'Generate your ingest token in Settings before touching the external agent configuration.'}
+                : 'Generate your ingest token in Settings before touching the external agent configuration.'}
           </div>
         </div>
       </div>

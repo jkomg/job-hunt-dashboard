@@ -1855,7 +1855,6 @@ body {
   color: oklch(0.56 0.13 88);
   margin-top: 1px;
 }
-
 @media (max-width: 640px) {
   .checkin-grid { grid-template-columns: 1fr; }
   .helper-grid { grid-template-columns: 1fr; }
