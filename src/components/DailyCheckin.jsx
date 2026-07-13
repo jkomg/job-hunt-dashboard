@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Icon } from '../ui-icons.jsx'
 
 const EXERCISE_OPTIONS = ['Cardio/Run', 'Weights/Strength', 'Yoga/Stretch', 'Walk', 'Sport/Activity', 'Rest Day']
@@ -10,13 +10,14 @@ function moodColor(v) {
   return 'var(--red)'
 }
 
-export default function DailyCheckin() {
+export default function DailyCheckin({ navIntent = null }) {
   const [existingId, setExistingId] = useState(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
   const [autofillingTop3, setAutofillingTop3] = useState(false)
+  const top3SectionRef = useRef(null)
 
   const today = new Date().toLocaleDateString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric', year: 'numeric'
@@ -83,6 +84,11 @@ export default function DailyCheckin() {
       })
       .catch(() => setLoading(false))
   }, [])
+
+  useEffect(() => {
+    if (navIntent?.checkinFocus !== 'plan') return
+    top3SectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [navIntent])
 
   function set(key, val) {
     setForm(prev => ({ ...prev, [key]: val }))
@@ -152,6 +158,7 @@ export default function DailyCheckin() {
   const calls = form['Conversations / Calls'] || 0
   const totalActivity = outreach + responses + applications + calls
   const top3Filled = top3Lines.filter(t => t.trim()).length
+  const isPlanMode = navIntent?.checkinFocus === 'plan'
 
   const checklist = [
     mindset !== 5 || energy !== 5,
@@ -186,6 +193,13 @@ export default function DailyCheckin() {
       </div>
 
       {error && <div className="error-msg">{error}</div>}
+
+      <div className="guide-example-block" style={{ marginBottom: 16 }}>
+        <div className="guide-example-label">What this page is for</div>
+        <div className="guide-example-body">
+          Use Check-in to log today&apos;s activity and set tomorrow&apos;s Top 3 plan. Your Top 3 becomes tomorrow&apos;s focus list on the Briefing.
+        </div>
+      </div>
 
       <div className="checkin-layout">
         {/* ── main column ─────────────────────────────── */}
@@ -330,13 +344,30 @@ export default function DailyCheckin() {
           </div>
 
           {/* 04 · Tomorrow's Top 3 */}
-          <div className="ci-card top3">
+          <div className="ci-card top3" ref={top3SectionRef}>
             <div className="ci-card-head">
               <span className="ci-num">04</span>
               <span className="ci-card-title">Tomorrow's Top 3</span>
               <button type="button" className="btn btn-ghost btn-sm t3-auto" onClick={autofillTop3} disabled={autofillingTop3}>
                 <Icon name="rotate-ccw" /> {autofillingTop3 ? 'Pulling…' : 'Auto-fill from queue'}
               </button>
+            </div>
+            {isPlanMode && (
+              <div className="guide-example-block guide-example-accent" style={{ marginTop: 0, marginBottom: 14 }}>
+                <div className="guide-example-label">Set plan</div>
+                <div className="guide-example-body">
+                  This is where you set tomorrow&apos;s plan. These Top 3 items become the focus tasks shown on your Briefing.
+                </div>
+              </div>
+            )}
+            <div className="guide-example-block" style={{ marginTop: 0, marginBottom: 14 }}>
+              <div className="guide-example-label">Strong Top 3 examples</div>
+              <div className="guide-example-body">
+                Good: &ldquo;Follow up with Acme recruiter about Tuesday&apos;s screen,&rdquo; &ldquo;Tailor resume for Brightwell CSM role,&rdquo; &ldquo;Send thank-you note after product interview.&rdquo;
+              </div>
+              <div className="guide-example-body" style={{ marginTop: 8, color: 'var(--text-2)' }}>
+                Too vague: &ldquo;Job search,&rdquo; &ldquo;Networking,&rdquo; or &ldquo;Apply more.&rdquo;
+              </div>
             </div>
             <div className="top3-rows">
               {[0, 1, 2].map(i => (
