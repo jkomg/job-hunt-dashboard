@@ -32,6 +32,7 @@ export default function Login({ onLogin }) {
       <div className="login-card">
         <h1>Job Hunt<span style={{ color: 'var(--accent)' }}>.</span></h1>
         <p className="sub">Your daily command center</p>
+        <div className="login-note">Account signup is invite-only. Ask your admin for a signup link if you are new here.</div>
         {error && <div className="error-msg">{error}</div>}
         <form onSubmit={submit}>
           <div className="field">

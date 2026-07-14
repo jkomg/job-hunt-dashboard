@@ -98,40 +98,64 @@ function PipelineForm({ form, set }) {
         <div className="helper-card">
           <div className="helper-card-title">Use the dates like this</div>
           <div className="helper-card-copy">`Next Action Date` is when you plan to do something. `Follow-Up Date` is when you want the dashboard to remind you to check back if nothing happens first.</div>
+          <div className="helper-card-copy" style={{ marginTop: 8 }}>
+            Example: if you plan to email the recruiter on July 18, use `Next Action Date`. If you already emailed them and want a reminder to check back on July 23, use `Follow-Up Date`.
+          </div>
         </div>
       </div>
 
-      <div className="checkin-grid">
-        <div className="field"><label>Company *</label><input value={form.Company} onChange={e => set('Company', e.target.value)} /></div>
-        <div className="field">
-          <label>Role</label>
-          <input value={form.Role} onChange={e => set('Role', e.target.value)} placeholder="Customer Success Manager" />
+      <section className="form-section form-section-essential">
+        <div className="form-section-head">
+          <div>
+            <div className="form-section-title">First-pass role info</div>
+            <div className="form-section-copy">Fill these in now so the role shows up cleanly in your daily flow.</div>
+          </div>
+          <span className="field-badge field-badge-essential">Start here</span>
         </div>
-        <div className="field">
-          <label>Stage</label>
-          <select value={form.Stage} onChange={e => set('Stage', e.target.value)}>{STAGES.map(s => <option key={s}>{s}</option>)}</select>
-          <div className="field-note">Use `Researching` before you apply and `Applied` after you submit. Move to `Closed` only when this role is done.</div>
-        </div>
-        <div className="field"><label>Priority</label><select value={form.Priority} onChange={e => set('Priority', e.target.value)}><option value="">—</option>{PRIORITIES.map(p => <option key={p}>{p}</option>)}</select></div>
-        <div className="field"><label>Date Applied</label><input type="date" value={form['Date Applied']} onChange={e => set('Date Applied', e.target.value)} /></div>
-        <div className="field">
-          <label>Follow-Up Date</label>
-          <input type="date" value={form['Follow-Up Date']} onChange={e => set('Follow-Up Date', e.target.value)} />
-          <div className="field-note">Use this when you are waiting on someone else and want the role to reappear in your `Briefing` if you have not heard back.</div>
-        </div>
-      </div>
 
-      <div className="checkin-grid">
-        <div className="field">
-          <label>Next Action</label>
-          <input value={form['Next Action']} onChange={e => set('Next Action', e.target.value)} placeholder="Email recruiter, finish application, prep for interview..." />
+        <div className="checkin-grid">
+          <div className="field">
+            <label>Company * <span className="field-badge field-badge-essential">Required</span></label>
+            <input value={form.Company} onChange={e => set('Company', e.target.value)} />
+          </div>
+          <div className="field">
+            <label>Role <span className="field-badge field-badge-essential">Recommended now</span></label>
+            <input value={form.Role} onChange={e => set('Role', e.target.value)} placeholder="Customer Success Manager" />
+          </div>
+          <div className="field">
+            <label>Stage <span className="field-badge field-badge-essential">Recommended now</span></label>
+            <select value={form.Stage} onChange={e => set('Stage', e.target.value)}>{STAGES.map(s => <option key={s}>{s}</option>)}</select>
+            <div className="field-note">Use `Researching` before you apply and `Applied` after you submit. Move to `Closed` only when this role is done.</div>
+          </div>
+          <div className="field">
+            <label>Priority <span className="field-badge field-badge-later">Optional later</span></label>
+            <select value={form.Priority} onChange={e => set('Priority', e.target.value)}><option value="">—</option>{PRIORITIES.map(p => <option key={p}>{p}</option>)}</select>
+          </div>
+          <div className="field">
+            <label>Date Applied <span className="field-badge field-badge-later">Optional later</span></label>
+            <input type="date" value={form['Date Applied']} onChange={e => set('Date Applied', e.target.value)} />
+          </div>
+          <div className="field">
+            <label>Follow-Up Date <span className="field-badge field-badge-essential">Recommended now</span></label>
+            <input type="date" value={form['Follow-Up Date']} onChange={e => set('Follow-Up Date', e.target.value)} />
+            <div className="field-note">Use this when you are waiting on someone else and want the role to reappear in your `Briefing` if you have not heard back.</div>
+            <div className="field-note">Think: `I am waiting on them.`</div>
+          </div>
         </div>
-        <div className="field">
-          <label>Next Action Date</label>
-          <input type="date" value={form['Next Action Date']} onChange={e => set('Next Action Date', e.target.value)} />
-          <div className="field-note">Use this when you already know what you plan to do next and when you plan to do it.</div>
+
+        <div className="checkin-grid">
+          <div className="field">
+            <label>Next Action <span className="field-badge field-badge-essential">Recommended now</span></label>
+            <input value={form['Next Action']} onChange={e => set('Next Action', e.target.value)} placeholder="Email recruiter, finish application, prep for interview..." />
+          </div>
+          <div className="field">
+            <label>Next Action Date <span className="field-badge field-badge-essential">Recommended now</span></label>
+            <input type="date" value={form['Next Action Date']} onChange={e => set('Next Action Date', e.target.value)} />
+            <div className="field-note">Use this when you already know what you plan to do next and when you plan to do it.</div>
+            <div className="field-note">Think: `I already know what I need to do.`</div>
+          </div>
         </div>
-      </div>
+      </section>
 
       <details className="details-card" open={showAdvanced} onToggle={e => setShowAdvanced(e.currentTarget.open)}>
         <summary>
@@ -194,9 +218,9 @@ function PipelineForm({ form, set }) {
         </div>
       </details>
 
-      <div className="field"><label>Job URL</label><input value={form['Job URL']} onChange={e => set('Job URL', e.target.value)} placeholder="https://…" /></div>
-      <div className="field"><label>Notes</label><textarea value={form.Notes} onChange={e => set('Notes', e.target.value)} placeholder="Keep this lightweight if you are just getting started." /></div>
-      <div className="field"><label>Research Notes</label><textarea value={form['Research Notes']} onChange={e => set('Research Notes', e.target.value)} placeholder="Company background, culture, products, interview prep…" /></div>
+      <div className="field"><label>Job URL <span className="field-badge field-badge-later">Optional later</span></label><input value={form['Job URL']} onChange={e => set('Job URL', e.target.value)} placeholder="https://…" /></div>
+      <div className="field"><label>Notes <span className="field-badge field-badge-later">Optional later</span></label><textarea value={form.Notes} onChange={e => set('Notes', e.target.value)} placeholder="Keep this lightweight if you are just getting started." /></div>
+      <div className="field"><label>Research Notes <span className="field-badge field-badge-later">Optional later</span></label><textarea value={form['Research Notes']} onChange={e => set('Research Notes', e.target.value)} placeholder="Company background, culture, products, interview prep…" /></div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
         <input type="checkbox" id="filed-ue" checked={!!form['Filed for Unemployment']} onChange={e => set('Filed for Unemployment', e.target.checked)} style={{ width: 16, height: 16, margin: 0, appearance: 'auto', flexShrink: 0 }} />
         <label htmlFor="filed-ue" style={{ fontSize: 13, color: 'var(--text)', cursor: 'pointer', margin: 0 }}>Filed for Unemployment</label>

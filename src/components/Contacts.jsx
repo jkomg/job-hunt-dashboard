@@ -66,31 +66,68 @@ function ContactForm({ form, set }) {
         <div className="helper-card">
           <div className="helper-card-title">Use the dates like this</div>
           <div className="helper-card-copy">`Next Follow-Up` is when this person should reappear on your radar. `Next Action Date` is when you plan to do a specific outreach step yourself.</div>
+          <div className="helper-card-copy" style={{ marginTop: 8 }}>
+            Example: if you want to send a thank-you note on July 16, use `Next Action Date`. If you already sent it and want to revisit the contact on July 22 if they stay quiet, use `Next Follow-Up`.
+          </div>
         </div>
       </div>
 
-      <div className="checkin-grid">
-        <div className="field"><label>Name *</label><input value={form.Name} onChange={e => set('Name', e.target.value)} /></div>
-        <div className="field"><label>Title</label><input value={form.Title} onChange={e => set('Title', e.target.value)} /></div>
-        <div className="field"><label>Company</label><input value={form.Company} onChange={e => set('Company', e.target.value)} /></div>
-        <div className="field"><label>Email</label><input type="email" value={form.Email} onChange={e => set('Email', e.target.value)} placeholder="name@company.com" /></div>
-        <div className="field"><label>Phone</label><input type="tel" value={form.Phone} onChange={e => set('Phone', e.target.value)} placeholder="(555) 555-5555" /></div>
-        <div className="field">
-          <label>Next Follow-Up</label>
-          <input type="date" value={form['Next Follow-Up']} onChange={e => set('Next Follow-Up', e.target.value)} />
-          <div className="field-note">Set this when you want the contact to appear in `Needs follow-up`, even if you have not planned the exact message yet.</div>
+      <section className="form-section form-section-essential">
+        <div className="form-section-head">
+          <div>
+            <div className="form-section-title">First-pass outreach info</div>
+            <div className="form-section-copy">Capture the person and the next touchpoint. Everything else can wait until the relationship is real.</div>
+          </div>
+          <span className="field-badge field-badge-essential">Start here</span>
         </div>
-        <div className="field"><label>LinkedIn URL</label><input value={form['LinkedIn URL']} onChange={e => set('LinkedIn URL', e.target.value)} placeholder="https://linkedin.com/in/…" /></div>
-      </div>
 
-      <div className="checkin-grid">
-        <div className="field"><label>Next Action</label><input value={form['Next Action']} onChange={e => set('Next Action', e.target.value)} placeholder="Send intro note, follow up, thank them, ask one question..." /></div>
-        <div className="field">
-          <label>Next Action Date</label>
-          <input type="date" value={form['Next Action Date']} onChange={e => set('Next Action Date', e.target.value)} />
-          <div className="field-note">Use this when you already know the outreach step you plan to take and when you want to do it.</div>
+        <div className="checkin-grid">
+          <div className="field">
+            <label>Name * <span className="field-badge field-badge-essential">Required</span></label>
+            <input value={form.Name} onChange={e => set('Name', e.target.value)} />
+          </div>
+          <div className="field">
+            <label>Title <span className="field-badge field-badge-later">Optional later</span></label>
+            <input value={form.Title} onChange={e => set('Title', e.target.value)} />
+          </div>
+          <div className="field">
+            <label>Company <span className="field-badge field-badge-essential">Recommended now</span></label>
+            <input value={form.Company} onChange={e => set('Company', e.target.value)} />
+          </div>
+          <div className="field">
+            <label>Email <span className="field-badge field-badge-later">Optional later</span></label>
+            <input type="email" value={form.Email} onChange={e => set('Email', e.target.value)} placeholder="name@company.com" />
+          </div>
+          <div className="field">
+            <label>Phone <span className="field-badge field-badge-later">Optional later</span></label>
+            <input type="tel" value={form.Phone} onChange={e => set('Phone', e.target.value)} placeholder="(555) 555-5555" />
+          </div>
+          <div className="field">
+            <label>Next Follow-Up <span className="field-badge field-badge-essential">Recommended now</span></label>
+            <input type="date" value={form['Next Follow-Up']} onChange={e => set('Next Follow-Up', e.target.value)} />
+            <div className="field-note">Set this when you want the contact to appear in `Needs follow-up`, even if you have not planned the exact message yet.</div>
+            <div className="field-note">Think: `Bring this person back onto my radar.`</div>
+          </div>
+          <div className="field">
+            <label>LinkedIn URL <span className="field-badge field-badge-later">Optional later</span></label>
+            <input value={form['LinkedIn URL']} onChange={e => set('LinkedIn URL', e.target.value)} placeholder="https://linkedin.com/in/…" />
+          </div>
         </div>
-      </div>
+
+        <div className="checkin-grid">
+          <div className="field">
+            <label>Next Action <span className="field-badge field-badge-essential">Recommended now</span></label>
+            <input value={form['Next Action']} onChange={e => set('Next Action', e.target.value)} placeholder="Send intro note, follow up, thank them, ask one question..." />
+          </div>
+          <div className="field">
+            <label>Next Action Date <span className="field-badge field-badge-essential">Recommended now</span></label>
+            <input type="date" value={form['Next Action Date']} onChange={e => set('Next Action Date', e.target.value)} />
+            <div className="field-note">Use this when you already know the outreach step you plan to take and when you want to do it.</div>
+            <div className="field-note">Think: `I know the message or step I plan to take.`</div>
+          </div>
+        </div>
+      </section>
+
       <details className="details-card" open={showRelationshipDetails} onToggle={e => setShowRelationshipDetails(e.currentTarget.open)}>
         <summary>
           <span>Relationship details</span>
@@ -114,7 +151,7 @@ function ContactForm({ form, set }) {
         </div>
       </details>
 
-      <div className="field"><label>Notes</label><textarea value={form.Notes} onChange={e => set('Notes', e.target.value)} placeholder="Add context after real messages or conversations." /></div>
+      <div className="field"><label>Notes <span className="field-badge field-badge-later">Optional later</span></label><textarea value={form.Notes} onChange={e => set('Notes', e.target.value)} placeholder="Add context after real messages or conversations." /></div>
     </>
   )
 }

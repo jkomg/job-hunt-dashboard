@@ -332,6 +332,29 @@ async function ensureStaffOpsSchema() {
   await db.execute('CREATE INDEX IF NOT EXISTS candidate_messages_thread_idx ON candidate_messages(thread_id, created_at)')
 }
 
+async function ensureSignupInviteSchema() {
+  await db.batch([
+    `
+      CREATE TABLE IF NOT EXISTS signup_invites (
+        id TEXT PRIMARY KEY,
+        organization_id TEXT NOT NULL,
+        email TEXT NOT NULL,
+        role TEXT NOT NULL,
+        token_hash TEXT NOT NULL UNIQUE,
+        created_by_user_id INTEGER,
+        expires_at INTEGER NOT NULL,
+        consumed_at INTEGER,
+        consumed_by_user_id INTEGER,
+        canceled_at INTEGER,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )
+    `
+  ])
+  await db.execute('CREATE INDEX IF NOT EXISTS signup_invites_org_idx ON signup_invites(organization_id, created_at DESC)')
+  await db.execute('CREATE INDEX IF NOT EXISTS signup_invites_email_idx ON signup_invites(email)')
+}
+
 async function ensureSheetSyncRunScopeSchema() {
   const cols = await getTableColumnSet('sheet_sync_runs')
   if (!cols.has('organization_id')) {
@@ -403,7 +426,8 @@ async function runMigrations() {
     { id: '2026-04-30-001-staff-ops-schema', description: 'staff recommendations and tasks tables', up: ensureStaffOpsSchema },
     { id: '2026-04-30-002-candidate-messaging-schema', description: 'candidate thread and message tables', up: ensureStaffOpsSchema },
     { id: '2026-05-01-001-pipeline-contacts-schema', description: 'pipeline multi-contact JSON field', up: ensureActionSchema },
-    { id: '2026-05-12-001-sheet-sync-org-scope', description: 'organization_id for sheet sync run records', up: ensureSheetSyncRunScopeSchema }
+    { id: '2026-05-12-001-sheet-sync-org-scope', description: 'organization_id for sheet sync run records', up: ensureSheetSyncRunScopeSchema },
+    { id: '2026-07-13-001-signup-invites', description: 'invite-only signup records', up: ensureSignupInviteSchema }
   ]
 
   for (const migration of migrations) {
@@ -458,6 +482,25 @@ function toStaffAssignment(row) {
     jobSeekerUserId: Number(row.job_seeker_user_id),
     staffUsername: row.staff_username || null,
     jobSeekerUsername: row.job_seeker_username || null,
+    createdAt: Number(row.created_at || 0),
+    updatedAt: Number(row.updated_at || 0)
+  }
+}
+
+function toSignupInvite(row) {
+  if (!row) return null
+  return {
+    id: row.id,
+    organizationId: row.organization_id,
+    organizationName: row.organization_name || null,
+    email: row.email || null,
+    role: row.role || null,
+    createdByUserId: row.created_by_user_id == null ? null : Number(row.created_by_user_id),
+    createdByUsername: row.created_by_username || null,
+    expiresAt: Number(row.expires_at || 0),
+    consumedAt: row.consumed_at == null ? null : Number(row.consumed_at),
+    consumedByUserId: row.consumed_by_user_id == null ? null : Number(row.consumed_by_user_id),
+    canceledAt: row.canceled_at == null ? null : Number(row.canceled_at),
     createdAt: Number(row.created_at || 0),
     updatedAt: Number(row.updated_at || 0)
   }
@@ -742,6 +785,147 @@ export async function listAllUsers() {
     isAdmin: Number(row.is_admin || 0) === 1,
     mustChangePassword: Number(row.must_change_password || 0) === 1
   }))
+}
+
+export async function listSignupInvites(organizationId = DEFAULT_ORG_ID) {
+  const res = await db.execute({
+    sql: `
+      SELECT
+        si.*,
+        o.name AS organization_name,
+        u.username AS created_by_username
+      FROM signup_invites si
+      LEFT JOIN organizations o ON o.id = si.organization_id
+      LEFT JOIN users u ON u.id = si.created_by_user_id
+      WHERE si.organization_id = ?
+      ORDER BY
+        CASE
+          WHEN si.consumed_at IS NULL AND si.canceled_at IS NULL AND si.expires_at >= ? THEN 0
+          ELSE 1
+        END,
+        si.created_at DESC
+    `,
+    args: [String(organizationId), now()]
+  })
+  return toPlainRows(res).map(toSignupInvite)
+}
+
+export async function createSignupInvite({
+  organizationId = DEFAULT_ORG_ID,
+  email,
+  role = DEFAULT_CANDIDATE_ROLE,
+  tokenHash,
+  createdByUserId = null,
+  expiresAt
+} = {}) {
+  const normalizedEmail = normalizeEmail(email)
+  const safeRole = normalizeMembershipRole(role, DEFAULT_CANDIDATE_ROLE)
+  const safeTokenHash = String(tokenHash || '').trim()
+  const safeExpiresAt = Number(expiresAt || 0)
+  if (!normalizedEmail) throw new Error('email is required')
+  if (!safeTokenHash) throw new Error('tokenHash is required')
+  if (!Number.isFinite(safeExpiresAt) || safeExpiresAt <= now()) throw new Error('expiresAt must be in the future')
+
+  const ts = now()
+  const id = crypto.randomUUID()
+  await db.execute({
+    sql: `
+      INSERT INTO signup_invites (
+        id, organization_id, email, role, token_hash, created_by_user_id,
+        expires_at, consumed_at, consumed_by_user_id, canceled_at, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?)
+    `,
+    args: [id, String(organizationId), normalizedEmail, safeRole, safeTokenHash, createdByUserId == null ? null : Number(createdByUserId), safeExpiresAt, ts, ts]
+  })
+  const created = await db.execute({
+    sql: `
+      SELECT
+        si.*,
+        o.name AS organization_name,
+        u.username AS created_by_username
+      FROM signup_invites si
+      LEFT JOIN organizations o ON o.id = si.organization_id
+      LEFT JOIN users u ON u.id = si.created_by_user_id
+      WHERE si.id = ?
+      LIMIT 1
+    `,
+    args: [id]
+  })
+  return toSignupInvite(firstRow(created))
+}
+
+export async function getSignupInviteByTokenHash(tokenHash) {
+  const safeTokenHash = String(tokenHash || '').trim()
+  if (!safeTokenHash) return null
+  const res = await db.execute({
+    sql: `
+      SELECT
+        si.*,
+        o.name AS organization_name,
+        u.username AS created_by_username
+      FROM signup_invites si
+      LEFT JOIN organizations o ON o.id = si.organization_id
+      LEFT JOIN users u ON u.id = si.created_by_user_id
+      WHERE si.token_hash = ?
+      LIMIT 1
+    `,
+    args: [safeTokenHash]
+  })
+  return toSignupInvite(firstRow(res))
+}
+
+export async function cancelSignupInvite(inviteId) {
+  const ts = now()
+  await db.execute({
+    sql: `
+      UPDATE signup_invites
+      SET canceled_at = ?, updated_at = ?
+      WHERE id = ? AND consumed_at IS NULL AND canceled_at IS NULL
+    `,
+    args: [ts, ts, String(inviteId)]
+  })
+  const res = await db.execute({
+    sql: `
+      SELECT
+        si.*,
+        o.name AS organization_name,
+        u.username AS created_by_username
+      FROM signup_invites si
+      LEFT JOIN organizations o ON o.id = si.organization_id
+      LEFT JOIN users u ON u.id = si.created_by_user_id
+      WHERE si.id = ?
+      LIMIT 1
+    `,
+    args: [String(inviteId)]
+  })
+  return toSignupInvite(firstRow(res))
+}
+
+export async function consumeSignupInvite(inviteId, consumedByUserId) {
+  const ts = now()
+  await db.execute({
+    sql: `
+      UPDATE signup_invites
+      SET consumed_at = ?, consumed_by_user_id = ?, updated_at = ?
+      WHERE id = ? AND consumed_at IS NULL AND canceled_at IS NULL
+    `,
+    args: [ts, Number(consumedByUserId), ts, String(inviteId)]
+  })
+  const res = await db.execute({
+    sql: `
+      SELECT
+        si.*,
+        o.name AS organization_name,
+        u.username AS created_by_username
+      FROM signup_invites si
+      LEFT JOIN organizations o ON o.id = si.organization_id
+      LEFT JOIN users u ON u.id = si.created_by_user_id
+      WHERE si.id = ?
+      LIMIT 1
+    `,
+    args: [String(inviteId)]
+  })
+  return toSignupInvite(firstRow(res))
 }
 
 export async function listAssignedUsersForStaff(staffUserId, organizationId = DEFAULT_ORG_ID) {
