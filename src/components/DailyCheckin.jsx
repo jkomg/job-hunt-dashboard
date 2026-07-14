@@ -182,28 +182,87 @@ export default function DailyCheckin({ navIntent = null }) {
     { key: 'Conversations / Calls', label: 'Calls / convos', sub: 'Live conversations', icon: 'phone', val: calls },
   ]
 
+  const top3Card = (
+    <div className={'ci-card top3' + (isPlanMode ? ' ci-card-plan-mode' : '')} ref={top3SectionRef}>
+      <div className="ci-card-head">
+        <span className="ci-num">04</span>
+        <span className="ci-card-title">Tomorrow's Top 3</span>
+        <button type="button" className="btn btn-ghost btn-sm t3-auto" onClick={autofillTop3} disabled={autofillingTop3}>
+          <Icon name="rotate-ccw" /> {autofillingTop3 ? 'Pulling…' : 'Auto-fill from queue'}
+        </button>
+      </div>
+      {isPlanMode && (
+        <div className="guide-example-block guide-example-accent ci-plan-callout" style={{ marginTop: 0, marginBottom: 14 }}>
+          <div className="guide-example-label">Plan mode</div>
+          <div className="guide-example-body">
+            You came here from `Briefing` to set tomorrow&apos;s plan. These Top 3 items become the focus tasks shown on your next Briefing.
+          </div>
+        </div>
+      )}
+      <div className="guide-example-block" style={{ marginTop: 0, marginBottom: 14 }}>
+        <div className="guide-example-label">Strong Top 3 examples</div>
+        <div className="guide-example-body">
+          Good: &ldquo;Follow up with Acme recruiter about Tuesday&apos;s screen,&rdquo; &ldquo;Tailor resume for Brightwell CSM role,&rdquo; &ldquo;Send thank-you note after product interview.&rdquo;
+        </div>
+        <div className="guide-example-body" style={{ marginTop: 8, color: 'var(--text-2)' }}>
+          Too vague: &ldquo;Job search,&rdquo; &ldquo;Networking,&rdquo; or &ldquo;Apply more.&rdquo;
+        </div>
+      </div>
+      <div className="top3-rows">
+        {[0, 1, 2].map(i => (
+          <div className="top3-row" key={i}>
+            <span className="top3-num">{i + 1}</span>
+            <input
+              className="ci-input"
+              value={top3Lines[i]}
+              onChange={e => setTop(i, e.target.value)}
+              placeholder={i === 0 ? 'The one thing that moves the search forward…' : 'Add a focus…'}
+            />
+          </div>
+        ))}
+      </div>
+      {isPlanMode && (
+        <div className="save-stack ci-plan-save">
+          <button
+            type="button"
+            className={'btn btn-primary btn-full' + (saved ? ' btn-saved' : '')}
+            onClick={save}
+            disabled={saving}
+          >
+            <Icon name={saved ? 'check' : 'save'} />
+            {saving ? 'Saving…' : saved ? 'Saved for tomorrow' : 'Save tomorrow’s plan'}
+          </button>
+          <div className="save-meta">{saved ? 'Plan saved to your next Briefing' : 'Save here before leaving plan mode'}</div>
+        </div>
+      )}
+    </div>
+  )
+
   return (
     <div className="page">
       <div className="page-head">
         <div>
-          <h1>Daily Check-in</h1>
-          <div className="sub">{todayShort} · {existingId ? 'UPDATING' : 'NEW ENTRY'}</div>
+          <h1>{isPlanMode ? "Set Tomorrow's Plan" : 'Daily Check-in'}</h1>
+          <div className="sub">{todayShort} · {isPlanMode ? 'PLAN MODE' : (existingId ? 'UPDATING' : 'NEW ENTRY')}</div>
         </div>
-        <span className="chip chip-gray ci-status"><Icon name="flame" /> {existingId ? 'Entry exists' : 'New entry'}</span>
+        <span className={'chip ci-status ' + (isPlanMode ? 'chip-amber' : 'chip-gray')}><Icon name={isPlanMode ? 'list-checks' : 'flame'} /> {isPlanMode ? 'Top 3 focus' : (existingId ? 'Entry exists' : 'New entry')}</span>
       </div>
 
       {error && <div className="error-msg">{error}</div>}
 
-      <div className="guide-example-block" style={{ marginBottom: 16 }}>
+      <div className={'guide-example-block' + (isPlanMode ? ' guide-example-accent' : '')} style={{ marginBottom: 16 }}>
         <div className="guide-example-label">What this page is for</div>
         <div className="guide-example-body">
-          Use Check-in to log today&apos;s activity and set tomorrow&apos;s Top 3 plan. Your Top 3 becomes tomorrow&apos;s focus list on the Briefing.
+          {isPlanMode
+            ? "You're here to set tomorrow's Top 3 plan first. If you want, you can still scroll down and log today's activity afterward."
+            : "Use Check-in to log today's activity and set tomorrow's Top 3 plan. Your Top 3 becomes tomorrow's focus list on the Briefing."}
         </div>
       </div>
 
       <div className="checkin-layout">
         {/* ── main column ─────────────────────────────── */}
         <div className="checkin-main">
+          {isPlanMode && top3Card}
 
           {/* 01 · How are you feeling */}
           <div className="ci-card">
@@ -343,46 +402,7 @@ export default function DailyCheckin({ navIntent = null }) {
             </div>
           </div>
 
-          {/* 04 · Tomorrow's Top 3 */}
-          <div className="ci-card top3" ref={top3SectionRef}>
-            <div className="ci-card-head">
-              <span className="ci-num">04</span>
-              <span className="ci-card-title">Tomorrow's Top 3</span>
-              <button type="button" className="btn btn-ghost btn-sm t3-auto" onClick={autofillTop3} disabled={autofillingTop3}>
-                <Icon name="rotate-ccw" /> {autofillingTop3 ? 'Pulling…' : 'Auto-fill from queue'}
-              </button>
-            </div>
-            {isPlanMode && (
-              <div className="guide-example-block guide-example-accent" style={{ marginTop: 0, marginBottom: 14 }}>
-                <div className="guide-example-label">Set plan</div>
-                <div className="guide-example-body">
-                  This is where you set tomorrow&apos;s plan. These Top 3 items become the focus tasks shown on your Briefing.
-                </div>
-              </div>
-            )}
-            <div className="guide-example-block" style={{ marginTop: 0, marginBottom: 14 }}>
-              <div className="guide-example-label">Strong Top 3 examples</div>
-              <div className="guide-example-body">
-                Good: &ldquo;Follow up with Acme recruiter about Tuesday&apos;s screen,&rdquo; &ldquo;Tailor resume for Brightwell CSM role,&rdquo; &ldquo;Send thank-you note after product interview.&rdquo;
-              </div>
-              <div className="guide-example-body" style={{ marginTop: 8, color: 'var(--text-2)' }}>
-                Too vague: &ldquo;Job search,&rdquo; &ldquo;Networking,&rdquo; or &ldquo;Apply more.&rdquo;
-              </div>
-            </div>
-            <div className="top3-rows">
-              {[0, 1, 2].map(i => (
-                <div className="top3-row" key={i}>
-                  <span className="top3-num">{i + 1}</span>
-                  <input
-                    className="ci-input"
-                    value={top3Lines[i]}
-                    onChange={e => setTop(i, e.target.value)}
-                    placeholder={i === 0 ? 'The one thing that moves the search forward…' : 'Add a focus…'}
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
+          {!isPlanMode && top3Card}
         </div>
 
         {/* ── right rail ────────────────────────────────── */}
