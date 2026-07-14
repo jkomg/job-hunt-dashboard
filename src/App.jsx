@@ -95,6 +95,10 @@ const MOBILE_NAV_ITEMS_STAFF = [
   { id: 'settings',      label: 'Settings',   icon: 'settings'       },
 ]
 
+function isOrgAdminRole(role) {
+  return ['admin', 'org_admin'].includes(String(role || '').trim())
+}
+
 function Sidebar({ view, go, groups, staffBadges, memberBadges, pipelineBadgeCount, isStaffLike, me, onLogout }) {
   const allItems = groups.flatMap(g => g.items)
   const activeItem = allItems.find(it => it.id === view) || SETTINGS_ITEM
@@ -111,7 +115,13 @@ function Sidebar({ view, go, groups, staffBadges, memberBadges, pipelineBadgeCou
   }
 
   const initials = (me?.displayName || me?.username || '?').slice(0, 2).toUpperCase()
-  const roleName = me?.isAdmin ? 'Admin' : me?.role === 'staff' ? 'Staff' : 'Job Seeker'
+  const roleName = me?.isPlatformAdmin
+    ? 'Platform Admin'
+    : isOrgAdminRole(me?.role)
+      ? 'Org Admin'
+      : me?.role === 'staff'
+        ? 'Staff'
+        : 'Job Seeker'
 
   return (
     <aside className="sidebar">
@@ -296,11 +306,11 @@ export default function App() {
 
   useEffect(() => { refreshMe() }, [])
 
-  const isAdminOnly = me?.isAdmin && me?.role === 'admin'
+  const isAdminOnly = !!me?.canManageOrg && me?.role !== 'staff'
   const isStaff = me?.role === 'staff'
   const isStaffLike = isStaff || isAdminOnly
   const navGroups = isAdminOnly ? ADMIN_GROUPS : (isStaff ? STAFF_GROUPS : JOB_SEEKER_GROUPS)
-  const mobileItems = isStaff ? MOBILE_NAV_ITEMS_STAFF : MOBILE_NAV_ITEMS_SEEKER
+  const mobileItems = isStaffLike ? MOBILE_NAV_ITEMS_STAFF : MOBILE_NAV_ITEMS_SEEKER
   const allNavIds = new Set([...navGroups.flatMap(g => g.items.map(i => i.id)), 'settings', 'admin_operations', 'admin_users', 'admin_assignments'])
   const settingsMode = view === 'admin_operations'
     ? 'admin_operations'
