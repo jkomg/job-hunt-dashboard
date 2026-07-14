@@ -221,6 +221,20 @@ export default function DailyCheckin({ navIntent = null }) {
           </div>
         ))}
       </div>
+      {isPlanMode && (
+        <div className="save-stack ci-plan-save">
+          <button
+            type="button"
+            className={'btn btn-primary btn-full' + (saved ? ' btn-saved' : '')}
+            onClick={save}
+            disabled={saving}
+          >
+            <Icon name={saved ? 'check' : 'save'} />
+            {saving ? 'Saving…' : saved ? 'Saved for tomorrow' : 'Save tomorrow’s plan'}
+          </button>
+          <div className="save-meta">{saved ? 'Plan saved to your next Briefing' : 'Save here before leaving plan mode'}</div>
+        </div>
+      )}
     </div>
   )
 

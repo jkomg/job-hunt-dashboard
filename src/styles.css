@@ -867,6 +867,7 @@ body {
 .top3-row { display: flex; align-items: center; gap: 11px; }
 .top3-num { width: 27px; height: 27px; border-radius: 8px; background: var(--accent-soft); color: var(--accent-strong); font-family: var(--font-mono); font-weight: 600; font-size: 13px; display: grid; place-items: center; flex-shrink: 0; }
 .top3-row .ci-input { background: var(--surface); }
+.ci-plan-save { margin-top: 14px; }
 
 /* right rail */
 .checkin-rail { position: sticky; top: 30px; display: flex; flex-direction: column; gap: 14px; }
