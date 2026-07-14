@@ -55,6 +55,13 @@ function formatDateTime(iso) {
   return `${ts.toLocaleString()} (${timeAgo(iso)})`
 }
 
+function formatInviteStatus(invite) {
+  if (invite?.consumedAt) return 'Used'
+  if (invite?.canceledAt) return 'Canceled'
+  if (Number(invite?.expiresAt || 0) < Date.now()) return 'Expired'
+  return 'Active'
+}
+
 function describeRun(run) {
   if (!run?.summary) return 'No summary yet.'
   const summary = run.summary
@@ -234,6 +241,7 @@ export default function Settings({ me, onProfileUpdated, onNavigate, settingsMod
   const [downloadingLogs, setDownloadingLogs] = useState(false)
   const [adminUsers, setAdminUsers] = useState([])
   const [organizations, setOrganizations] = useState([])
+  const [signupInvites, setSignupInvites] = useState([])
   const [assignedUsers, setAssignedUsers] = useState([])
   const [staffAssignments, setStaffAssignments] = useState([])
   const [auditLogs, setAuditLogs] = useState([])
@@ -241,7 +249,14 @@ export default function Settings({ me, onProfileUpdated, onNavigate, settingsMod
   const [newUserEmail, setNewUserEmail] = useState('')
   const [newUserRole, setNewUserRole] = useState(DEFAULT_CANDIDATE_ROLE)
   const [newUserPassword, setNewUserPassword] = useState('')
+  const [adminUserSearch, setAdminUserSearch] = useState('')
+  const [inviteEmail, setInviteEmail] = useState('')
+  const [inviteRole, setInviteRole] = useState(DEFAULT_CANDIDATE_ROLE)
+  const [inviteExpiresDays, setInviteExpiresDays] = useState('7')
+  const [latestInviteUrl, setLatestInviteUrl] = useState('')
   const [creatingUser, setCreatingUser] = useState(false)
+  const [creatingInvite, setCreatingInvite] = useState(false)
+  const [cancelingInviteId, setCancelingInviteId] = useState('')
   const [updatingRoleUserId, setUpdatingRoleUserId] = useState('')
   const [resettingPasswordUserId, setResettingPasswordUserId] = useState('')
   const [togglingMustResetUserId, setTogglingMustResetUserId] = useState('')
@@ -316,6 +331,25 @@ export default function Settings({ me, onProfileUpdated, onNavigate, settingsMod
     for (const user of adminUsers) map.set(Number(user.id), user)
     return map
   }, [adminUsers])
+  const adminSummary = useMemo(() => ({
+    users: adminUsers.filter(user => !!user.role).length,
+    staff: adminUsers.filter(user => user.role === 'staff' || user.role === 'admin').length,
+    invites: signupInvites.filter(invite => formatInviteStatus(invite) === 'Active').length,
+    orgs: organizations.length
+  }), [adminUsers, signupInvites, organizations])
+  const filteredAdminUsers = useMemo(() => {
+    const query = adminUserSearch.trim().toLowerCase()
+    if (!query) return adminUsers
+    return adminUsers.filter(user => {
+      const haystack = [
+        user.username,
+        user.email,
+        user.role,
+        user.organizationId
+      ].filter(Boolean).join(' ').toLowerCase()
+      return haystack.includes(query)
+    })
+  }, [adminUsers, adminUserSearch])
   const opsStatusRows = useMemo(() => {
     const lastByDirection = {}
     for (const run of runs || []) {
@@ -416,21 +450,24 @@ export default function Settings({ me, onProfileUpdated, onNavigate, settingsMod
       setEventsTabsText(tabsToText(cfg.eventsTabs || ['Events']))
 
       if (me?.isAdmin) {
-        const [usersRes, assignmentsRes, auditRes, costRes, orgRes] = await Promise.all([
+        const [usersRes, assignmentsRes, auditRes, costRes, orgRes, invitesRes] = await Promise.all([
           api('/api/admin/users'),
           api('/api/admin/staff-assignments'),
           api('/api/admin/audit-log?limit=60'),
           api('/api/admin/cost-snapshots?limit=10'),
-          api('/api/admin/organizations')
+          api('/api/admin/organizations'),
+          api('/api/admin/signup-invites')
         ])
         setAdminUsers(usersRes?.users || [])
         setOrganizations(orgRes?.organizations || [])
+        setSignupInvites(invitesRes?.invites || [])
         setStaffAssignments(assignmentsRes?.assignments || [])
         setAuditLogs(auditRes?.logs || [])
         setCostSnapshots(costRes?.snapshots || [])
       } else {
         setAdminUsers([])
         setOrganizations([])
+        setSignupInvites([])
         setStaffAssignments([])
         setAuditLogs([])
         setCostSnapshots([])
@@ -535,6 +572,55 @@ export default function Settings({ me, onProfileUpdated, onNavigate, settingsMod
       setError(e.payload || { error: e.message })
     } finally {
       setCreatingUser(false)
+    }
+  }
+
+  async function createInvite() {
+    setCreatingInvite(true)
+    setError(null)
+    setSuccess('')
+    try {
+      const email = inviteEmail.trim().toLowerCase()
+      if (!email || !email.includes('@')) throw new Error('A valid email is required')
+      const result = await api('/api/admin/signup-invites', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email,
+          role: inviteRole,
+          expiresInDays: Number(inviteExpiresDays) || 7
+        })
+      })
+      setLatestInviteUrl(result?.inviteUrl || '')
+      if (navigator?.clipboard?.writeText && result?.inviteUrl) {
+        await navigator.clipboard.writeText(result.inviteUrl)
+        setSuccess('Signup invite created and copied to clipboard.')
+      } else {
+        setSuccess('Signup invite created.')
+      }
+      setInviteEmail('')
+      setInviteRole(DEFAULT_CANDIDATE_ROLE)
+      setInviteExpiresDays('7')
+      await load()
+    } catch (e) {
+      setError(e.payload || { error: e.message })
+    } finally {
+      setCreatingInvite(false)
+    }
+  }
+
+  async function cancelInvite(invite) {
+    setCancelingInviteId(invite.id)
+    setError(null)
+    setSuccess('')
+    try {
+      await api(`/api/admin/signup-invites/${invite.id}`, { method: 'DELETE' })
+      setSuccess(`Signup invite canceled for ${invite.email}.`)
+      await load()
+    } catch (e) {
+      setError(e.payload || { error: e.message })
+    } finally {
+      setCancelingInviteId('')
     }
   }
 
@@ -1559,116 +1645,137 @@ Body:
           <div style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 10 }}>
             Create users, change roles, reset passwords, and control force-reset policy.
           </div>
-          <div style={{ fontWeight: 600, marginBottom: 8 }}>Organizations</div>
-          <div className="settings-grid">
-            <div className="field">
-              <label>Name</label>
-              <input value={newOrgName} onChange={e => setNewOrgName(e.target.value)} placeholder="Remote Rebellion Pilot" />
+          <div className="admin-summary-grid">
+            <div className="admin-summary-card">
+              <div className="admin-summary-label">Managed Users</div>
+              <div className="admin-summary-value">{adminSummary.users}</div>
             </div>
-            <div className="field">
-              <label>ID (optional)</label>
-              <input value={newOrgId} onChange={e => setNewOrgId(e.target.value)} placeholder="remote-rebellion-pilot" />
+            <div className="admin-summary-card">
+              <div className="admin-summary-label">Staff + Admin</div>
+              <div className="admin-summary-value">{adminSummary.staff}</div>
             </div>
-          </div>
-          <div className="quick-actions" style={{ marginBottom: 10 }}>
-            <button className="btn btn-primary" onClick={createOrg} disabled={creatingOrg}>
-              {creatingOrg ? 'Creating…' : 'Create Organization'}
-            </button>
-          </div>
-          {!!organizations.length && (
-            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
-              {organizations.map(org => `${org.name} (${org.id})`).join(' • ')}
+            <div className="admin-summary-card">
+              <div className="admin-summary-label">Active Invites</div>
+              <div className="admin-summary-value">{adminSummary.invites}</div>
             </div>
-          )}
-          <div style={{ fontWeight: 600, marginBottom: 8 }}>Assign User Membership</div>
-          <div className="settings-grid">
-            <div className="field">
-              <label>User</label>
-              <select value={membershipUserId} onChange={e => setMembershipUserId(e.target.value)}>
-                <option value="">Select user</option>
-                {adminUsers.map(user => <option key={`membership-user-${user.id}`} value={user.id}>{user.username}</option>)}
-              </select>
-            </div>
-            <div className="field">
-              <label>Organization</label>
-              <select value={membershipOrgId} onChange={e => setMembershipOrgId(e.target.value)}>
-                <option value="">Select organization</option>
-                {organizations.map(org => <option key={`membership-org-${org.id}`} value={org.id}>{org.name} ({org.id})</option>)}
-              </select>
-            </div>
-            <div className="field">
-              <label>Role</label>
-              <select value={membershipRole} onChange={e => setMembershipRole(e.target.value)}>
-                <option value="accelerator_user">accelerator_user</option>
-                <option value="premium_user">premium_user</option>
-                <option value="vip_user">vip_user</option>
-                <option value="job_seeker">job_seeker (legacy)</option>
-                <option value="staff">staff</option>
-                <option value="admin">admin</option>
-              </select>
+            <div className="admin-summary-card">
+              <div className="admin-summary-label">Organizations</div>
+              <div className="admin-summary-value">{adminSummary.orgs}</div>
             </div>
           </div>
-          <div className="quick-actions" style={{ marginBottom: 14 }}>
-            <button className="btn btn-ghost" onClick={saveMembership} disabled={savingMembership}>
-              {savingMembership ? 'Saving…' : 'Save Membership'}
-            </button>
-            <button className="btn btn-ghost" onClick={removeMembership} disabled={savingMembership || !membershipUserId || !membershipOrgId}>
-              {savingMembership ? 'Working…' : 'Remove Membership'}
-            </button>
+
+          <div className="admin-block">
+            <div className="admin-block-head">
+              <div>
+                <div className="admin-block-title">Manage Existing Users</div>
+                <div className="admin-block-copy">Search first, then change roles, reset passwords, or remove access.</div>
+              </div>
+            </div>
+            <div className="field" style={{ marginBottom: 12 }}>
+              <label>Search users</label>
+              <input value={adminUserSearch} onChange={e => setAdminUserSearch(e.target.value)} placeholder="Search by username, email, role, or org" />
+            </div>
+            <div className="table-scroll">
+            <table className="data-table data-table-users">
+              <thead>
+                <tr>
+                  <th>Username</th>
+                  <th>Email</th>
+                  <th>Role</th>
+                  <th>Password Reset</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredAdminUsers.map(user => (
+                  <tr key={`org-user-${user.id}`}>
+                    <td>{user.username}</td>
+                    <td>{user.email || '—'}</td>
+                    <td>
+                      <select
+                        value={user.role || ''}
+                        disabled={updatingRoleUserId === String(user.id) || user.username === me?.username || !user.role}
+                        onChange={(e) => changeUserRole(user.id, e.target.value)}
+                      >
+                        {!user.role && <option value="">No membership</option>}
+                        <option value="accelerator_user">accelerator_user</option>
+                        <option value="premium_user">premium_user</option>
+                        <option value="vip_user">vip_user</option>
+                        <option value="job_seeker">job_seeker (legacy)</option>
+                        <option value="staff">staff</option>
+                        <option value="admin">admin</option>
+                      </select>
+                    </td>
+                    <td>{user.mustChangePassword ? 'Required' : 'No'}</td>
+                    <td>
+                      <div className="table-actions">
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => resetUserPassword(user)}
+                          disabled={resettingPasswordUserId === String(user.id)}
+                        >
+                          {resettingPasswordUserId === String(user.id) ? 'Resetting…' : 'Reset Password'}
+                        </button>
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => toggleForceReset(user)}
+                          disabled={togglingMustResetUserId === String(user.id)}
+                        >
+                          {togglingMustResetUserId === String(user.id)
+                            ? 'Saving…'
+                            : (user.mustChangePassword ? 'Clear Force Reset' : 'Force Reset')}
+                        </button>
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => toggleByoPermission(user)}
+                          disabled={togglingByoPermissionUserId === String(user.id)}
+                        >
+                          {togglingByoPermissionUserId === String(user.id)
+                            ? 'Saving…'
+                            : (user?.permissions?.canUseByoAgent ? 'Disable BYO Agent' : 'Enable BYO Agent')}
+                        </button>
+                        {user.username !== me?.username && (
+                          <button
+                            className="btn btn-ghost btn-sm"
+                            style={{ color: 'var(--red)' }}
+                            onClick={() => deleteUser(user)}
+                          >
+                            Delete User
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {!filteredAdminUsers.length && (
+                  <tr>
+                    <td colSpan="5" style={{ color: 'var(--text-muted)' }}>No users match that search.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+            </div>
           </div>
-          <div style={{ fontWeight: 600, marginBottom: 8 }}>Create User</div>
-          <div className="field">
-            <label>Username</label>
-            <input value={newUsername} onChange={e => setNewUsername(e.target.value)} placeholder="new user username" />
-          </div>
-          <div className="field">
-            <label>Email (optional)</label>
-            <input value={newUserEmail} onChange={e => setNewUserEmail(e.target.value)} placeholder="name@example.com" />
-          </div>
-          <div className="field">
-              <label>Role</label>
-              <select value={newUserRole} onChange={e => setNewUserRole(e.target.value)}>
-                <option value="accelerator_user">accelerator_user</option>
-                <option value="premium_user">premium_user</option>
-                <option value="vip_user">vip_user</option>
-                <option value="job_seeker">job_seeker (legacy)</option>
-                <option value="staff">staff</option>
-                <option value="admin">admin</option>
-              </select>
-          </div>
-          <div className="field">
-            <label>Temporary Password</label>
-            <input type="password" value={newUserPassword} onChange={e => setNewUserPassword(e.target.value)} placeholder="at least 10 characters" />
-          </div>
-          <div className="quick-actions" style={{ marginBottom: 14 }}>
-            <button className="btn btn-primary" onClick={createUser} disabled={creatingUser}>
-              {creatingUser ? 'Creating…' : 'Create User'}
-            </button>
-          </div>
-          <div style={{ fontWeight: 600, marginBottom: 8 }}>Manage Existing Users</div>
-          <div className="table-scroll">
-          <table className="data-table data-table-users">
-            <thead>
-              <tr>
-                <th>Username</th>
-                <th>Email</th>
-                <th>Role</th>
-                <th>Password Reset</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {adminUsers.map(user => (
-                <tr key={`org-user-${user.id}`}>
-                  <td>{user.username}</td>
-                  <td>{user.email || '—'}</td>
-                  <td>
-                    <select
-                      value={user.role || ''}
-                      disabled={updatingRoleUserId === String(user.id) || user.username === me?.username || !user.role}
-                      onChange={(e) => changeUserRole(user.id, e.target.value)}
-                    >
-                      {!user.role && <option value="">No membership</option>}
+
+          <div className="admin-block">
+            <div className="admin-block-head">
+              <div>
+                <div className="admin-block-title">Invite or Add New User</div>
+                <div className="admin-block-copy">Use invites when someone should set their own password. Use direct create when you need to provision access yourself.</div>
+              </div>
+            </div>
+            <div className="admin-subgrid">
+              <div className="admin-mini-card">
+                <div className="admin-mini-title">Invite New User</div>
+                <div className="admin-mini-copy">Best for normal onboarding.</div>
+                <div className="settings-grid">
+                  <div className="field">
+                    <label>Email</label>
+                    <input value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} placeholder="name@example.com" />
+                  </div>
+                  <div className="field">
+                    <label>Role</label>
+                    <select value={inviteRole} onChange={e => setInviteRole(e.target.value)}>
                       <option value="accelerator_user">accelerator_user</option>
                       <option value="premium_user">premium_user</option>
                       <option value="vip_user">vip_user</option>
@@ -1676,50 +1783,181 @@ Body:
                       <option value="staff">staff</option>
                       <option value="admin">admin</option>
                     </select>
-                  </td>
-                  <td>{user.mustChangePassword ? 'Required' : 'No'}</td>
-                  <td>
-                    <div className="table-actions">
-                      <button
-                        className="btn btn-ghost btn-sm"
-                        onClick={() => resetUserPassword(user)}
-                        disabled={resettingPasswordUserId === String(user.id)}
-                      >
-                        {resettingPasswordUserId === String(user.id) ? 'Resetting…' : 'Reset Password'}
-                      </button>
-                      <button
-                        className="btn btn-ghost btn-sm"
-                        onClick={() => toggleForceReset(user)}
-                        disabled={togglingMustResetUserId === String(user.id)}
-                      >
-                        {togglingMustResetUserId === String(user.id)
-                          ? 'Saving…'
-                          : (user.mustChangePassword ? 'Clear Force Reset' : 'Force Reset')}
-                      </button>
-                      <button
-                        className="btn btn-ghost btn-sm"
-                        onClick={() => toggleByoPermission(user)}
-                        disabled={togglingByoPermissionUserId === String(user.id)}
-                      >
-                        {togglingByoPermissionUserId === String(user.id)
-                          ? 'Saving…'
-                          : (user?.permissions?.canUseByoAgent ? 'Disable BYO Agent' : 'Enable BYO Agent')}
-                      </button>
-                      {user.username !== me?.username && (
-                        <button
-                          className="btn btn-ghost btn-sm"
-                          style={{ color: 'var(--red)' }}
-                          onClick={() => deleteUser(user)}
-                        >
-                          Delete User
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  </div>
+                  <div className="field">
+                    <label>Expires In (days)</label>
+                    <input type="number" min="1" max="30" value={inviteExpiresDays} onChange={e => setInviteExpiresDays(e.target.value)} />
+                  </div>
+                </div>
+                <div className="quick-actions" style={{ marginBottom: 0 }}>
+                  <button className="btn btn-primary" onClick={createInvite} disabled={creatingInvite}>
+                    {creatingInvite ? 'Creating…' : 'Create Signup Invite'}
+                  </button>
+                </div>
+                {!!latestInviteUrl && (
+                  <div className="field" style={{ marginBottom: 0 }}>
+                    <label>Latest Invite Link</label>
+                    <input value={latestInviteUrl} readOnly />
+                  </div>
+                )}
+              </div>
+
+              <div className="admin-mini-card">
+                <div className="admin-mini-title">Create User Directly</div>
+                <div className="admin-mini-copy">Best when you need a temporary password right now.</div>
+                <div className="field">
+                  <label>Username</label>
+                  <input value={newUsername} onChange={e => setNewUsername(e.target.value)} placeholder="new user username" />
+                </div>
+                <div className="field">
+                  <label>Email (optional)</label>
+                  <input value={newUserEmail} onChange={e => setNewUserEmail(e.target.value)} placeholder="name@example.com" />
+                </div>
+                <div className="field">
+                    <label>Role</label>
+                    <select value={newUserRole} onChange={e => setNewUserRole(e.target.value)}>
+                      <option value="accelerator_user">accelerator_user</option>
+                      <option value="premium_user">premium_user</option>
+                      <option value="vip_user">vip_user</option>
+                      <option value="job_seeker">job_seeker (legacy)</option>
+                      <option value="staff">staff</option>
+                      <option value="admin">admin</option>
+                    </select>
+                </div>
+                <div className="field">
+                  <label>Temporary Password</label>
+                  <input type="password" value={newUserPassword} onChange={e => setNewUserPassword(e.target.value)} placeholder="at least 10 characters" />
+                </div>
+                <div className="quick-actions" style={{ marginBottom: 0 }}>
+                  <button className="btn btn-primary" onClick={createUser} disabled={creatingUser}>
+                    {creatingUser ? 'Creating…' : 'Create User'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {!!signupInvites.length && (
+            <div className="admin-block">
+              <div className="admin-block-head">
+                <div>
+                  <div className="admin-block-title">Existing Signup Invites</div>
+                  <div className="admin-block-copy">Keep an eye on pending access and cancel stale links.</div>
+                </div>
+              </div>
+              <div className="table-scroll">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Email</th>
+                      <th>Role</th>
+                      <th>Status</th>
+                      <th>Expires</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {signupInvites.map(invite => {
+                      const status = formatInviteStatus(invite)
+                      return (
+                        <tr key={`invite-${invite.id}`}>
+                          <td>{invite.email}</td>
+                          <td>{invite.role}</td>
+                          <td>{status}</td>
+                          <td>{invite.expiresAt ? formatDateTime(new Date(invite.expiresAt).toISOString()) : '—'}</td>
+                          <td>
+                            <div className="table-actions">
+                              {status === 'Active' && (
+                                <button
+                                  className="btn btn-ghost btn-sm"
+                                  onClick={() => cancelInvite(invite)}
+                                  disabled={cancelingInviteId === invite.id}
+                                >
+                                  {cancelingInviteId === invite.id ? 'Canceling…' : 'Cancel Invite'}
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          <div className="admin-block">
+            <div className="admin-block-head">
+              <div>
+                <div className="admin-block-title">Organizations and Memberships</div>
+                <div className="admin-block-copy">Use this when you are adding a new org or moving someone across org boundaries.</div>
+              </div>
+            </div>
+            <div className="admin-subgrid">
+              <div className="admin-mini-card">
+                <div className="admin-mini-title">Organizations</div>
+                <div className="settings-grid">
+                  <div className="field">
+                    <label>Name</label>
+                    <input value={newOrgName} onChange={e => setNewOrgName(e.target.value)} placeholder="Remote Rebellion Pilot" />
+                  </div>
+                  <div className="field">
+                    <label>ID (optional)</label>
+                    <input value={newOrgId} onChange={e => setNewOrgId(e.target.value)} placeholder="remote-rebellion-pilot" />
+                  </div>
+                </div>
+                <div className="quick-actions" style={{ marginBottom: 10 }}>
+                  <button className="btn btn-primary" onClick={createOrg} disabled={creatingOrg}>
+                    {creatingOrg ? 'Creating…' : 'Create Organization'}
+                  </button>
+                </div>
+                {!!organizations.length && (
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                    {organizations.map(org => `${org.name} (${org.id})`).join(' • ')}
+                  </div>
+                )}
+              </div>
+
+              <div className="admin-mini-card">
+                <div className="admin-mini-title">Assign User Membership</div>
+                <div className="settings-grid">
+                  <div className="field">
+                    <label>User</label>
+                    <select value={membershipUserId} onChange={e => setMembershipUserId(e.target.value)}>
+                      <option value="">Select user</option>
+                      {adminUsers.map(user => <option key={`membership-user-${user.id}`} value={user.id}>{user.username}</option>)}
+                    </select>
+                  </div>
+                  <div className="field">
+                    <label>Organization</label>
+                    <select value={membershipOrgId} onChange={e => setMembershipOrgId(e.target.value)}>
+                      <option value="">Select organization</option>
+                      {organizations.map(org => <option key={`membership-org-${org.id}`} value={org.id}>{org.name} ({org.id})</option>)}
+                    </select>
+                  </div>
+                  <div className="field">
+                    <label>Role</label>
+                    <select value={membershipRole} onChange={e => setMembershipRole(e.target.value)}>
+                      <option value="accelerator_user">accelerator_user</option>
+                      <option value="premium_user">premium_user</option>
+                      <option value="vip_user">vip_user</option>
+                      <option value="job_seeker">job_seeker (legacy)</option>
+                      <option value="staff">staff</option>
+                      <option value="admin">admin</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="quick-actions" style={{ marginBottom: 0 }}>
+                  <button className="btn btn-ghost" onClick={saveMembership} disabled={savingMembership}>
+                    {savingMembership ? 'Saving…' : 'Save Membership'}
+                  </button>
+                  <button className="btn btn-ghost" onClick={removeMembership} disabled={savingMembership || !membershipUserId || !membershipOrgId}>
+                    {savingMembership ? 'Working…' : 'Remove Membership'}
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
           </div>
         </div>

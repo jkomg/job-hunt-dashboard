@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import Login from './components/Login.jsx'
+import Signup from './components/Signup.jsx'
 import ForcePasswordChange from './components/ForcePasswordChange.jsx'
 import SetupWizard from './components/SetupWizard.jsx'
 import Dashboard from './components/Dashboard.jsx'
@@ -245,10 +246,18 @@ function MobileMoreSheet({ open, onClose, go, groups, view }) {
 }
 
 export default function App() {
+  const initialInviteToken = (() => {
+    try {
+      return new URLSearchParams(window.location.search).get('invite') || ''
+    } catch {
+      return ''
+    }
+  })()
   const [authed, setAuthed] = useState(null)
   const [me, setMe] = useState(null)
   const [view, setView] = useState('dashboard')
   const [navIntent, setNavIntent] = useState(null)
+  const [inviteToken, setInviteToken] = useState(initialInviteToken)
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false)
   const [staffBadges, setStaffBadges] = useState({ tasksOpen: 0, threadsOpen: 0 })
   const [memberBadges, setMemberBadges] = useState({ inboxOpenThreads: 0 })
@@ -404,6 +413,18 @@ export default function App() {
     resetShellView()
   }
 
+  function clearInviteToken() {
+    try {
+      const url = new URL(window.location.href)
+      url.searchParams.delete('invite')
+      const next = `${url.pathname}${url.search}${url.hash}`
+      window.history.replaceState({}, '', next)
+    } catch {
+      // ignore URL cleanup errors
+    }
+    setInviteToken('')
+  }
+
   if (authed === null) {
     return (
       <div className="stage" data-mode={mode} data-accent={accent}>
@@ -412,7 +433,12 @@ export default function App() {
     )
   }
 
-  if (!authed) return <Login onLogin={() => refreshMe({ resetView: true })} />
+  if (!authed) {
+    if (inviteToken) {
+      return <Signup inviteToken={inviteToken} onSignup={() => { clearInviteToken(); refreshMe({ resetView: true }) }} onBackToLogin={clearInviteToken} />
+    }
+    return <Login onLogin={() => refreshMe({ resetView: true })} />
+  }
   if (me?.mustChangePassword) return <ForcePasswordChange onDone={() => refreshMe({ resetView: true })} onLogout={logout} />
   if (!me?.onboardingComplete) return <SetupWizard me={me} onComplete={() => refreshMe({ resetView: true })} onLogout={logout} />
 

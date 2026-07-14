@@ -19,6 +19,7 @@ import {
   getPrimaryMembershipForUser, createUserAccount, listOrganizationUsers, listAssignedUsersForStaff, listAllUsers,
   listOrganizations, createOrganization, listMembershipsForUser, ensureUserMembership, deleteUserMembership, deleteUserAccount,
   listStaffAssignments, createStaffAssignment, deleteStaffAssignment, createAuditLog, getAuditLogs,
+  listSignupInvites, createSignupInvite, getSignupInviteByTokenHash, cancelSignupInvite, consumeSignupInvite,
   hasStaffAssignment, listJobRecommendations, createJobRecommendation, getJobRecommendationById, markRecommendationPosted, markRecommendationDraft, updateJobRecommendationDraft, listStaffTasks,
   getStaffTaskById, createStaffTask, updateStaffTask,
   listCandidateThreads, getCandidateThreadById, createCandidateThread, listCandidateMessages, createCandidateMessage,
@@ -103,6 +104,7 @@ const rateBuckets = new Map()
 const DEPLOY_VERSION = String(process.env.DEPLOY_VERSION || 'dev')
 const CSRF_EXEMPT_PATHS = new Set([
   '/api/login',
+  '/api/signup',
   '/api/health',
   '/api/internal/sheets/sync',
   '/api/internal/backup/export',
@@ -255,6 +257,31 @@ function latestTs(...values) {
     if (!Number.isFinite(n)) return max
     return n > max ? n : max
   }, 0)
+}
+
+function invitePublicPayload(invite) {
+  if (!invite) return null
+  return {
+    email: invite.email,
+    role: invite.role,
+    organizationId: invite.organizationId,
+    organizationName: invite.organizationName,
+    expiresAt: new Date(Number(invite.expiresAt || 0)).toISOString(),
+    status: inviteStatus(invite)
+  }
+}
+
+function inviteStatus(invite) {
+  if (!invite) return 'missing'
+  if (invite.canceledAt) return 'canceled'
+  if (invite.consumedAt) return 'used'
+  if (Number(invite.expiresAt || 0) < Date.now()) return 'expired'
+  return 'active'
+}
+
+function buildInviteUrl(req, token) {
+  const origin = `${req.protocol}://${req.get('host')}`
+  return `${origin}/?invite=${encodeURIComponent(String(token || ''))}`
 }
 
 function getCandidateActivityFromDashboard(dashboard) {
@@ -643,6 +670,94 @@ app.post('/api/login', async (req, res) => {
   })
 })
 
+app.get('/api/signup/invite/:token', async (req, res) => {
+  try {
+    const rawToken = String(req.params.token || '').trim()
+    if (!rawToken) return res.status(400).json({ error: 'Invite token is required' })
+    const invite = await getSignupInviteByTokenHash(hashToken(rawToken))
+    if (!invite) return res.status(404).json({ error: 'Invite not found', code: 'INVITE_NOT_FOUND' })
+    const status = inviteStatus(invite)
+    if (status !== 'active') {
+      return res.status(410).json({ error: `This invite is ${status}.`, code: `INVITE_${status.toUpperCase()}` })
+    }
+    res.json({ ok: true, invite: invitePublicPayload(invite) })
+  } catch (e) {
+    console.error('signup.invite.get failed', e)
+    res.status(500).json({ error: 'Could not load invite' })
+  }
+})
+
+app.post('/api/signup/invite/:token', async (req, res) => {
+  try {
+    if (AUTH_MODE === 'iap') {
+      return res.status(400).json({ error: 'Invite signup is unavailable in IAP mode' })
+    }
+    const rawToken = String(req.params.token || '').trim()
+    const username = String(req.body?.username || '').trim().toLowerCase()
+    const password = String(req.body?.password || '')
+    if (!rawToken) return res.status(400).json({ error: 'Invite token is required' })
+    if (!/^[a-z0-9._-]{3,32}$/.test(username)) {
+      return res.status(400).json({ error: 'Username must be 3-32 chars: letters, numbers, dot, dash, underscore' })
+    }
+    if (password.length < 10) {
+      return res.status(400).json({ error: 'Password must be at least 10 characters' })
+    }
+
+    const invite = await getSignupInviteByTokenHash(hashToken(rawToken))
+    if (!invite) return res.status(404).json({ error: 'Invite not found', code: 'INVITE_NOT_FOUND' })
+    const status = inviteStatus(invite)
+    if (status !== 'active') {
+      return res.status(410).json({ error: `This invite is ${status}.`, code: `INVITE_${status.toUpperCase()}` })
+    }
+    const existingEmail = await getUserByEmail(invite.email)
+    if (existingEmail) {
+      return res.status(409).json({ error: 'That invite email already belongs to an existing account' })
+    }
+
+    const user = await createUserAccount({
+      username,
+      password,
+      email: invite.email,
+      role: invite.role,
+      organizationId: invite.organizationId,
+      mustChangePassword: false
+    })
+    await consumeSignupInvite(invite.id, user.id)
+    await createAuditLog({
+      organizationId: invite.organizationId,
+      actorUserId: null,
+      targetUserId: user.id,
+      action: 'signup.invite.accepted',
+      entityType: 'signup_invite',
+      entityId: invite.id,
+      metadata: { email: invite.email, username: user.username, role: invite.role }
+    })
+
+    for (const token of getSessionTokenCandidates(req)) {
+      await deleteSession(token)
+    }
+    clearSessionCookies(res)
+
+    const sessionToken = crypto.randomBytes(32).toString('hex')
+    await createSession(sessionToken, user.id)
+    const csrfToken = generateCsrfToken()
+    res.cookie(SESSION_COOKIE_NAME, sessionToken, sessionCookieOptions())
+    setCsrfCookie(res, csrfToken)
+
+    res.json({
+      ok: true,
+      username: user.username,
+      mustChangePassword: false
+    })
+  } catch (e) {
+    console.error('signup.invite.consume failed', e)
+    if (String(e?.message || '').includes('UNIQUE constraint failed')) {
+      return res.status(409).json({ error: 'That username or email is already taken' })
+    }
+    res.status(500).json({ error: 'Could not create account from invite' })
+  }
+})
+
 app.post('/api/logout', async (req, res) => {
   for (const token of getSessionTokenCandidates(req)) {
     await deleteSession(token)
@@ -708,6 +823,70 @@ app.get('/api/admin/users', requireAuth, requireAdmin, async (req, res) => {
   } catch (e) {
     console.error('admin.users.list failed', e)
     res.status(500).json({ error: 'Could not list users' })
+  }
+})
+
+app.get('/api/admin/signup-invites', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const invites = await listSignupInvites(req.organizationId)
+    res.json({ ok: true, invites })
+  } catch (e) {
+    console.error('admin.signupInvites.list failed', e)
+    res.status(500).json({ error: 'Could not list signup invites' })
+  }
+})
+
+app.post('/api/admin/signup-invites', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const email = String(req.body?.email || '').trim().toLowerCase()
+    const role = String(req.body?.role || DEFAULT_CANDIDATE_ROLE).trim()
+    const expiresInDays = Math.max(1, Math.min(30, Number(req.body?.expiresInDays) || 7))
+    if (!email || !email.includes('@')) {
+      return res.status(400).json({ error: 'A valid email is required' })
+    }
+    const token = crypto.randomBytes(24).toString('base64url')
+    const invite = await createSignupInvite({
+      organizationId: req.organizationId,
+      email,
+      role,
+      tokenHash: hashToken(token),
+      createdByUserId: req.userId,
+      expiresAt: Date.now() + expiresInDays * 24 * 60 * 60 * 1000
+    })
+    await createAuditLog({
+      organizationId: req.organizationId,
+      actorUserId: req.userId,
+      action: 'admin.signup_invite.created',
+      entityType: 'signup_invite',
+      entityId: invite.id,
+      metadata: { email, role, expiresInDays }
+    })
+    res.json({ ok: true, invite, inviteUrl: buildInviteUrl(req, token) })
+  } catch (e) {
+    console.error('admin.signupInvites.create failed', e)
+    if (String(e?.message || '').includes('UNIQUE constraint failed')) {
+      return res.status(409).json({ error: 'That invite already exists or conflicts with an existing one' })
+    }
+    res.status(500).json({ error: 'Could not create signup invite' })
+  }
+})
+
+app.delete('/api/admin/signup-invites/:id', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const invite = await cancelSignupInvite(req.params.id)
+    if (!invite) return res.status(404).json({ error: 'Invite not found' })
+    await createAuditLog({
+      organizationId: req.organizationId,
+      actorUserId: req.userId,
+      action: 'admin.signup_invite.canceled',
+      entityType: 'signup_invite',
+      entityId: invite.id,
+      metadata: { email: invite.email, role: invite.role }
+    })
+    res.json({ ok: true, invite })
+  } catch (e) {
+    console.error('admin.signupInvites.cancel failed', e)
+    res.status(500).json({ error: 'Could not cancel signup invite' })
   }
 })
 

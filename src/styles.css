@@ -1303,10 +1303,24 @@ body {
 .accent-swatch.active { border-color: var(--text); box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--text); }
 .settings-save-row { display: flex; align-items: center; gap: 10px; padding: 14px 22px; border-top: 1px solid var(--border); background: var(--surface-2); }
 .settings-saved { font-family: var(--font-mono); font-size: 11.5px; color: var(--green); display: flex; align-items: center; gap: 6px; }
+.admin-summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.admin-summary-card { padding: 12px 13px; border: 1px solid var(--border); border-radius: 12px; background: color-mix(in oklch, var(--accent) 4%, var(--surface)); }
+.admin-summary-label { font-size: 11px; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.05em; font-family: var(--font-mono); }
+.admin-summary-value { font-size: 22px; font-weight: 700; letter-spacing: -0.03em; margin-top: 6px; }
+.admin-block { border: 1px solid var(--border); border-radius: 14px; padding: 14px; background: var(--surface); }
+.admin-block-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.admin-block-title { font-size: 14px; font-weight: 700; letter-spacing: -0.015em; }
+.admin-block-copy { font-size: 12px; color: var(--text-3); margin-top: 3px; line-height: 1.5; }
+.admin-subgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.admin-mini-card { border: 1px solid var(--border); border-radius: 12px; padding: 13px; background: var(--surface-2); }
+.admin-mini-title { font-size: 13px; font-weight: 700; letter-spacing: -0.015em; margin-bottom: 4px; }
+.admin-mini-copy { font-size: 12px; color: var(--text-3); margin-bottom: 12px; line-height: 1.5; }
 
 @media (max-width: 600px) {
   .settings-row { flex-direction: column; gap: 6px; }
   .settings-row-label { flex: none; padding-top: 0; }
+  .admin-summary-grid { grid-template-columns: 1fr 1fr; }
+  .admin-subgrid { grid-template-columns: 1fr; }
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -1451,6 +1465,10 @@ body {
 /* Login page */
 .login-wrap { display: flex; align-items: center; justify-content: center; min-height: 100dvh; background: var(--bg); padding: 20px; }
 .login-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 36px 28px; width: 100%; max-width: 360px; box-shadow: var(--shadow-md); }
+.signup-card { max-width: 420px; }
+.login-note { color: var(--text-3); font-size: 12px; line-height: 1.5; margin-bottom: 14px; }
+.signup-summary-grid { margin-bottom: 16px; }
+.signup-back-btn { margin-top: 12px; }
 
 /* Button variants missing from theme */
 .btn-success { background: var(--green); color: #fff; box-shadow: var(--shadow-sm); }
@@ -1531,6 +1549,57 @@ body {
   color: var(--text-2);
   font-size: 12px;
   line-height: 1.5;
+}
+.form-section {
+  margin-bottom: 16px;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+}
+.form-section-essential {
+  background: linear-gradient(180deg, color-mix(in oklch, var(--accent) 6%, var(--surface)) 0%, var(--surface) 100%);
+  border-color: color-mix(in oklch, var(--accent) 28%, var(--border));
+}
+.form-section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.form-section-title {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  margin-bottom: 4px;
+}
+.form-section-copy {
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.field-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.field-badge-essential {
+  color: var(--accent-strong);
+  background: color-mix(in oklch, var(--accent) 14%, transparent);
+  border: 1px solid color-mix(in oklch, var(--accent) 30%, transparent);
+}
+.field-badge-later {
+  color: var(--text-3);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
 }
 .field-note {
   font-size: 12px;
