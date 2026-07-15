@@ -393,7 +393,7 @@ export default function App() {
         const threads = Array.isArray(data?.threads) ? data.threads : []
         if (!active) return
         setMemberBadges({
-          inboxOpenThreads: threads.filter(t => t.status === 'open').length
+          inboxOpenThreads: Number(data?.unreadThreads || 0)
         })
       } catch {
         // ignore member badge refresh errors

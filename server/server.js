@@ -88,6 +88,10 @@ const AGENT_SETTINGS_KEYS = {
 const USER_PERMISSION_KEYS = {
   canUseByoAgent: 'permissions.can_use_byo_agent'
 }
+const MEMBER_THREAD_SETTING_KEYS = {
+  hiddenUntilUpdatedAt: 'member_thread.hidden_until_updated_at',
+  lastReadAt: 'member_thread.last_read_at'
+}
 const CANDIDATE_ROLES = new Set(['job_seeker', 'accelerator_user', 'premium_user', 'vip_user'])
 const DEFAULT_CANDIDATE_ROLE = 'accelerator_user'
 const ORG_ADMIN_ROLES = new Set(['admin', 'org_admin'])
@@ -332,6 +336,66 @@ async function getUserPermissionFlags(userId, { isAdmin = false } = {}) {
   const raw = await getAppSetting(key)
   const canUseByoAgent = raw == null ? !!isAdmin : parseBool(raw, !!isAdmin)
   return { canUseByoAgent }
+}
+
+function memberThreadSettingKey(userId, threadId, key) {
+  return userScopedSettingKey(userId, `${key}:${String(threadId || '').trim()}`)
+}
+
+async function markMemberThreadRead(userId, threadId, readAt = Date.now()) {
+  await setAppSetting(
+    memberThreadSettingKey(userId, threadId, MEMBER_THREAD_SETTING_KEYS.lastReadAt),
+    String(Number(readAt) || Date.now())
+  )
+}
+
+async function archiveMemberThread(userId, threadId, updatedAt = Date.now()) {
+  await setAppSetting(
+    memberThreadSettingKey(userId, threadId, MEMBER_THREAD_SETTING_KEYS.hiddenUntilUpdatedAt),
+    String(Number(updatedAt) || Date.now())
+  )
+}
+
+async function listMemberThreadsWithState({ organizationId, jobSeekerUserId, limit = 200 } = {}) {
+  const threads = await listCandidateThreadsForMember({ organizationId, jobSeekerUserId, limit })
+  if (!threads.length) {
+    return { threads: [], unreadThreads: 0, unreadMessages: 0 }
+  }
+
+  const keys = threads.flatMap(thread => ([
+    memberThreadSettingKey(jobSeekerUserId, thread.id, MEMBER_THREAD_SETTING_KEYS.hiddenUntilUpdatedAt),
+    memberThreadSettingKey(jobSeekerUserId, thread.id, MEMBER_THREAD_SETTING_KEYS.lastReadAt)
+  ]))
+  const settings = await getAppSettings(keys)
+
+  const visibleThreads = []
+  let unreadThreads = 0
+  let unreadMessages = 0
+
+  for (const thread of threads) {
+    const hiddenUntil = Number(settings[memberThreadSettingKey(jobSeekerUserId, thread.id, MEMBER_THREAD_SETTING_KEYS.hiddenUntilUpdatedAt)] || 0)
+    if (hiddenUntil > 0 && Number(thread.updatedAt || 0) <= hiddenUntil) continue
+
+    const lastReadAt = Number(settings[memberThreadSettingKey(jobSeekerUserId, thread.id, MEMBER_THREAD_SETTING_KEYS.lastReadAt)] || 0)
+    const messages = await listCandidateMessagesForMember(thread.id, jobSeekerUserId, 500)
+    const unreadCount = messages.filter(message => {
+      const createdAt = Number(message.createdAt || 0)
+      return Number(message.authorUserId) !== Number(jobSeekerUserId) && createdAt > lastReadAt
+    }).length
+
+    if (unreadCount > 0) {
+      unreadThreads += 1
+      unreadMessages += unreadCount
+    }
+
+    visibleThreads.push({
+      ...thread,
+      unreadCount,
+      lastReadAt: lastReadAt || null
+    })
+  }
+
+  return { threads: visibleThreads, unreadThreads, unreadMessages }
 }
 
 async function getSheetsConfigOverrides(organizationId) {
@@ -2103,12 +2167,12 @@ app.post('/api/staff/threads/:threadId/messages', requireAuth, requireStaffOrAdm
 
 app.get('/api/member/threads', requireAuth, requireJobSeeker, async (req, res) => {
   try {
-    const threads = await listCandidateThreadsForMember({
+    const inbox = await listMemberThreadsWithState({
       organizationId: req.organizationId,
       jobSeekerUserId: req.userId,
       limit: 200
     })
-    res.json({ ok: true, threads })
+    res.json({ ok: true, ...inbox })
   } catch (e) {
     console.error('member.threads.list failed', e)
     res.status(500).json({ error: 'Could not list member threads' })
@@ -2121,10 +2185,18 @@ app.get('/api/member/threads/:threadId/messages', requireAuth, requireJobSeeker,
     if (!thread || thread.organizationId !== req.organizationId || Number(thread.jobSeekerUserId) !== Number(req.userId)) {
       return res.status(404).json({ error: 'Thread not found' })
     }
+    const hiddenUntil = Number(await getAppSetting(
+      memberThreadSettingKey(req.userId, thread.id, MEMBER_THREAD_SETTING_KEYS.hiddenUntilUpdatedAt)
+    ) || 0)
+    if (hiddenUntil > 0 && Number(thread.updatedAt || 0) <= hiddenUntil) {
+      return res.status(404).json({ error: 'Thread not found' })
+    }
     const messages = await listCandidateMessagesForMember(thread.id, req.userId, 500)
     if (!messages.length) {
       return res.status(404).json({ error: 'Thread not found' })
     }
+    const latestMessageAt = messages.reduce((max, message) => Math.max(max, Number(message.createdAt || 0)), 0)
+    await markMemberThreadRead(req.userId, thread.id, latestMessageAt || Date.now())
     res.json({ ok: true, thread, messages })
   } catch (e) {
     console.error('member.messages.list failed', e)
@@ -2167,6 +2239,33 @@ app.post('/api/member/threads/:threadId/messages', requireAuth, requireJobSeeker
   } catch (e) {
     console.error('member.messages.create failed', e)
     res.status(500).json({ error: 'Could not create message' })
+  }
+})
+
+app.delete('/api/member/threads/:threadId', requireAuth, requireJobSeeker, async (req, res) => {
+  try {
+    const thread = await getCandidateThreadById(req.params.threadId)
+    if (!thread || thread.organizationId !== req.organizationId || Number(thread.jobSeekerUserId) !== Number(req.userId)) {
+      return res.status(404).json({ error: 'Thread not found' })
+    }
+    const visibleMessages = await listCandidateMessagesForMember(thread.id, req.userId, 1)
+    if (!visibleMessages.length) {
+      return res.status(404).json({ error: 'Thread not found' })
+    }
+    await archiveMemberThread(req.userId, thread.id, Number(thread.updatedAt || Date.now()))
+    await createAuditLog({
+      organizationId: req.organizationId,
+      actorUserId: req.userId,
+      targetUserId: req.userId,
+      action: 'member.thread.archived',
+      entityType: 'candidate_thread',
+      entityId: thread.id,
+      metadata: { topic: thread.topic || null }
+    })
+    res.json({ ok: true })
+  } catch (e) {
+    console.error('member.threads.delete failed', e)
+    res.status(500).json({ error: 'Could not remove thread' })
   }
 })
 
