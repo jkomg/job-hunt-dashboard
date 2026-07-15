@@ -268,7 +268,212 @@ Body:
   ],
 }
 
-const GUIDES = [START_HERE_GUIDE, JOB_SEEKER_GUIDE, BYO_GUIDE]
+const STAFF_GUIDE = {
+  id: 'staff-guide',
+  title: 'Staff Operations Guide',
+  subtitle: 'How staff should use Queue, Jobs, Support, and candidate threads.',
+  badge: 'Staff workflow',
+  icon: 'clipboard-list',
+  accent: 'oklch(0.60 0.16 210)',
+  audience: 'Staff',
+  sections: [
+    {
+      title: 'What Staff Owns',
+      text: 'Staff uses the app to help job seekers move forward, not to perform platform setup. Your daily job is to review candidate momentum, surface good opportunities, and keep support conversations moving.',
+      bullets: [
+        'Open Staff Briefing first.',
+        'Review your queue for stale follow-ups, interviews, and inactive candidates.',
+        'Draft or post job recommendations.',
+        'Keep tasks and threads current as you support candidates.',
+      ],
+      belongsHere: 'Day-to-day candidate support work: queue review, recommendations, tasks, and threaded conversations.',
+      example: 'A strong first pass each morning is checking stale follow-ups, picking one candidate, posting one strong role, and replying to any open support thread.',
+    },
+    {
+      title: 'Queue',
+      text: 'Queue is your triage view. Use it to decide who needs attention before you start creating work.',
+      bullets: [
+        'Watch Interview Active, Stale Follow-Ups, and Inactive 7d signals first.',
+        'Use My Queue when you want only your assigned candidates.',
+        'Use All Candidates only if you are an org admin or platform admin helping across the org.',
+      ],
+      belongsHere: 'The candidate-level overview for deciding who needs support today.',
+      example: 'If one candidate is interview-active and another has stale follow-ups, the interview-active candidate probably gets attention first.',
+    },
+    {
+      title: 'Jobs',
+      text: 'Jobs is where staff drafts recommendations before posting them into a candidate’s pipeline.',
+      bullets: [
+        'Create a draft when a role still needs review.',
+        'Post to Pipeline only when the recommendation is candidate-ready.',
+        'Use the fit note to explain why the role is relevant.',
+      ],
+      belongsHere: 'Vetted job leads that staff wants a candidate to act on, not every raw role you found online.',
+      example: 'A good recommendation includes company, role, source, link, and a short fit note like “Good match for enterprise onboarding and regulated accounts.”',
+    },
+    {
+      title: 'Support',
+      text: 'Support is where tasks and threads live. Use tasks for structured follow-up work and threads for conversations.',
+      bullets: [
+        'Use tasks when work has an owner, status, and due date.',
+        'Use threads for advice, coordination, and candidate-facing conversations.',
+        'Mark a thread internal when staff is discussing support strategy without the candidate seeing it.',
+      ],
+      belongsHere: 'Tasks = action items. Threads = conversation history.',
+      example: '“Review resume before Friday” is a task. “Here are three ways to respond to the recruiter” is a thread message.',
+    },
+    {
+      title: 'What Belongs In Threads',
+      text: 'Threads work best when each topic has a clear purpose instead of becoming a giant mixed conversation.',
+      bullets: [
+        'Create one thread per support topic.',
+        'Use shared visibility for candidate-facing messages.',
+        'Use internal visibility for staff-only coordination.',
+      ],
+      belongsHere: 'Topic-based support conversations such as interview prep, outreach strategy, or a follow-up plan after a rejection.',
+      example: 'Create one thread called “Interview prep for Acme panel” instead of mixing that advice into a general conversation thread.',
+    },
+    {
+      title: 'A Good Staff Rhythm',
+      text: 'The best staff workflow is short, repeatable, and visible to the rest of the team.',
+      bullets: [
+        'Morning: review Briefing and Queue.',
+        'Midday: post or refine recommendations.',
+        'Afternoon: clear tasks and reply to open threads.',
+        'Before leaving: make sure any urgent candidate next steps are captured in tasks or messages.',
+      ],
+      belongsHere: 'A lightweight operating rhythm that keeps support timely without forcing a giant weekly cleanup.',
+      example: 'If you touch a candidate, leave behind a task, a posted recommendation, or a thread update so the next staff member can see what happened.',
+    },
+  ],
+}
+
+const ORG_ADMIN_GUIDE = {
+  id: 'org-admin-guide',
+  title: 'Org Admin Guide',
+  subtitle: 'How to manage users, invites, assignments, and access inside one organization.',
+  badge: 'Org management',
+  icon: 'users',
+  accent: 'oklch(0.62 0.16 285)',
+  audience: 'Org admins',
+  sections: [
+    {
+      title: 'What Org Admins Can Do',
+      text: 'Org admins manage access and operations inside their own organization. They do not make site-wide or infrastructure changes.',
+      bullets: [
+        'Manage users in your organization.',
+        'Create signup invites or direct accounts.',
+        'Assign staff to job seekers.',
+        'Review your org audit log.',
+      ],
+      belongsHere: 'Organization-scoped people management and support operations.',
+      example: 'If Remote Rebellion needs a new coach added and three candidates assigned, that belongs to an org admin.',
+    },
+    {
+      title: 'User Management',
+      text: 'Use User Management for people access inside your org.',
+      bullets: [
+        'Invite new users when they should set their own password.',
+        'Create users directly when you need to hand someone a temporary password.',
+        'Change org roles only when their responsibilities really changed.',
+      ],
+      belongsHere: 'Real people who should have access to your organization right now.',
+      example: 'Invite a new staff coach by email, or create a direct account for a contractor who needs immediate access today.',
+    },
+    {
+      title: 'Remove From Org vs Delete User',
+      text: 'Org admins remove access from their org. Platform admins are the only people who can delete the full account.',
+      bullets: [
+        'Use Remove from Org when someone should no longer access your organization.',
+        'Expect the account to remain available if that person belongs to another org.',
+        'Escalate full account deletion to a platform admin.',
+      ],
+      belongsHere: 'Org-scoped access cleanup, not system-wide account deletion.',
+      example: 'If a staff member leaves Remote Rebellion, remove them from the org. Do not expect that action to erase their account everywhere.',
+    },
+    {
+      title: 'Assignments',
+      text: 'Assignments tell the system which staff member owns which job seeker.',
+      bullets: [
+        'Assign every active candidate to a responsible staff member.',
+        'Reassign candidates when ownership changes.',
+        'Use assignments to keep staff queue views meaningful.',
+      ],
+      belongsHere: 'Clear candidate ownership for support and accountability.',
+      example: 'When one coach goes on vacation, move their active candidates to another staff member so those candidates still appear in the right queue.',
+    },
+    {
+      title: 'Audit Log and Invites',
+      text: 'Use the audit log to confirm what changed and who changed it. Use invites to onboard safely.',
+      bullets: [
+        'Check the audit log when you are verifying a role, password policy, or assignment change.',
+        'Cancel stale invites instead of leaving old links active.',
+        'Use invites as the default path for new users whenever possible.',
+      ],
+      belongsHere: 'Change tracking and safe onboarding for your organization.',
+      example: 'If someone says they lost access unexpectedly, audit log is where you check whether their role or membership was changed.',
+    },
+  ],
+}
+
+const PLATFORM_ADMIN_GUIDE = {
+  id: 'platform-admin-guide',
+  title: 'Platform Admin Guide',
+  subtitle: 'Platform-only operations: org setup, backups, deployment health, and cross-org membership work.',
+  badge: 'Platform operations',
+  icon: 'shield',
+  accent: 'oklch(0.70 0.18 60)',
+  audience: 'Platform admins',
+  sections: [
+    {
+      title: 'What Platform Admins Own',
+      text: 'Platform admins are the only people who should make site-wide changes or manage infrastructure-sensitive settings.',
+      bullets: [
+        'Create organizations.',
+        'Manage cross-org memberships.',
+        'Run backups and restores.',
+        'Review deployment and cost operations.',
+      ],
+      belongsHere: 'Platform-wide configuration and safety-sensitive actions.',
+      example: 'Creating a new pilot organization and moving a user across orgs is platform-admin work, not org-admin work.',
+    },
+    {
+      title: 'Organizations and Memberships',
+      text: 'Use this area when the change crosses org boundaries.',
+      bullets: [
+        'Create a new organization before onboarding its users.',
+        'Add or remove memberships when someone belongs to multiple orgs.',
+        'Use platform admin role sparingly.',
+      ],
+      belongsHere: 'Tenant structure and cross-org access management.',
+      example: 'If Remote Rebellion gets its own pilot org and one advisor belongs to both that org and another pilot, membership management belongs here.',
+    },
+    {
+      title: 'Backups, Restore, and Cost Ops',
+      text: 'These controls affect the whole app, so they should be used deliberately and documented when possible.',
+      bullets: [
+        'Run exports before risky changes.',
+        'Treat restore as a last-resort recovery tool.',
+        'Use cost snapshots and operational status to verify the health of production services.',
+      ],
+      belongsHere: 'System recovery and deployment-health actions that can affect every user.',
+      example: 'Before a major migration or schema repair, export a backup snapshot so recovery is possible if something goes wrong.',
+    },
+    {
+      title: 'When To Use Platform Admin vs Org Admin',
+      text: 'A simple test helps: if the change should affect only one organization, prefer org-admin workflows. If it affects tenant structure or system health, it is platform-admin work.',
+      bullets: [
+        'One org only = org admin.',
+        'Cross-org or system-wide = platform admin.',
+        'Prefer the least powerful role that can safely do the work.',
+      ],
+      belongsHere: 'Permission judgment and access hygiene.',
+      example: 'Resetting a user password for one org is org-admin work. Restoring a backup snapshot is platform-admin work.',
+    },
+  ],
+}
+
+const GUIDES = [START_HERE_GUIDE, JOB_SEEKER_GUIDE, STAFF_GUIDE, ORG_ADMIN_GUIDE, PLATFORM_ADMIN_GUIDE, BYO_GUIDE]
 
 function GuideCard({ guide, active, onClick }) {
   return (
@@ -340,7 +545,7 @@ export default function Guides() {
       <div className="page-head">
         <div>
           <h1>Guides</h1>
-          <div className="sub">IN-APP HOW-TOS FOR FIRST-TIME USERS AND ADVANCED SETUP</div>
+          <div className="sub">IN-APP HOW-TOS FOR JOB SEEKERS, STAFF, ORG ADMINS, PLATFORM ADMINS, AND ADVANCED SETUP</div>
         </div>
         <span className="chip chip-gray">{GUIDES.length} guides</span>
       </div>
@@ -358,6 +563,12 @@ export default function Guides() {
               ? 'Open Briefing, then make sure every active role in Pipeline has a next action and a date.'
               : selectedGuide.id === 'start-here'
                 ? 'Open Briefing, then add one real job to Pipeline and one real person to Outreach.'
+                : selectedGuide.id === 'staff-guide'
+                  ? 'Open Staff Briefing, review Queue first, then pick one candidate who clearly needs help today.'
+                  : selectedGuide.id === 'org-admin-guide'
+                    ? 'Open User Management and confirm the people, roles, and assignments in your org still match reality.'
+                    : selectedGuide.id === 'platform-admin-guide'
+                      ? 'Open Operations and confirm backups, deploy health, and org structure before making any platform-wide change.'
                 : 'Generate your ingest token in Settings before touching the external agent configuration.'}
           </div>
         </div>

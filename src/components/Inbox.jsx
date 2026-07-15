@@ -30,8 +30,11 @@ export default function Inbox() {
   const [selectedThreadId, setSelectedThreadId] = useState('')
   const [messages, setMessages] = useState([])
   const [messageBody, setMessageBody] = useState('')
+  const [unreadMessages, setUnreadMessages] = useState(0)
+  const [unreadThreads, setUnreadThreads] = useState(0)
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
+  const [deletingThreadId, setDeletingThreadId] = useState('')
   const [error, setError] = useState('')
   const msgEndRef = useRef(null)
 
@@ -42,6 +45,8 @@ export default function Inbox() {
       const d = await api('/api/member/threads')
       const list = d.threads || []
       setThreads(list)
+      setUnreadMessages(Number(d.unreadMessages || 0))
+      setUnreadThreads(Number(d.unreadThreads || 0))
       setSelectedThreadId(prev => list.find(t => t.id === prev)?.id || list[0]?.id || '')
     } catch (e) {
       setError(e.message)
@@ -58,6 +63,16 @@ export default function Inbox() {
       try {
         const d = await api(`/api/member/threads/${selectedThreadId}/messages`)
         setMessages(d.messages || [])
+        setThreads(prev => {
+          const next = prev.map(thread => (
+            thread.id === selectedThreadId ? { ...thread, unreadCount: 0 } : thread
+          ))
+          const nextUnreadThreads = next.filter(thread => Number(thread.unreadCount || 0) > 0).length
+          const nextUnreadMessages = next.reduce((sum, thread) => sum + Number(thread.unreadCount || 0), 0)
+          setUnreadThreads(nextUnreadThreads)
+          setUnreadMessages(nextUnreadMessages)
+          return next
+        })
       } catch (e) {
         setError(e.message)
       }
@@ -97,13 +112,31 @@ export default function Inbox() {
     }
   }
 
+  async function deleteThread(thread) {
+    if (!thread?.id) return
+    const confirmed = window.confirm(`Remove "${thread.topic || 'this thread'}" from your inbox? It will come back if staff sends a new message.`)
+    if (!confirmed) return
+    setDeletingThreadId(thread.id)
+    setError('')
+    try {
+      await api(`/api/member/threads/${thread.id}`, { method: 'DELETE' })
+      if (selectedThreadId === thread.id) {
+        setSelectedThreadId('')
+        setMessages([])
+      }
+      await loadThreads()
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setDeletingThreadId('')
+    }
+  }
+
   function handleKey(e) {
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); send() }
   }
 
   if (loading) return <div className="loading"><div className="spin" />Loading inbox…</div>
-
-  const unreadCount = 0
 
   return (
     <div className="page">
@@ -112,7 +145,8 @@ export default function Inbox() {
           <h1>Inbox</h1>
           <div className="sub">
             {threads.length} THREAD{threads.length !== 1 ? 'S' : ''}
-            {unreadCount > 0 ? ` · ${unreadCount} UNREAD` : ''}
+            {unreadThreads > 0 ? ` · ${unreadThreads} UNREAD THREAD${unreadThreads === 1 ? '' : 'S'}` : ''}
+            {unreadMessages > 0 ? ` · ${unreadMessages} UNREAD MESSAGE${unreadMessages === 1 ? '' : 'S'}` : ''}
           </div>
         </div>
       </div>
@@ -147,7 +181,10 @@ export default function Inbox() {
                       <span className="thread-time">{t.updatedAt ? fmt(t.updatedAt) : ''}</span>
                     </div>
                     <div className="thread-subject">{t.topic || 'Thread'}</div>
-                    <div className="thread-preview">{t.status === 'closed' ? 'Closed' : 'Open'}</div>
+                    <div className="thread-preview">
+                      {t.status === 'closed' ? 'Closed' : 'Open'}
+                      {Number(t.unreadCount || 0) > 0 ? ` · ${t.unreadCount} unread` : ''}
+                    </div>
                   </div>
                 </button>
               ))}
@@ -166,7 +203,17 @@ export default function Inbox() {
                         {selectedThread.status === 'closed' ? 'Closed thread' : 'Open thread'}
                       </div>
                     </div>
-                    {selectedThread.status === 'closed' && <span className="chip chip-gray">Closed</span>}
+                    <div className="quick-actions">
+                      {selectedThread.status === 'closed' && <span className="chip chip-gray">Closed</span>}
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => deleteThread(selectedThread)}
+                        disabled={deletingThreadId === selectedThread.id}
+                        type="button"
+                      >
+                        {deletingThreadId === selectedThread.id ? 'Removing…' : 'Remove from Inbox'}
+                      </button>
+                    </div>
                   </div>
                 </div>
 
