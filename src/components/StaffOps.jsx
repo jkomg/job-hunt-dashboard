@@ -44,7 +44,8 @@ function SignalBadges({ signals }) {
   )
 }
 
-export default function StaffOps({ me, mode = 'operations', navIntent = null }) {
+export default function StaffOps({ me, mode = 'operations', navIntent = null, onNavigate = null }) {
+  const canManageOrg = !!me?.canManageOrg
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -113,7 +114,7 @@ export default function StaffOps({ me, mode = 'operations', navIntent = null }) 
     setLoading(true)
     setError('')
     try {
-      const staffQuery = (me?.isAdmin && staffScope === 'assigned') ? '?scope=assigned' : ''
+      const staffQuery = (canManageOrg && staffScope === 'assigned') ? '?scope=assigned' : ''
       const [data, unassignedData] = await Promise.all([
         api(`/api/staff/queue${staffQuery}`),
         api('/api/staff/unassigned-candidates')
@@ -123,7 +124,7 @@ export default function StaffOps({ me, mode = 'operations', navIntent = null }) 
       if (!selectedCandidateId && data.candidates?.length) {
         setSelectedCandidateId(String(data.candidates[0].id))
       }
-      if (me?.isAdmin && !taskForm.assigneeUserId) {
+      if (canManageOrg && !taskForm.assigneeUserId) {
         const first = (data.staffUsers || [])[0]
         if (first?.id) setTaskForm(prev => ({ ...prev, assigneeUserId: String(first.id) }))
       }
@@ -134,7 +135,7 @@ export default function StaffOps({ me, mode = 'operations', navIntent = null }) 
     }
   }
 
-  useEffect(() => { load() }, [me?.isAdmin, staffScope])
+  useEffect(() => { load() }, [canManageOrg, staffScope])
   useEffect(() => {
     try { localStorage.setItem('staff_scope', staffScope) } catch {}
   }, [staffScope])
@@ -407,7 +408,7 @@ export default function StaffOps({ me, mode = 'operations', navIntent = null }) 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           relatedUserId: selectedCandidateId ? Number(selectedCandidateId) : null,
-          assigneeUserId: me?.isAdmin && taskForm.assigneeUserId ? Number(taskForm.assigneeUserId) : undefined,
+          assigneeUserId: canManageOrg && taskForm.assigneeUserId ? Number(taskForm.assigneeUserId) : undefined,
           type: taskForm.type,
           priority: taskForm.priority,
           dueAt: taskForm.dueDate ? new Date(`${taskForm.dueDate}T12:00:00`).getTime() : null,
@@ -515,12 +516,23 @@ export default function StaffOps({ me, mode = 'operations', navIntent = null }) 
           </div>
         </div>
       </div>
+      <div className="card mb-16" style={{ borderColor: 'var(--accent)' }}>
+        <div className="card-title">Need a quick walkthrough?</div>
+        <div style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 10 }}>
+          The in-app guides now include a staff workflow guide and admin-specific instructions with examples.
+        </div>
+        <div className="quick-actions">
+          <button className="btn btn-ghost btn-sm" onClick={() => onNavigate && onNavigate('guides')}>
+            Open Guides
+          </button>
+        </div>
+      </div>
       <div className="quick-actions mb-16">
         <button className={`btn btn-sm ${opsTab === 'queue' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setOpsTab('queue')}>Queue</button>
         <button className={`btn btn-sm ${opsTab === 'jobs' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setOpsTab('jobs')}>Jobs</button>
         <button className={`btn btn-sm ${opsTab === 'support' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setOpsTab('support')}>Support</button>
       </div>
-      {me?.isAdmin && (
+      {canManageOrg && (
         <div className="quick-actions mb-16">
           <button className={`btn btn-sm ${staffScope === 'assigned' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setStaffScope('assigned')}>My Queue</button>
           <button className={`btn btn-sm ${staffScope === 'all' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setStaffScope('all')}>All Candidates</button>
@@ -816,7 +828,7 @@ export default function StaffOps({ me, mode = 'operations', navIntent = null }) 
           <div className="card mb-16" ref={tasksSectionRef}>
             <div className="card-title">New Task</div>
             <div className="settings-grid">
-              {me?.isAdmin && (
+              {canManageOrg && (
                 <div className="field">
                   <label>Assign To</label>
                   <select value={taskForm.assigneeUserId} onChange={e => setTaskForm({ ...taskForm, assigneeUserId: e.target.value })}>
@@ -850,7 +862,7 @@ export default function StaffOps({ me, mode = 'operations', navIntent = null }) 
             </div>
             <div className="field"><label>Notes</label><textarea rows={2} value={taskForm.notes} onChange={e => setTaskForm({ ...taskForm, notes: e.target.value })} /></div>
             <button className="btn btn-primary" onClick={createTask}
-              disabled={savingTask || !taskForm.notes.trim() || (me?.isAdmin && !taskForm.assigneeUserId)}>
+              disabled={savingTask || !taskForm.notes.trim() || (canManageOrg && !taskForm.assigneeUserId)}>
               {savingTask ? 'Creating…' : 'Create Task'}
             </button>
           </div>
@@ -884,13 +896,13 @@ export default function StaffOps({ me, mode = 'operations', navIntent = null }) 
             {!!filteredTasks.length && (
               <table className="data-table">
                 <thead><tr>
-                  {me?.isAdmin && <th>Assignee</th>}
+                  {canManageOrg && <th>Assignee</th>}
                   <th>Type</th><th>Priority</th><th>Status</th><th>Due</th><th>Notes</th><th />
                 </tr></thead>
                 <tbody>
                   {filteredTasks.map(task => (
                     <tr key={task.id}>
-                      {me?.isAdmin && (
+                      {canManageOrg && (
                         <td>
                           <select value={String(task.assigneeUserId || '')} disabled={updatingTaskId === task.id}
                             onChange={e => reassignTask(task, e.target.value)}>

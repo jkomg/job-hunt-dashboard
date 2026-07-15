@@ -468,9 +468,9 @@ export default function App() {
 
       <main className="main">
         {view === 'dashboard'      && <Dashboard onNavigate={navigate} me={me} />}
-        {isStaff && view === 'operations'     && <StaffOps me={me} mode="operations" navIntent={navIntent} />}
-        {isStaff && view === 'staff_tasks'    && <StaffOps me={me} mode="tasks" navIntent={navIntent} />}
-        {isStaff && view === 'staff_threads'  && <StaffOps me={me} mode="threads" navIntent={navIntent} />}
+        {isStaff && view === 'operations'     && <StaffOps me={me} mode="operations" navIntent={navIntent} onNavigate={navigate} />}
+        {isStaff && view === 'staff_tasks'    && <StaffOps me={me} mode="tasks" navIntent={navIntent} onNavigate={navigate} />}
+        {isStaff && view === 'staff_threads'  && <StaffOps me={me} mode="threads" navIntent={navIntent} onNavigate={navigate} />}
         {!isStaffLike && view === 'checkin'       && <DailyCheckin navIntent={navIntent} />}
         {!isStaffLike && view === 'pipeline'      && <Pipeline navIntent={navIntent} />}
         {!isStaffLike && view === 'contacts'      && <Contacts />}

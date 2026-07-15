@@ -1666,6 +1666,15 @@ Body:
             </div>
           </div>
           <div className="settings-body">
+          <div className="guide-tip" style={{ marginBottom: 12 }}>
+            <Icon name="book-open" />
+            <span>
+              Need the walkthrough? Open `Guides` for the Staff Operations Guide plus org-admin and platform-admin instructions.
+            </span>
+            <button className="btn btn-ghost btn-sm" onClick={() => onNavigate && onNavigate('guides')} type="button">
+              Open Guides
+            </button>
+          </div>
           <div style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 10 }}>
             Manage people in this organization, reset passwords, and control account access.
           </div>

@@ -35,10 +35,11 @@ export default function Dashboard({ onNavigate, me }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [doneItems, setDoneItems] = useState({})
-  const isStaffLike = me?.role === 'staff' || me?.isAdmin
+  const canManageOrg = !!me?.canManageOrg
+  const isStaffLike = me?.role === 'staff' || canManageOrg
 
   useEffect(() => {
-    const staffQuery = (isStaffLike && me?.isAdmin && staffScope === 'assigned') ? '?scope=assigned' : ''
+    const staffQuery = (isStaffLike && canManageOrg && staffScope === 'assigned') ? '?scope=assigned' : ''
     const staffQueueFetch = isStaffLike
       ? fetch(`/api/staff/queue${staffQuery}`, { credentials: 'include' }).then(r => r.ok ? r.json() : null)
       : Promise.resolve(null)
@@ -61,7 +62,7 @@ export default function Dashboard({ onNavigate, me }) {
         .then(d => setMemberThreads(d?.threads || []))
         .catch(() => {})
     }
-  }, [isStaffLike, me?.isAdmin, staffScope])
+  }, [isStaffLike, canManageOrg, staffScope])
 
   useEffect(() => {
     try { localStorage.setItem('staff_scope', staffScope) } catch {}
@@ -112,7 +113,7 @@ export default function Dashboard({ onNavigate, me }) {
     const tasks = staffQueue?.tasks || []
     const scopeLabel = summary.scope === 'all'
       ? 'All candidates'
-      : me?.isAdmin
+      : canManageOrg
         ? 'My assigned candidates'
         : 'My assigned candidates'
     const draftRecommendations = recommendations.filter(r => r.status === 'draft')
@@ -132,7 +133,7 @@ export default function Dashboard({ onNavigate, me }) {
             <h1>Staff Briefing</h1>
             <div className="sub">{todayDate.toUpperCase()} · @{me?.username || 'unknown'} ({me?.role || 'unknown'})</div>
           </div>
-          {me?.isAdmin && (
+          {canManageOrg && (
             <div style={{ display: 'flex', gap: 6 }}>
               <button className={`btn btn-sm ${staffScope === 'assigned' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setStaffScope('assigned')}>My Queue</button>
               <button className={`btn btn-sm ${staffScope === 'all' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setStaffScope('all')}>All Candidates</button>
@@ -167,7 +168,7 @@ export default function Dashboard({ onNavigate, me }) {
             <button className="btn btn-ghost" onClick={() => onNavigate('operations', { staffFocus: 'threads' })}>
               Threads ({openThreads})
             </button>
-            {me?.isAdmin && (
+            {me?.isPlatformAdmin && (
               <button className="btn btn-ghost" onClick={() => onNavigate('admin_operations')}>
                 Admin Operations
               </button>
