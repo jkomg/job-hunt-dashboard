@@ -9,11 +9,7 @@ function formatInviteExpiry(iso) {
 
 function passwordChecks(password) {
   const raw = String(password || '')
-  return [
-    { label: 'At least 10 characters', ok: raw.length >= 10 },
-    { label: 'Contains a letter', ok: /[A-Za-z]/.test(raw) },
-    { label: 'Contains a number', ok: /\d/.test(raw) }
-  ]
+  return [{ label: 'At least 10 characters', ok: raw.length >= 10 }]
 }
 
 export default function Signup({ inviteToken, onSignup, onBackToLogin }) {
