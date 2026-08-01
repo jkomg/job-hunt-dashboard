@@ -59,6 +59,9 @@ const BACKUP_EXPORT_CRON_TOKEN = String(process.env.BACKUP_EXPORT_CRON_TOKEN || 
 const COST_SNAPSHOT_CRON_TOKEN = String(process.env.COST_SNAPSHOT_CRON_TOKEN || '').trim()
 const BACKUP_GCS_BUCKET = String(process.env.BACKUP_GCS_BUCKET || '').trim()
 const BACKUP_GCS_PREFIX = String(process.env.BACKUP_GCS_PREFIX || 'job-hunt').trim()
+const ENABLE_SHEETS_SYNC = parseBool(process.env.ENABLE_SHEETS_SYNC, false)
+const ENABLE_GMAIL_IMPORT = parseBool(process.env.ENABLE_GMAIL_IMPORT, false)
+const ENABLE_BACKUP_EXPORT = parseBool(process.env.ENABLE_BACKUP_EXPORT, false)
 const SHEET_SETTINGS_KEYS = {
   enabled: 'sheets.sync.enabled',
   sheetId: 'sheets.sheet_id',
@@ -94,6 +97,14 @@ const MEMBER_THREAD_SETTING_KEYS = {
 }
 const CANDIDATE_ROLES = new Set(['job_seeker', 'accelerator_user', 'premium_user', 'vip_user'])
 const DEFAULT_CANDIDATE_ROLE = 'accelerator_user'
+const ROLE_LABELS = {
+  job_seeker: 'Solo Job Seeker',
+  accelerator_user: 'Accelerator Member',
+  premium_user: 'Premium Member',
+  vip_user: 'VIP Member',
+  staff: 'Staff',
+  admin: 'Admin'
+}
 const ORG_ADMIN_ROLES = new Set(['admin', 'org_admin'])
 const MANAGEABLE_ORG_ROLES = ['accelerator_user', 'premium_user', 'vip_user', 'job_seeker', 'staff', 'org_admin']
 const PLATFORM_MANAGEABLE_ROLES = [...MANAGEABLE_ORG_ROLES, 'admin']
@@ -568,7 +579,17 @@ app.use('/api', (req, res, next) => {
   next()
 })
 app.get('/api/health', (_req, res) => {
-  res.json({ ok: true, authMode: AUTH_MODE, deployVersion: DEPLOY_VERSION, now: new Date().toISOString() })
+  res.json({
+    ok: true,
+    authMode: AUTH_MODE,
+    deployVersion: DEPLOY_VERSION,
+    features: {
+      sheetsSyncEnabled: ENABLE_SHEETS_SYNC,
+      gmailImportEnabled: ENABLE_GMAIL_IMPORT,
+      backupExportEnabled: ENABLE_BACKUP_EXPORT
+    },
+    now: new Date().toISOString()
+  })
 })
 
 function isValidInternalToken(req, headerName, expectedToken) {
@@ -868,6 +889,7 @@ app.get('/api/me', requireAuth, async (req, res) => {
       canManageOrg: !!req.canManageOrg,
       organizationId: req.organizationId,
       role: req.userRole || null,
+      roleLabel: ROLE_LABELS[req.userRole] || req.userRole || null,
       mustChangePassword: !!req.mustChangePassword,
       onboardingComplete: onboarding.onboardingComplete,
       displayName: onboarding.displayName,

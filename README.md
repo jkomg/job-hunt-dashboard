@@ -27,9 +27,11 @@ This project is now documented as a **server/client app** first:
 - Staff tasks + one-click flags (`follow_up`, `interview_prep`)
 - Optional Google Sheets sync and backup workflows
 
+Deployment integrations are opt-in. The low-cost hosted profile runs with session auth, Turso/libSQL, and Cloud Run only. Enable Sheets, Gmail, or scheduled backups explicitly with `ENABLE_SHEETS_SYNC`, `ENABLE_GMAIL_IMPORT`, or `ENABLE_BACKUP_EXPORT`.
+
 ## Roles
 
-### Candidate (Accelerator / Premium / VIP)
+### Candidate (solo or organization-sponsored)
 
 - Uses Briefing, Pipeline, Outreach, Interviews, Events, Check-in
 - Receives staff support via Inbox threads
@@ -48,6 +50,13 @@ This project is now documented as a **server/client app** first:
 - Creates users and role assignments
 - Manages staff assignments
 - Reviews audit logs, sync health, and backups
+
+Role terminology:
+
+- `job_seeker` is the base unaffiliated solo-user role.
+- `accelerator_user`, `premium_user`, and `vip_user` are organization-sponsored member tiers.
+- `staff` is the operational role for supporting assigned candidates.
+- `admin` manages the organization and operational controls.
 
 ## Hosted Onboarding
 

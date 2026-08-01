@@ -275,6 +275,17 @@ chmod +x ./scripts/setup-cloud-cost-controls.sh
 BUDGET_AMOUNT=15USD ./scripts/setup-cloud-cost-controls.sh
 ```
 
+## Hosted deployment profiles
+
+`deploy.sh` keeps optional infrastructure out of the baseline deployment. Defaults are:
+
+- `MAX_INSTANCES=2`
+- `ENABLE_SHEETS_SYNC=false`
+- `ENABLE_GMAIL_IMPORT=false`
+- `ENABLE_BACKUP_EXPORT=false`
+
+Set a flag to `true` only after the corresponding secrets and scheduler job are configured. Disabling a flag on the next deploy removes the corresponding Cloud Run environment variables and secret bindings.
+
 ## cost-snapshot.sh
 
 Generates a quick cost-driver snapshot for hosted environments.
@@ -303,6 +314,8 @@ Optional overrides:
 - `PUSH_URL` (optional internal endpoint, e.g. `https://<service>/api/internal/cost/snapshot`)
 - `PUSH_TOKEN` (must match `COST_SNAPSHOT_CRON_TOKEN` in app env)
 - `SNAPSHOT_SOURCE` (optional label, default `scheduler`)
+- `BILLING_EXPORT_TABLE` (optional BigQuery table from Cloud Billing export, e.g. `billing-project.billing_export.gcp_billing_export_v1_...`)
+- `BILLING_EXPORT_PROJECT` (optional project containing that table; defaults to `PROJECT_ID`)
 
 ### Scheduled push mode
 
@@ -311,6 +324,8 @@ To collect on an interval and surface in Settings:
 1. Set `COST_SNAPSHOT_CRON_TOKEN` in app secrets/env.
 2. Run this script from a trusted environment with `gcloud` auth (for example Cloud Shell or a secured runner) on a schedule.
 3. Pass `PUSH_URL` + `PUSH_TOKEN` so snapshots are persisted in-app.
+
+The script reports actual month-to-date spend only when `BILLING_EXPORT_TABLE` is set and the authenticated environment has `bq` access. Without a billing export, it continues to report configuration and clearly marks actual spend as unavailable; budgets alone are not treated as spend data.
 
 ## setup-daily-backup-export.sh
 
@@ -331,6 +346,8 @@ Creates/updates a Cloud Scheduler HTTP job that exports a JSON backup to Cloud S
 - `BACKUP_GCS_BUCKET` configured in app env/secrets
 - Cloud Run runtime service account has bucket write access:
   - `roles/storage.objectCreator` (minimum)
+
+For the hosted v2 release, backup is a required operational path when `ENABLE_BACKUP_EXPORT=true`: create the bucket, deploy with the backup profile enabled, run this script, and perform a restore drill.
 
 ### Running
 

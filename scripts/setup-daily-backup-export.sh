@@ -8,6 +8,7 @@ JOB_NAME="${JOB_NAME:-job-hunt-daily-backup-export}"
 SCHEDULE="${SCHEDULE:-15 6 * * *}"
 TIME_ZONE="${TIME_ZONE:-America/New_York}"
 CRON_TOKEN="${CRON_TOKEN:-}"
+BACKUP_GCS_BUCKET="${BACKUP_GCS_BUCKET:-}"
 SCHEDULER_SA_NAME="${SCHEDULER_SA_NAME:-jobhunt-scheduler-invoker}"
 DOMAIN="${DOMAIN:-}"
 IAP_BACKEND_SERVICE="${IAP_BACKEND_SERVICE:-job-hunt-backend}"
@@ -17,9 +18,19 @@ if [[ -z "${CRON_TOKEN}" ]]; then
   echo "Missing CRON_TOKEN. Provide it from BACKUP_EXPORT_CRON_TOKEN."
   exit 1
 fi
+if [[ -z "${BACKUP_GCS_BUCKET}" ]]; then
+  echo "Missing BACKUP_GCS_BUCKET. Provide the target Cloud Storage bucket name."
+  exit 1
+fi
 
 gcloud config set project "$PROJECT_ID" >/dev/null
 gcloud services enable cloudscheduler.googleapis.com run.googleapis.com iam.googleapis.com --project "$PROJECT_ID" >/dev/null
+
+if ! gcloud storage buckets describe "gs://${BACKUP_GCS_BUCKET}" --project "$PROJECT_ID" >/dev/null 2>&1; then
+  echo "Backup bucket does not exist or is not accessible: gs://${BACKUP_GCS_BUCKET}"
+  echo "Create it first, then grant the Cloud Run runtime service account roles/storage.objectCreator."
+  exit 1
+fi
 
 SERVICE_URL="$(gcloud run services describe "$SERVICE_NAME" --region "$REGION" --format='value(status.url)')"
 if [[ -z "${SERVICE_URL}" ]]; then

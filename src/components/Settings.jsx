@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from '../ui-icons.jsx'
+import { roleLabel } from '../roles.js'
 
 const ACCENT_SWATCHES = [
   { name: 'Indigo',  val: 'indigo',  color: 'oklch(0.52 0.22 268)' },
@@ -17,7 +18,7 @@ function Toggle({ on, onToggle }) {
 }
 
 const BUNDLE_VERSION = String(import.meta.env.VITE_DEPLOY_VERSION || 'dev')
-const EXPECTED_SCHEDULER_JOBS = [
+const ALL_SCHEDULER_JOBS = [
   { name: 'job-hunt-daily-sheets-sync', cadence: 'daily', purpose: 'Google Sheets sync' },
   { name: 'job-hunt-daily-backup-export', cadence: 'daily', purpose: 'Backup export to GCS' }
 ]
@@ -34,9 +35,8 @@ function getRoleOptions(me) {
 }
 
 function getRoleLabel(role) {
-  if (role === 'admin') return 'platform_admin'
-  if (role === 'org_admin') return 'org_admin'
-  return role || '—'
+  if (role === 'org_admin') return 'Organization Admin'
+  return roleLabel(role)
 }
 
 function tabsToText(tabs) {
@@ -168,9 +168,9 @@ function parseSchedulerFromSnapshot(summaryText) {
   return { jobCount: Number.isFinite(jobCount) ? jobCount : null, jobs, status: statusLine ? statusLine.replace(/^- status:\s*/i, '') : null }
 }
 
-function schedulerCoverageSummary(schedulerInfo) {
+function schedulerCoverageSummary(schedulerInfo, expectedJobs = ALL_SCHEDULER_JOBS) {
   const names = new Set((schedulerInfo?.jobs || []).map(j => String(j.name || '').trim()).filter(Boolean))
-  const checks = EXPECTED_SCHEDULER_JOBS.map(job => ({
+  const checks = expectedJobs.map(job => ({
     ...job,
     configured: names.has(job.name)
   }))
@@ -429,9 +429,15 @@ export default function Settings({ me, onProfileUpdated, onNavigate, settingsMod
     () => parseSchedulerFromSnapshot(costSnapshots?.[0]?.summary_text || ''),
     [costSnapshots]
   )
+  const expectedSchedulerJobs = useMemo(() => {
+    const features = healthMeta?.features || {}
+    return ALL_SCHEDULER_JOBS.filter(job => (
+      job.name === 'job-hunt-daily-sheets-sync' ? features.sheetsSyncEnabled === true : features.backupExportEnabled === true
+    ))
+  }, [healthMeta])
   const schedulerCoverage = useMemo(
-    () => schedulerCoverageSummary(schedulerInfo),
-    [schedulerInfo]
+    () => schedulerCoverageSummary(schedulerInfo, expectedSchedulerJobs),
+    [schedulerInfo, expectedSchedulerJobs]
   )
   const deploymentProfile = useMemo(() => {
     const authMode = String(healthMeta?.authMode || 'unknown')
@@ -1733,7 +1739,7 @@ Body:
                         {!user.role && <option value="">No membership</option>}
                         {roleOptions.map(role => (
                           <option key={`edit-role-${role}`} value={role}>
-                            {getRoleLabel(role)}{role === 'job_seeker' ? ' (legacy)' : ''}
+                            {getRoleLabel(role)}
                           </option>
                         ))}
                       </select>
@@ -1810,7 +1816,7 @@ Body:
                     <select value={inviteRole} onChange={e => setInviteRole(e.target.value)}>
                       {roleOptions.map(role => (
                         <option key={`invite-role-${role}`} value={role}>
-                          {getRoleLabel(role)}{role === 'job_seeker' ? ' (legacy)' : ''}
+                          {getRoleLabel(role)}
                         </option>
                       ))}
                     </select>
@@ -1849,7 +1855,7 @@ Body:
                     <select value={newUserRole} onChange={e => setNewUserRole(e.target.value)}>
                       {roleOptions.map(role => (
                         <option key={`new-role-${role}`} value={role}>
-                          {getRoleLabel(role)}{role === 'job_seeker' ? ' (legacy)' : ''}
+                          {getRoleLabel(role)}
                         </option>
                       ))}
                     </select>
@@ -1971,7 +1977,7 @@ Body:
                     <select value={membershipRole} onChange={e => setMembershipRole(e.target.value)}>
                       {PLATFORM_ROLE_OPTIONS.map(role => (
                         <option key={`membership-role-${role}`} value={role}>
-                          {getRoleLabel(role)}{role === 'job_seeker' ? ' (legacy)' : ''}
+                          {getRoleLabel(role)}
                         </option>
                       ))}
                     </select>

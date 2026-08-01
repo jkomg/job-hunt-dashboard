@@ -4,7 +4,7 @@
 Define a clear staff/admin operating model that is distinct from the job-seeker experience while keeping wellness hooks for all users.
 
 ## Product Split
-- Member Workspace (`job_seeker`): personal job hunt command center.
+- Member Workspace (candidate access tier): personal job hunt command center.
 - Staff Ops Console (`staff` and `admin`): candidate support, job distribution, operations.
 
 ## Core Principles
@@ -101,9 +101,9 @@ Define a clear staff/admin operating model that is distinct from the job-seeker 
 - `POST /api/staff/tasks`
 - `PATCH /api/staff/tasks/:id`
 - `GET /api/staff/candidates/:id/support-summary`
-- `POST /api/staff/candidates` — staff creates job_seeker + auto-assigns to self
+- `POST /api/staff/candidates` — staff creates a candidate account + auto-assigns to self
 - `POST /api/staff/self-assign` — staff self-assigns to existing unassigned candidate
-- `GET /api/staff/unassigned-candidates` — list unassigned job_seekers in org
+- `GET /api/staff/unassigned-candidates` — list unassigned candidate accounts in org
 - `GET /api/staff/assigned-users`
 
 All staff endpoints require staff/admin role and assignment/org scope checks.
@@ -152,7 +152,7 @@ Fallback in all phases: use in-app messages as source of truth and optionally mi
 - Staff Ops UI rewrite: candidate overview table, signal badges, “Working on” context bar.
 - Merged “Job Research” + “Distribution” → “Research & Recommend”.
 - Separate New Task / Task list cards; separate New Thread / Thread list cards.
-- Staff can create `job_seeker` accounts and self-assign directly from Staff Ops.
+- Staff can create candidate accounts and self-assign directly from Staff Ops.
 - Settings consolidation: Sync Health + Sync Details + Recent Sync Runs → one “Google Sheets Sync” card.
 
 ## Interview Script For Staff Discovery

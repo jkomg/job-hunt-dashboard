@@ -10,6 +10,8 @@ BILLING_ACCOUNT="${BILLING_ACCOUNT:-}"
 PUSH_URL="${PUSH_URL:-}"
 PUSH_TOKEN="${PUSH_TOKEN:-}"
 SNAPSHOT_SOURCE="${SNAPSHOT_SOURCE:-scheduler}"
+BILLING_EXPORT_TABLE="${BILLING_EXPORT_TABLE:-}"
+BILLING_EXPORT_PROJECT="${BILLING_EXPORT_PROJECT:-$PROJECT_ID}"
 
 tmp_file="$(mktemp)"
 trap 'rm -f "$tmp_file"' EXIT
@@ -92,6 +94,43 @@ else
     echo "- status: budget list unavailable (missing billing permissions is common)" >>"$tmp_file"
   else
     echo "- status: no billing account provided or discovered; set BILLING_ACCOUNT to enable budget snapshot" >>"$tmp_file"
+  fi
+fi
+echo >>"$tmp_file"
+
+echo "## Actual Billing (month to date)" >>"$tmp_file"
+if [[ -z "$BILLING_EXPORT_TABLE" ]]; then
+  echo "- status: not configured; set BILLING_EXPORT_TABLE to a BigQuery billing-export table" >>"$tmp_file"
+else
+  if [[ ! "$BILLING_EXPORT_TABLE" =~ ^[A-Za-z0-9_.-]+$ ]]; then
+    echo "- status: invalid BILLING_EXPORT_TABLE identifier" >>"$tmp_file"
+  elif ! command -v bq >/dev/null 2>&1; then
+    echo "- status: bq CLI unavailable" >>"$tmp_file"
+  else
+    billing_query="
+      SELECT
+        ROUND(SUM(cost) + COALESCE(SUM((SELECT SUM(c.amount) FROM UNNEST(credits) c)), 0), 2) AS month_to_date_cost,
+        COUNT(DISTINCT service.description) AS service_count,
+        MAX(usage_start_time) AS latest_usage
+      FROM \`${BILLING_EXPORT_TABLE}\`
+      WHERE usage_start_time >= TIMESTAMP(DATE_TRUNC(CURRENT_DATE(), MONTH))
+        AND usage_start_time < TIMESTAMP_ADD(CURRENT_TIMESTAMP(), INTERVAL 1 DAY)
+        AND project.id = '${PROJECT_ID}'
+    "
+    billing_json="$(bq query --project_id="$BILLING_EXPORT_PROJECT" --use_legacy_sql=false --format=json --quiet "$billing_query" 2>/dev/null || true)"
+    if [[ -z "$billing_json" ]]; then
+      echo "- status: billing export query failed or is not accessible" >>"$tmp_file"
+    else
+      billing_summary="$(python3 -c 'import json, sys
+rows = json.load(sys.stdin)
+row = rows[0] if rows else {}
+print("- month_to_date_cost_usd: {}".format(row.get("month_to_date_cost") if row.get("month_to_date_cost") is not None else "0"))
+print("- services_seen: {}".format(row.get("service_count") if row.get("service_count") is not None else "0"))
+print("- latest_usage_start: {}".format(row.get("latest_usage") or "unknown"))' <<<"$billing_json")"
+      while IFS= read -r line; do
+        [[ -n "$line" ]] && echo "$line" >>"$tmp_file"
+      done <<<"$billing_summary"
+    fi
   fi
 fi
 echo >>"$tmp_file"
