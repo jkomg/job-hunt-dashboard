@@ -10,8 +10,10 @@ BILLING_ACCOUNT="${BILLING_ACCOUNT:-}"
 PUSH_URL="${PUSH_URL:-}"
 PUSH_TOKEN="${PUSH_TOKEN:-}"
 SNAPSHOT_SOURCE="${SNAPSHOT_SOURCE:-scheduler}"
-BILLING_EXPORT_TABLE="${BILLING_EXPORT_TABLE:-}"
 BILLING_EXPORT_PROJECT="${BILLING_EXPORT_PROJECT:-$PROJECT_ID}"
+BILLING_EXPORT_DATASET="${BILLING_EXPORT_DATASET:-billing_export}"
+BILLING_EXPORT_ACCOUNT_ID="${BILLING_EXPORT_ACCOUNT_ID:-016E03_D01F73_457507}"
+BILLING_EXPORT_TABLE="${BILLING_EXPORT_TABLE:-${BILLING_EXPORT_PROJECT}.${BILLING_EXPORT_DATASET}.gcp_billing_export_v1_${BILLING_EXPORT_ACCOUNT_ID}}"
 
 tmp_file="$(mktemp)"
 trap 'rm -f "$tmp_file"' EXIT
@@ -99,14 +101,11 @@ fi
 echo >>"$tmp_file"
 
 echo "## Actual Billing (month to date)" >>"$tmp_file"
-if [[ -z "$BILLING_EXPORT_TABLE" ]]; then
-  echo "- status: not configured; set BILLING_EXPORT_TABLE to a BigQuery billing-export table" >>"$tmp_file"
-else
-  if [[ ! "$BILLING_EXPORT_TABLE" =~ ^[A-Za-z0-9_.-]+$ ]]; then
+if [[ ! "$BILLING_EXPORT_TABLE" =~ ^[A-Za-z0-9_.-]+$ ]]; then
     echo "- status: invalid BILLING_EXPORT_TABLE identifier" >>"$tmp_file"
-  elif ! command -v bq >/dev/null 2>&1; then
+elif ! command -v bq >/dev/null 2>&1; then
     echo "- status: bq CLI unavailable" >>"$tmp_file"
-  else
+else
     billing_query="
       SELECT
         ROUND(SUM(cost) + COALESCE(SUM((SELECT SUM(c.amount) FROM UNNEST(credits) c)), 0), 2) AS month_to_date_cost,
@@ -122,16 +121,22 @@ else
       echo "- status: billing export query failed or is not accessible" >>"$tmp_file"
     else
       billing_summary="$(python3 -c 'import json, sys
-rows = json.load(sys.stdin)
+try:
+  rows = json.load(sys.stdin)
+except (json.JSONDecodeError, TypeError):
+  raise SystemExit(1)
 row = rows[0] if rows else {}
 print("- month_to_date_cost_usd: {}".format(row.get("month_to_date_cost") if row.get("month_to_date_cost") is not None else "0"))
 print("- services_seen: {}".format(row.get("service_count") if row.get("service_count") is not None else "0"))
-print("- latest_usage_start: {}".format(row.get("latest_usage") or "unknown"))' <<<"$billing_json")"
-      while IFS= read -r line; do
-        [[ -n "$line" ]] && echo "$line" >>"$tmp_file"
-      done <<<"$billing_summary"
+print("- latest_usage_start: {}".format(row.get("latest_usage") or "unknown"))' <<<"$billing_json")" || true
+      if [[ -z "$billing_summary" ]]; then
+        echo "- status: billing export query failed or is not accessible" >>"$tmp_file"
+      else
+        while IFS= read -r line; do
+          [[ -n "$line" ]] && echo "$line" >>"$tmp_file"
+        done <<<"$billing_summary"
+      fi
     fi
-  fi
 fi
 echo >>"$tmp_file"
 

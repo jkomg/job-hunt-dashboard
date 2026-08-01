@@ -314,8 +314,10 @@ Optional overrides:
 - `PUSH_URL` (optional internal endpoint, e.g. `https://<service>/api/internal/cost/snapshot`)
 - `PUSH_TOKEN` (must match `COST_SNAPSHOT_CRON_TOKEN` in app env)
 - `SNAPSHOT_SOURCE` (optional label, default `scheduler`)
-- `BILLING_EXPORT_TABLE` (optional BigQuery table from Cloud Billing export, e.g. `billing-project.billing_export.gcp_billing_export_v1_...`)
+- `BILLING_EXPORT_TABLE` (optional override; defaults to `BILLING_EXPORT_PROJECT.BILLING_EXPORT_DATASET.gcp_billing_export_v1_BILLING_EXPORT_ACCOUNT_ID`)
 - `BILLING_EXPORT_PROJECT` (optional project containing that table; defaults to `PROJECT_ID`)
+- `BILLING_EXPORT_DATASET` (defaults to `billing_export`)
+- `BILLING_EXPORT_ACCOUNT_ID` (billing account ID with hyphens replaced by underscores)
 
 ### Scheduled push mode
 
@@ -325,7 +327,7 @@ To collect on an interval and surface in Settings:
 2. Run this script from a trusted environment with `gcloud` auth (for example Cloud Shell or a secured runner) on a schedule.
 3. Pass `PUSH_URL` + `PUSH_TOKEN` so snapshots are persisted in-app.
 
-The script reports actual month-to-date spend only when `BILLING_EXPORT_TABLE` is set and the authenticated environment has `bq` access. Without a billing export, it continues to report configuration and clearly marks actual spend as unavailable; budgets alone are not treated as spend data.
+The script reports actual month-to-date spend when the Cloud Billing export has populated the derived table and the authenticated environment has `bq` access. The dataset can be created with `bq mk --dataset --location=US PROJECT_ID:billing_export`; enabling the Cloud Billing export itself remains a Cloud Console action under **Billing → Billing export → BigQuery export**. Google notes that billing data tables are created automatically shortly after export is enabled.
 
 ## setup-daily-backup-export.sh
 
@@ -357,3 +359,13 @@ CRON_TOKEN="$(grep '^BACKUP_EXPORT_CRON_TOKEN=' .env | cut -d'=' -f2-)" \
 DOMAIN="hunt.jkomg.us" \
 ./scripts/setup-daily-backup-export.sh
 ```
+
+## concurrency-snapshot.sh
+
+Queries Cloud Monitoring for the service's observed maximum request concurrency and instance count over a recent window. This makes the `MAX_INSTANCES=2` beta setting measurable before raising it.
+
+```bash
+LOOKBACK_MINUTES=60 npm run ops:concurrency:snapshot
+```
+
+The script reports configured limits alongside observed values. Cloud Run exposes the concurrency and instance metrics at no additional Cloud Monitoring charge for fully managed Cloud Run services.

@@ -18,6 +18,9 @@ const THIRD_TEMP_PASSWORD = 'smoke3-temp-password-2026!'
 const THIRD_NEXT_PASSWORD = 'smoke3-password-2026!'
 const FOURTH_USERNAME = 'smoke4'
 const FOURTH_TEMP_PASSWORD = 'smoke4-temp-password-2026!'
+const ORG_ADMIN_USERNAME = 'orgadmin_smoke'
+const ORG_ADMIN_TEMP_PASSWORD = 'orgadmin-temp-password-2026!'
+const ORG_ADMIN_NEXT_PASSWORD = 'orgadmin-password-2026!'
 const ORPHAN_USERNAME = 'orphan_smoke'
 const ORPHAN_PASSWORD = 'orphan-smoke-password-2026!'
 const SMOKE_SUITE = String(process.env.SMOKE_SUITE || 'full').trim().toLowerCase()
@@ -267,6 +270,17 @@ async function run() {
   })
   if (!createFourthUser.body?.ok || !createFourthUser.body?.id) throw new Error('Admin fourth-user create failed')
 
+  const createOrgAdmin = await api('/api/admin/users', {
+    method: 'POST',
+    body: {
+      username: ORG_ADMIN_USERNAME,
+      password: ORG_ADMIN_TEMP_PASSWORD,
+      role: 'org_admin'
+    },
+    allowStatuses: [200]
+  })
+  if (!createOrgAdmin.body?.ok || !createOrgAdmin.body?.id) throw new Error('Admin org-admin create failed')
+
   const orgListBefore = await api('/api/admin/organizations', { allowStatuses: [200] })
   if (!Array.isArray(orgListBefore.body?.organizations) || !orgListBefore.body.organizations.length) {
     throw new Error(`Expected at least one organization, got ${JSON.stringify(orgListBefore.body)}`)
@@ -367,6 +381,38 @@ async function run() {
     throw new Error(`Expected exactly one deletion audit record, got ${deleteActions.length}`)
   }
   note('Staff assignment and audit log passed')
+
+  await api('/api/logout', { method: 'POST', allowStatuses: [200] })
+  cookieJar.clear()
+  const orgAdminLogin = await api('/api/login', {
+    method: 'POST',
+    body: { username: ORG_ADMIN_USERNAME, password: ORG_ADMIN_TEMP_PASSWORD },
+    allowStatuses: [200]
+  })
+  if (!orgAdminLogin.body?.mustChangePassword) throw new Error('Expected org admin to require password change')
+  await api('/api/change-password', {
+    method: 'POST',
+    body: { currentPassword: ORG_ADMIN_TEMP_PASSWORD, newPassword: ORG_ADMIN_NEXT_PASSWORD },
+    allowStatuses: [200]
+  })
+  await api('/api/setup/complete', {
+    method: 'POST',
+    body: { displayName: 'Smoke Org Admin', username: ORG_ADMIN_USERNAME },
+    allowStatuses: [200]
+  })
+  const orgAdminProfile = await api('/api/me', { allowStatuses: [200] })
+  if (orgAdminProfile.body?.role !== 'org_admin' || orgAdminProfile.body?.isPlatformAdmin || !orgAdminProfile.body?.isOrgAdmin || !orgAdminProfile.body?.canManageOrg) {
+    throw new Error(`Org-admin identity flags are incorrect: ${JSON.stringify(orgAdminProfile.body)}`)
+  }
+  await api('/api/admin/users', { allowStatuses: [200] })
+  await api(`/api/admin/users/${createOrgAdmin.body.id}/memberships`, { allowStatuses: [403] })
+  await api('/api/admin/organizations', {
+    method: 'POST',
+    body: { id: 'org-admin-forbidden-org', name: 'Should Not Create' },
+    allowStatuses: [403]
+  })
+  await api('/api/admin/backup/export', { allowStatuses: [403] })
+  note('Organization-admin permission matrix passed')
 
   await api('/api/logout', { method: 'POST', allowStatuses: [200] })
   cookieJar.clear()
