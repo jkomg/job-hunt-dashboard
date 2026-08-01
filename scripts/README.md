@@ -348,6 +348,7 @@ Creates/updates a Cloud Scheduler HTTP job that exports a JSON backup to Cloud S
 - `BACKUP_GCS_BUCKET` configured in app env/secrets
 - Cloud Run runtime service account has bucket write access:
   - `roles/storage.objectCreator` (minimum)
+- `infra/backup-lifecycle.json` limits live backups to 90 days and noncurrent versions to 30 days.
 
 For the hosted v2 release, backup is a required operational path when `ENABLE_BACKUP_EXPORT=true`: create the bucket, deploy with the backup profile enabled, run this script, and perform a restore drill.
 
