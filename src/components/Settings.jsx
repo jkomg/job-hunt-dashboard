@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from '../ui-icons.jsx'
+import { CANDIDATE_ROLE_OPTIONS, OPERATIONAL_ROLE_OPTIONS } from '../roles.js'
 
 const ACCENT_SWATCHES = [
   { name: 'Indigo',  val: 'indigo',  color: 'oklch(0.52 0.22 268)' },
@@ -17,7 +18,7 @@ function Toggle({ on, onToggle }) {
 }
 
 const BUNDLE_VERSION = String(import.meta.env.VITE_DEPLOY_VERSION || 'dev')
-const EXPECTED_SCHEDULER_JOBS = [
+const ALL_SCHEDULER_JOBS = [
   { name: 'job-hunt-daily-sheets-sync', cadence: 'daily', purpose: 'Google Sheets sync' },
   { name: 'job-hunt-daily-backup-export', cadence: 'daily', purpose: 'Backup export to GCS' }
 ]
@@ -152,9 +153,9 @@ function parseSchedulerFromSnapshot(summaryText) {
   return { jobCount: Number.isFinite(jobCount) ? jobCount : null, jobs, status: statusLine ? statusLine.replace(/^- status:\s*/i, '') : null }
 }
 
-function schedulerCoverageSummary(schedulerInfo) {
+function schedulerCoverageSummary(schedulerInfo, expectedJobs = ALL_SCHEDULER_JOBS) {
   const names = new Set((schedulerInfo?.jobs || []).map(j => String(j.name || '').trim()).filter(Boolean))
-  const checks = EXPECTED_SCHEDULER_JOBS.map(job => ({
+  const checks = expectedJobs.map(job => ({
     ...job,
     configured: names.has(job.name)
   }))
@@ -410,9 +411,15 @@ export default function Settings({ me, onProfileUpdated, onNavigate, settingsMod
     () => parseSchedulerFromSnapshot(costSnapshots?.[0]?.summary_text || ''),
     [costSnapshots]
   )
+  const expectedSchedulerJobs = useMemo(() => {
+    const features = healthMeta?.features || {}
+    return ALL_SCHEDULER_JOBS.filter(job => (
+      job.name === 'job-hunt-daily-sheets-sync' ? features.sheetsSyncEnabled === true : features.backupExportEnabled === true
+    ))
+  }, [healthMeta])
   const schedulerCoverage = useMemo(
-    () => schedulerCoverageSummary(schedulerInfo),
-    [schedulerInfo]
+    () => schedulerCoverageSummary(schedulerInfo, expectedSchedulerJobs),
+    [schedulerInfo, expectedSchedulerJobs]
   )
   const deploymentProfile = useMemo(() => {
     const authMode = String(healthMeta?.authMode || 'unknown')
@@ -1698,12 +1705,8 @@ Body:
                         onChange={(e) => changeUserRole(user.id, e.target.value)}
                       >
                         {!user.role && <option value="">No membership</option>}
-                        <option value="accelerator_user">accelerator_user</option>
-                        <option value="premium_user">premium_user</option>
-                        <option value="vip_user">vip_user</option>
-                        <option value="job_seeker">job_seeker (legacy)</option>
-                        <option value="staff">staff</option>
-                        <option value="admin">admin</option>
+                        {CANDIDATE_ROLE_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                        {OPERATIONAL_ROLE_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
                       </select>
                     </td>
                     <td>{user.mustChangePassword ? 'Required' : 'No'}</td>
@@ -1776,12 +1779,8 @@ Body:
                   <div className="field">
                     <label>Role</label>
                     <select value={inviteRole} onChange={e => setInviteRole(e.target.value)}>
-                      <option value="accelerator_user">accelerator_user</option>
-                      <option value="premium_user">premium_user</option>
-                      <option value="vip_user">vip_user</option>
-                      <option value="job_seeker">job_seeker (legacy)</option>
-                      <option value="staff">staff</option>
-                      <option value="admin">admin</option>
+                      {CANDIDATE_ROLE_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                      {OPERATIONAL_ROLE_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
                     </select>
                   </div>
                   <div className="field">
@@ -1816,12 +1815,8 @@ Body:
                 <div className="field">
                     <label>Role</label>
                     <select value={newUserRole} onChange={e => setNewUserRole(e.target.value)}>
-                      <option value="accelerator_user">accelerator_user</option>
-                      <option value="premium_user">premium_user</option>
-                      <option value="vip_user">vip_user</option>
-                      <option value="job_seeker">job_seeker (legacy)</option>
-                      <option value="staff">staff</option>
-                      <option value="admin">admin</option>
+                      {CANDIDATE_ROLE_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                      {OPERATIONAL_ROLE_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
                     </select>
                 </div>
                 <div className="field">
@@ -1939,12 +1934,8 @@ Body:
                   <div className="field">
                     <label>Role</label>
                     <select value={membershipRole} onChange={e => setMembershipRole(e.target.value)}>
-                      <option value="accelerator_user">accelerator_user</option>
-                      <option value="premium_user">premium_user</option>
-                      <option value="vip_user">vip_user</option>
-                      <option value="job_seeker">job_seeker (legacy)</option>
-                      <option value="staff">staff</option>
-                      <option value="admin">admin</option>
+                      {CANDIDATE_ROLE_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                      {OPERATIONAL_ROLE_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
                     </select>
                   </div>
                 </div>

@@ -21,7 +21,7 @@ Ship a stable **hosted** release where end users sign in to a running service an
 
 Shipped and active:
 
-- Multi-user role model (`job_seeker`, `staff`, `admin`)
+- Multi-user role model: unaffiliated `job_seeker`, organization-sponsored candidate tiers (`accelerator_user`, `premium_user`, `vip_user`), `staff`, and `admin`.
 - Assignment-scoped staff access
 - Staff Ops workspace:
   - recommendations + post-to-pipeline

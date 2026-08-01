@@ -17,6 +17,7 @@ import StaffOps from './components/StaffOps.jsx'
 import Guides from './components/Guides.jsx'
 import { Icon } from './ui-icons.jsx'
 import { useTheme } from './useTheme.js'
+import { roleLabel } from './roles.js'
 
 const JOB_SEEKER_GROUPS = [
   {
@@ -152,7 +153,7 @@ function Sidebar({ view, go, groups, staffBadges, memberBadges, pipelineBadgeCou
       <div className="sidebar-foot">
         <div className="identity-chip" title={`role=${me?.role} org=${me?.organizationId || 'unknown'}`}>
           <strong>{me?.username || '?'}</strong>
-          <span>{me?.role || 'unknown'}</span>
+          <span>{roleLabel(me?.role || 'unknown')}</span>
           {me?.organizationId && <span>{me.organizationId}</span>}
         </div>
         <button
@@ -167,7 +168,7 @@ function Sidebar({ view, go, groups, staffBadges, memberBadges, pipelineBadgeCou
           <div className="avatar">{initials}</div>
           <div className="profile-info">
             <div className="profile-name">{me?.displayName || me?.username}</div>
-            <div className="profile-role">{roleName}</div>
+            <div className="profile-role">{roleName} · {roleLabel(me?.role)}</div>
           </div>
           <Icon name="log-out" />
         </div>

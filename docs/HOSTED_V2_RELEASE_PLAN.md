@@ -10,7 +10,7 @@ v2 is a hosted product:
 
 - admins provision users/orgs
 - users sign in to a hosted URL
-- role-based workflows for `job_seeker`, `staff`, `org_admin`, `platform_admin`
+- role-based workflows for unaffiliated `job_seeker` users, organization-sponsored candidate tiers (`accelerator_user`, `premium_user`, `vip_user`), `staff`, and `admin`
 
 Local Docker/self-host docs move to legacy/internal recovery docs and are not primary onboarding.
 
@@ -49,7 +49,7 @@ Exit criteria:
 
 1. Hosted onboarding flow: invite/create account, forced password change, reset path.
 2. Session hardening defaults for hosted mode.
-3. Role model finalized: `job_seeker`, `staff`, `org_admin`, `platform_admin`.
+3. Role model finalized: unaffiliated `job_seeker`, organization-sponsored candidate tiers (`accelerator_user`, `premium_user`, `vip_user`), `staff`, and `admin`.
 
 Exit criteria:
 
@@ -75,6 +75,8 @@ Exit criteria:
 
 - Restore tested from a recent backup.
 - Operational failure path is visible/actionable.
+
+Hosted backup is an explicit profile, not an accidental side effect. A v2 deployment that enables `ENABLE_BACKUP_EXPORT` must have the backup bucket, Secret Manager bindings, Scheduler job, and a completed restore drill. A core low-cost deployment may leave the profile disabled only before hosted user data is onboarded.
 
 ## Database platform decision for v2
 
