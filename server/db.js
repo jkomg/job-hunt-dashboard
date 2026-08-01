@@ -105,9 +105,13 @@ function isCandidateRole(role) {
   return CANDIDATE_ROLES.has(String(role || '').trim())
 }
 
+function isOrgAdminRole(role) {
+  return ['admin', 'org_admin'].includes(String(role || '').trim())
+}
+
 function normalizeMembershipRole(role, fallback = DEFAULT_CANDIDATE_ROLE) {
   const normalized = String(role || '').trim()
-  if (['admin', 'staff'].includes(normalized)) return normalized
+  if (['admin', 'org_admin', 'staff'].includes(normalized)) return normalized
   if (isCandidateRole(normalized)) return normalized
   return fallback
 }
@@ -612,7 +616,7 @@ export async function ensureUserMembership(userId, { organizationId = DEFAULT_OR
       VALUES (?, ?, ?, ?, ?, ?)
       ON CONFLICT(organization_id, user_id) DO UPDATE SET
         role = CASE
-          WHEN memberships.role = 'admin' THEN memberships.role
+          WHEN memberships.role IN ('admin', 'org_admin') THEN memberships.role
           ELSE excluded.role
         END,
         updated_at = excluded.updated_at
@@ -710,7 +714,11 @@ export async function getPrimaryMembershipForUser(userId) {
       SELECT * FROM memberships
       WHERE user_id = ?
       ORDER BY
-        CASE role WHEN 'admin' THEN 0 WHEN 'staff' THEN 1 ELSE 2 END,
+        CASE
+          WHEN role IN ('admin', 'org_admin') THEN 0
+          WHEN role = 'staff' THEN 1
+          ELSE 2
+        END,
         created_at ASC
       LIMIT 1
     `,
@@ -729,7 +737,11 @@ export async function listMembershipsForUser(userId) {
       JOIN organizations o ON o.id = m.organization_id
       WHERE m.user_id = ?
       ORDER BY
-        CASE m.role WHEN 'admin' THEN 0 WHEN 'staff' THEN 1 ELSE 2 END,
+        CASE
+          WHEN m.role IN ('admin', 'org_admin') THEN 0
+          WHEN m.role = 'staff' THEN 1
+          ELSE 2
+        END,
         m.created_at ASC
     `,
     args: [id]
@@ -762,7 +774,11 @@ export async function listOrganizationUsers(organizationId = DEFAULT_ORG_ID) {
       JOIN users u ON u.id = m.user_id
       WHERE m.organization_id = ?
       ORDER BY
-        CASE m.role WHEN 'admin' THEN 0 WHEN 'staff' THEN 1 ELSE 2 END,
+        CASE
+          WHEN m.role IN ('admin', 'org_admin') THEN 0
+          WHEN m.role = 'staff' THEN 1
+          ELSE 2
+        END,
         u.username ASC
     `,
     args: [String(organizationId)]
@@ -979,7 +995,9 @@ export async function createStaffAssignment({ organizationId = DEFAULT_ORG_ID, s
   const staffMembership = await getMembership(orgId, staffId)
   const seekerMembership = await getMembership(orgId, seekerId)
   if (!staffMembership || !seekerMembership) throw new Error('Both users must belong to the organization')
-  if (!['staff', 'admin'].includes(staffMembership.role)) throw new Error('Assigned staff user must have staff or admin role')
+  if (!(staffMembership.role === 'staff' || isOrgAdminRole(staffMembership.role))) {
+    throw new Error('Assigned staff user must have staff or org admin role')
+  }
   if (!isCandidateRole(seekerMembership.role)) throw new Error('Assigned job_seeker user must have a candidate role')
 
   const ts = now()
@@ -2105,7 +2123,7 @@ export async function createUserAccount({
       INSERT INTO users (username, password_hash, email, is_admin, must_change_password)
       VALUES (?, ?, ?, ?, ?)
     `,
-    args: [normalizedUsername, hash, normalizedEmail, safeRole === 'admin' ? 1 : 0, mustChangePassword ? 1 : 0]
+    args: [normalizedUsername, hash, normalizedEmail, 0, mustChangePassword ? 1 : 0]
   })
 
   const user = await getUserByUsername(normalizedUsername)
@@ -2119,10 +2137,6 @@ export async function updateOrganizationUserRole(userId, organizationId = DEFAUL
   if (!user) throw new Error('User not found')
 
   await ensureUserMembership(Number(userId), { organizationId, role: safeRole })
-  await db.execute({
-    sql: 'UPDATE users SET is_admin = ? WHERE id = ?',
-    args: [safeRole === 'admin' ? 1 : 0, Number(userId)]
-  })
 
   return getUserById(Number(userId))
 }

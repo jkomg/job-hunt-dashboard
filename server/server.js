@@ -91,6 +91,10 @@ const AGENT_SETTINGS_KEYS = {
 const USER_PERMISSION_KEYS = {
   canUseByoAgent: 'permissions.can_use_byo_agent'
 }
+const MEMBER_THREAD_SETTING_KEYS = {
+  hiddenUntilUpdatedAt: 'member_thread.hidden_until_updated_at',
+  lastReadAt: 'member_thread.last_read_at'
+}
 const CANDIDATE_ROLES = new Set(['job_seeker', 'accelerator_user', 'premium_user', 'vip_user'])
 const DEFAULT_CANDIDATE_ROLE = 'accelerator_user'
 const ROLE_LABELS = {
@@ -101,6 +105,9 @@ const ROLE_LABELS = {
   staff: 'Staff',
   admin: 'Admin'
 }
+const ORG_ADMIN_ROLES = new Set(['admin', 'org_admin'])
+const MANAGEABLE_ORG_ROLES = ['accelerator_user', 'premium_user', 'vip_user', 'job_seeker', 'staff', 'org_admin']
+const PLATFORM_MANAGEABLE_ROLES = [...MANAGEABLE_ORG_ROLES, 'admin']
 const WEEKLY_RECOMMENDATION_TARGETS = {
   job_seeker: 3,
   accelerator_user: 3,
@@ -257,6 +264,10 @@ function isCandidateRole(role) {
   return CANDIDATE_ROLES.has(String(role || '').trim())
 }
 
+function isOrgAdminRole(role) {
+  return ORG_ADMIN_ROLES.has(String(role || '').trim())
+}
+
 function parseIsoTs(value) {
   const ts = Date.parse(String(value || ''))
   return Number.isFinite(ts) ? ts : 0
@@ -336,6 +347,66 @@ async function getUserPermissionFlags(userId, { isAdmin = false } = {}) {
   const raw = await getAppSetting(key)
   const canUseByoAgent = raw == null ? !!isAdmin : parseBool(raw, !!isAdmin)
   return { canUseByoAgent }
+}
+
+function memberThreadSettingKey(userId, threadId, key) {
+  return userScopedSettingKey(userId, `${key}:${String(threadId || '').trim()}`)
+}
+
+async function markMemberThreadRead(userId, threadId, readAt = Date.now()) {
+  await setAppSetting(
+    memberThreadSettingKey(userId, threadId, MEMBER_THREAD_SETTING_KEYS.lastReadAt),
+    String(Number(readAt) || Date.now())
+  )
+}
+
+async function archiveMemberThread(userId, threadId, updatedAt = Date.now()) {
+  await setAppSetting(
+    memberThreadSettingKey(userId, threadId, MEMBER_THREAD_SETTING_KEYS.hiddenUntilUpdatedAt),
+    String(Number(updatedAt) || Date.now())
+  )
+}
+
+async function listMemberThreadsWithState({ organizationId, jobSeekerUserId, limit = 200 } = {}) {
+  const threads = await listCandidateThreadsForMember({ organizationId, jobSeekerUserId, limit })
+  if (!threads.length) {
+    return { threads: [], unreadThreads: 0, unreadMessages: 0 }
+  }
+
+  const keys = threads.flatMap(thread => ([
+    memberThreadSettingKey(jobSeekerUserId, thread.id, MEMBER_THREAD_SETTING_KEYS.hiddenUntilUpdatedAt),
+    memberThreadSettingKey(jobSeekerUserId, thread.id, MEMBER_THREAD_SETTING_KEYS.lastReadAt)
+  ]))
+  const settings = await getAppSettings(keys)
+
+  const visibleThreads = []
+  let unreadThreads = 0
+  let unreadMessages = 0
+
+  for (const thread of threads) {
+    const hiddenUntil = Number(settings[memberThreadSettingKey(jobSeekerUserId, thread.id, MEMBER_THREAD_SETTING_KEYS.hiddenUntilUpdatedAt)] || 0)
+    if (hiddenUntil > 0 && Number(thread.updatedAt || 0) <= hiddenUntil) continue
+
+    const lastReadAt = Number(settings[memberThreadSettingKey(jobSeekerUserId, thread.id, MEMBER_THREAD_SETTING_KEYS.lastReadAt)] || 0)
+    const messages = await listCandidateMessagesForMember(thread.id, jobSeekerUserId, 500)
+    const unreadCount = messages.filter(message => {
+      const createdAt = Number(message.createdAt || 0)
+      return Number(message.authorUserId) !== Number(jobSeekerUserId) && createdAt > lastReadAt
+    }).length
+
+    if (unreadCount > 0) {
+      unreadThreads += 1
+      unreadMessages += unreadCount
+    }
+
+    visibleThreads.push({
+      ...thread,
+      unreadCount,
+      lastReadAt: lastReadAt || null
+    })
+  }
+
+  return { threads: visibleThreads, unreadThreads, unreadMessages }
 }
 
 async function getSheetsConfigOverrides(organizationId) {
@@ -531,18 +602,23 @@ function isValidInternalToken(req, headerName, expectedToken) {
   return crypto.timingSafeEqual(a, b)
 }
 
-function requireAdmin(req, res, next) {
-  if (!req.isAdmin) return res.status(403).json({ error: 'Admin access required' })
+function requirePlatformAdmin(req, res, next) {
+  if (!req.isPlatformAdmin) return res.status(403).json({ error: 'Platform admin access required' })
   next()
 }
 
+function requireOrgAdmin(req, res, next) {
+  if (req.canManageOrg) return next()
+  return res.status(403).json({ error: 'Organization admin access required' })
+}
+
 function requireStaffOrAdmin(req, res, next) {
-  if (req.isAdmin || req.userRole === 'staff') return next()
+  if (req.canManageOrg || req.userRole === 'staff') return next()
   return res.status(403).json({ error: 'Staff access required' })
 }
 
 function requireJobSeeker(req, res, next) {
-  if (isCandidateRole(req.userRole) && !req.isAdmin) return next()
+  if (isCandidateRole(req.userRole) && !req.canManageOrg && !req.isPlatformAdmin) return next()
   return res.status(403).json({ error: 'Job seeker access required' })
 }
 
@@ -551,7 +627,10 @@ function dataScope(req) {
     organizationId: req.organizationId,
     userId: req.userId,
     role: req.userRole,
-    isAdmin: req.isAdmin
+    isAdmin: req.isPlatformAdmin,
+    isPlatformAdmin: req.isPlatformAdmin,
+    isOrgAdmin: req.isOrgAdmin,
+    canManageOrg: req.canManageOrg
   }
 }
 
@@ -561,7 +640,7 @@ async function canAccessCandidate(req, candidateUserId) {
   const orgUsers = await listOrganizationUsers(req.organizationId)
   const candidate = orgUsers.find(u => Number(u.id) === targetId)
   if (!candidate || !isCandidateRole(candidate.role)) return false
-  if (req.isAdmin) return true
+  if (req.canManageOrg) return true
   if (req.userRole !== 'staff') return false
   return hasStaffAssignment({
     organizationId: req.organizationId,
@@ -572,7 +651,7 @@ async function canAccessCandidate(req, candidateUserId) {
 
 async function canAccessStaffTask(req, task) {
   if (!task || task.organizationId !== req.organizationId) return false
-  if (req.isAdmin) return true
+  if (req.canManageOrg) return true
   if (req.userRole !== 'staff') return false
   return Number(task.assigneeUserId) === Number(req.userId)
 }
@@ -596,7 +675,10 @@ async function requireAuth(req, res, next) {
         // In IAP mode, trust IAP identity headers directly to avoid per-request DB dependency.
         req.userId = null
         req.userEmail = iapEmail
-        req.isAdmin = ADMIN_EMAILS.has(iapEmail)
+        req.isPlatformAdmin = ADMIN_EMAILS.has(iapEmail)
+        req.isOrgAdmin = false
+        req.canManageOrg = req.isPlatformAdmin
+        req.isAdmin = req.isPlatformAdmin
         req.mustChangePassword = false
         req.authMode = 'iap'
         return next()
@@ -630,7 +712,10 @@ async function requireAuth(req, res, next) {
     req.userEmail = user?.email || null
     req.organizationId = membership?.organizationId || null
     req.userRole = membership?.role || (user?.isAdmin ? 'admin' : DEFAULT_CANDIDATE_ROLE)
-    req.isAdmin = !!user?.isAdmin || req.userRole === 'admin'
+    req.isPlatformAdmin = !!user?.isAdmin
+    req.isOrgAdmin = isOrgAdminRole(req.userRole)
+    req.canManageOrg = req.isPlatformAdmin || req.isOrgAdmin
+    req.isAdmin = req.isPlatformAdmin
     req.mustChangePassword = !!user?.mustChangePassword
     req.authMode = 'session'
     if (!req.organizationId) {
@@ -798,7 +883,10 @@ app.get('/api/me', requireAuth, async (req, res) => {
       authMode: req.authMode,
       username: user?.username || null,
       email: req.userEmail || null,
-      isAdmin: !!req.isAdmin,
+      isAdmin: !!req.isPlatformAdmin,
+      isPlatformAdmin: !!req.isPlatformAdmin,
+      isOrgAdmin: !!req.isOrgAdmin,
+      canManageOrg: !!req.canManageOrg,
       organizationId: req.organizationId,
       role: req.userRole || null,
       roleLabel: ROLE_LABELS[req.userRole] || req.userRole || null,
@@ -813,34 +901,13 @@ app.get('/api/me', requireAuth, async (req, res) => {
   }
 })
 
-app.get('/api/admin/users', requireAuth, requireAdmin, async (req, res) => {
+app.get('/api/admin/users', requireAuth, requireOrgAdmin, async (req, res) => {
   try {
-    const [orgUsers, allUsers] = await Promise.all([
-      listOrganizationUsers(req.organizationId),
-      listAllUsers()
-    ])
-    const byId = new Map((orgUsers || []).map(u => [Number(u.id), u]))
-    const users = await Promise.all((allUsers || []).map(async (u) => {
-      const orgScoped = byId.get(Number(u.id))
-      const permissions = await getUserPermissionFlags(Number(u.id), { isAdmin: !!u.isAdmin })
-      if (orgScoped) return orgScoped
-      return {
-        id: Number(u.id),
-        username: u.username,
-        email: u.email || null,
-        isAdmin: !!u.isAdmin,
-        mustChangePassword: !!u.mustChangePassword,
-        organizationId: null,
-        role: '',
-        createdAt: null,
-        permissions
-      }
-    }))
-    for (const u of users) {
-      if (!u.permissions) {
-        u.permissions = await getUserPermissionFlags(Number(u.id), { isAdmin: !!u.isAdmin })
-      }
-    }
+    const orgUsers = await listOrganizationUsers(req.organizationId)
+    const users = await Promise.all((orgUsers || []).map(async (u) => ({
+      ...u,
+      permissions: await getUserPermissionFlags(Number(u.id), { isAdmin: !!u.isAdmin })
+    })))
     res.json({ ok: true, users })
   } catch (e) {
     console.error('admin.users.list failed', e)
@@ -848,7 +915,7 @@ app.get('/api/admin/users', requireAuth, requireAdmin, async (req, res) => {
   }
 })
 
-app.get('/api/admin/signup-invites', requireAuth, requireAdmin, async (req, res) => {
+app.get('/api/admin/signup-invites', requireAuth, requireOrgAdmin, async (req, res) => {
   try {
     const invites = await listSignupInvites(req.organizationId)
     res.json({ ok: true, invites })
@@ -858,13 +925,17 @@ app.get('/api/admin/signup-invites', requireAuth, requireAdmin, async (req, res)
   }
 })
 
-app.post('/api/admin/signup-invites', requireAuth, requireAdmin, async (req, res) => {
+app.post('/api/admin/signup-invites', requireAuth, requireOrgAdmin, async (req, res) => {
   try {
     const email = String(req.body?.email || '').trim().toLowerCase()
     const role = String(req.body?.role || DEFAULT_CANDIDATE_ROLE).trim()
     const expiresInDays = Math.max(1, Math.min(30, Number(req.body?.expiresInDays) || 7))
     if (!email || !email.includes('@')) {
       return res.status(400).json({ error: 'A valid email is required' })
+    }
+    const allowedRoles = req.isPlatformAdmin ? PLATFORM_MANAGEABLE_ROLES : MANAGEABLE_ORG_ROLES
+    if (!allowedRoles.includes(role)) {
+      return res.status(400).json({ error: 'Invalid role' })
     }
     const token = crypto.randomBytes(24).toString('base64url')
     const invite = await createSignupInvite({
@@ -893,7 +964,7 @@ app.post('/api/admin/signup-invites', requireAuth, requireAdmin, async (req, res
   }
 })
 
-app.delete('/api/admin/signup-invites/:id', requireAuth, requireAdmin, async (req, res) => {
+app.delete('/api/admin/signup-invites/:id', requireAuth, requireOrgAdmin, async (req, res) => {
   try {
     const invite = await cancelSignupInvite(req.params.id)
     if (!invite) return res.status(404).json({ error: 'Invite not found' })
@@ -912,7 +983,7 @@ app.delete('/api/admin/signup-invites/:id', requireAuth, requireAdmin, async (re
   }
 })
 
-app.get('/api/admin/organizations', requireAuth, requireAdmin, async (_req, res) => {
+app.get('/api/admin/organizations', requireAuth, requireOrgAdmin, async (req, res) => {
   try {
     const organizations = await listOrganizations()
     res.json({ ok: true, organizations })
@@ -922,7 +993,7 @@ app.get('/api/admin/organizations', requireAuth, requireAdmin, async (_req, res)
   }
 })
 
-app.post('/api/admin/organizations', requireAuth, requireAdmin, async (req, res) => {
+app.post('/api/admin/organizations', requireAuth, requirePlatformAdmin, async (req, res) => {
   try {
     const name = String(req.body?.name || '').trim()
     const id = req.body?.id == null ? null : String(req.body.id).trim()
@@ -946,7 +1017,7 @@ app.post('/api/admin/organizations', requireAuth, requireAdmin, async (req, res)
   }
 })
 
-app.post('/api/admin/users', requireAuth, requireAdmin, async (req, res) => {
+app.post('/api/admin/users', requireAuth, requireOrgAdmin, async (req, res) => {
   try {
     const username = String(req.body?.username || '').trim().toLowerCase()
     const password = String(req.body?.password || '').trim()
@@ -958,6 +1029,10 @@ app.post('/api/admin/users', requireAuth, requireAdmin, async (req, res) => {
     }
     if (password.length < 10) {
       return res.status(400).json({ error: 'Temporary password must be at least 10 characters' })
+    }
+    const allowedRoles = req.isPlatformAdmin ? PLATFORM_MANAGEABLE_ROLES : MANAGEABLE_ORG_ROLES
+    if (!allowedRoles.includes(role)) {
+      return res.status(400).json({ error: 'Invalid role' })
     }
 
     const user = await createUserAccount({
@@ -987,7 +1062,7 @@ app.post('/api/admin/users', requireAuth, requireAdmin, async (req, res) => {
   }
 })
 
-app.get('/api/admin/users/:id/memberships', requireAuth, requireAdmin, async (req, res) => {
+app.get('/api/admin/users/:id/memberships', requireAuth, requirePlatformAdmin, async (req, res) => {
   try {
     const targetUserId = Number(req.params.id)
     if (!Number.isFinite(targetUserId) || targetUserId <= 0) {
@@ -1001,7 +1076,7 @@ app.get('/api/admin/users/:id/memberships', requireAuth, requireAdmin, async (re
   }
 })
 
-app.post('/api/admin/users/:id/memberships', requireAuth, requireAdmin, async (req, res) => {
+app.post('/api/admin/users/:id/memberships', requireAuth, requirePlatformAdmin, async (req, res) => {
   try {
     const targetUserId = Number(req.params.id)
     const organizationId = String(req.body?.organizationId || '').trim()
@@ -1010,7 +1085,7 @@ app.post('/api/admin/users/:id/memberships', requireAuth, requireAdmin, async (r
       return res.status(400).json({ error: 'Invalid target user' })
     }
     if (!organizationId) return res.status(400).json({ error: 'organizationId is required' })
-    if (!['admin', 'staff', 'job_seeker', 'accelerator_user', 'premium_user', 'vip_user'].includes(role)) {
+    if (!PLATFORM_MANAGEABLE_ROLES.includes(role)) {
       return res.status(400).json({ error: 'Invalid role' })
     }
     const targetUser = await getUserById(targetUserId)
@@ -1037,7 +1112,7 @@ app.post('/api/admin/users/:id/memberships', requireAuth, requireAdmin, async (r
   }
 })
 
-app.delete('/api/admin/users/:id/memberships', requireAuth, requireAdmin, async (req, res) => {
+app.delete('/api/admin/users/:id/memberships', requireAuth, requirePlatformAdmin, async (req, res) => {
   try {
     const targetUserId = Number(req.params.id)
     const organizationId = String(req.body?.organizationId || '').trim()
@@ -1069,18 +1144,19 @@ app.delete('/api/admin/users/:id/memberships', requireAuth, requireAdmin, async 
   }
 })
 
-app.patch('/api/admin/users/:id/role', requireAuth, requireAdmin, async (req, res) => {
+app.patch('/api/admin/users/:id/role', requireAuth, requireOrgAdmin, async (req, res) => {
   try {
     const targetUserId = Number(req.params.id)
     const role = String(req.body?.role || '').trim()
     if (!Number.isFinite(targetUserId) || targetUserId <= 0) {
       return res.status(400).json({ error: 'Invalid target user' })
     }
-    if (!['admin', 'staff', 'job_seeker', 'accelerator_user', 'premium_user', 'vip_user'].includes(role)) {
+    const allowedRoles = req.isPlatformAdmin ? PLATFORM_MANAGEABLE_ROLES : MANAGEABLE_ORG_ROLES
+    if (!allowedRoles.includes(role)) {
       return res.status(400).json({ error: 'Invalid role' })
     }
-    if (targetUserId === Number(req.userId) && role !== 'admin') {
-      return res.status(400).json({ error: 'You cannot remove your own admin role' })
+    if (targetUserId === Number(req.userId) && !isOrgAdminRole(role)) {
+      return res.status(400).json({ error: 'You cannot remove your own org admin role' })
     }
     const targetUser = await getUserById(targetUserId)
     if (!targetUser) return res.status(404).json({ error: 'User not found' })
@@ -1102,7 +1178,7 @@ app.patch('/api/admin/users/:id/role', requireAuth, requireAdmin, async (req, re
   }
 })
 
-app.post('/api/admin/users/:id/reset-password', requireAuth, requireAdmin, async (req, res) => {
+app.post('/api/admin/users/:id/reset-password', requireAuth, requireOrgAdmin, async (req, res) => {
   try {
     const targetUserId = Number(req.params.id)
     const password = String(req.body?.password || '').trim()
@@ -1132,7 +1208,7 @@ app.post('/api/admin/users/:id/reset-password', requireAuth, requireAdmin, async
   }
 })
 
-app.patch('/api/admin/users/:id/password-policy', requireAuth, requireAdmin, async (req, res) => {
+app.patch('/api/admin/users/:id/password-policy', requireAuth, requireOrgAdmin, async (req, res) => {
   try {
     const targetUserId = Number(req.params.id)
     const mustChangePassword = !!req.body?.mustChangePassword
@@ -1157,7 +1233,7 @@ app.patch('/api/admin/users/:id/password-policy', requireAuth, requireAdmin, asy
   }
 })
 
-app.delete('/api/admin/users/:id', requireAuth, requireAdmin, async (req, res) => {
+app.delete('/api/admin/users/:id', requireAuth, requireOrgAdmin, async (req, res) => {
   try {
     const targetUserId = Number(req.params.id)
     if (!Number.isFinite(targetUserId) || targetUserId <= 0) {
@@ -1168,15 +1244,20 @@ app.delete('/api/admin/users/:id', requireAuth, requireAdmin, async (req, res) =
     }
     const targetUser = await getUserById(targetUserId)
     if (!targetUser) return res.status(404).json({ error: 'User not found' })
-    await deleteUserAccount(targetUserId)
+    if (req.isPlatformAdmin) {
+      await deleteUserAccount(targetUserId)
+    } else {
+      const deleted = await deleteUserMembership(targetUserId, { organizationId: req.organizationId })
+      if (!deleted) return res.status(404).json({ error: 'Membership not found' })
+    }
     await createAuditLog({
       organizationId: req.organizationId,
       actorUserId: req.userId,
       targetUserId,
-      action: 'admin.user.deleted',
+      action: req.isPlatformAdmin ? 'admin.user.deleted' : 'admin.user.removed_from_org',
       entityType: 'user',
       entityId: String(targetUserId),
-      metadata: { username: targetUser.username }
+      metadata: { username: targetUser.username, organizationId: req.organizationId, scope: req.isPlatformAdmin ? 'account' : 'organization' }
     })
     res.json({ ok: true })
   } catch (e) {
@@ -1185,7 +1266,7 @@ app.delete('/api/admin/users/:id', requireAuth, requireAdmin, async (req, res) =
   }
 })
 
-app.put('/api/admin/users/:id/permissions', requireAuth, requireAdmin, async (req, res) => {
+app.put('/api/admin/users/:id/permissions', requireAuth, requireOrgAdmin, async (req, res) => {
   try {
     const targetUserId = Number(req.params.id)
     if (!Number.isFinite(targetUserId) || targetUserId <= 0) {
@@ -1215,7 +1296,7 @@ app.put('/api/admin/users/:id/permissions', requireAuth, requireAdmin, async (re
   }
 })
 
-app.get('/api/admin/staff-assignments', requireAuth, requireAdmin, async (req, res) => {
+app.get('/api/admin/staff-assignments', requireAuth, requireOrgAdmin, async (req, res) => {
   try {
     const assignments = await listStaffAssignments(req.organizationId)
     res.json({ ok: true, assignments })
@@ -1225,7 +1306,7 @@ app.get('/api/admin/staff-assignments', requireAuth, requireAdmin, async (req, r
   }
 })
 
-app.post('/api/admin/staff-assignments', requireAuth, requireAdmin, async (req, res) => {
+app.post('/api/admin/staff-assignments', requireAuth, requireOrgAdmin, async (req, res) => {
   try {
     const staffUserId = Number(req.body?.staffUserId)
     const jobSeekerUserId = Number(req.body?.jobSeekerUserId)
@@ -1266,7 +1347,7 @@ app.post('/api/admin/staff-assignments', requireAuth, requireAdmin, async (req, 
   }
 })
 
-app.delete('/api/admin/staff-assignments', requireAuth, requireAdmin, async (req, res) => {
+app.delete('/api/admin/staff-assignments', requireAuth, requireOrgAdmin, async (req, res) => {
   try {
     const staffUserId = Number(req.body?.staffUserId)
     const jobSeekerUserId = Number(req.body?.jobSeekerUserId)
@@ -1303,7 +1384,7 @@ app.delete('/api/admin/staff-assignments', requireAuth, requireAdmin, async (req
   }
 })
 
-app.get('/api/admin/audit-log', requireAuth, requireAdmin, async (req, res) => {
+app.get('/api/admin/audit-log', requireAuth, requireOrgAdmin, async (req, res) => {
   try {
     const logs = await getAuditLogs({ organizationId: req.organizationId, limit: req.query?.limit })
     res.json({ ok: true, logs })
@@ -1315,7 +1396,7 @@ app.get('/api/admin/audit-log', requireAuth, requireAdmin, async (req, res) => {
 
 app.get('/api/staff/assigned-users', requireAuth, requireStaffOrAdmin, async (req, res) => {
   try {
-    const users = req.isAdmin
+    const users = req.canManageOrg
       ? await listOrganizationUsers(req.organizationId)
       : await listAssignedUsersForStaff(req.userId, req.organizationId)
     res.json({ ok: true, users })
@@ -1344,7 +1425,7 @@ app.post('/api/staff/users/:id/reset-password', requireAuth, requireStaffOrAdmin
     if (!membership || !isCandidateRole(membership.role)) {
       return res.status(403).json({ error: 'Staff can only reset passwords for candidate users' })
     }
-    if (!req.isAdmin) {
+    if (!req.canManageOrg) {
       const hasAccess = await hasStaffAssignment({
         organizationId: req.organizationId,
         staffUserId: req.userId,
@@ -1373,25 +1454,25 @@ app.post('/api/staff/users/:id/reset-password', requireAuth, requireStaffOrAdmin
 app.get('/api/staff/queue', requireAuth, requireStaffOrAdmin, async (req, res) => {
   try {
     const requestedScope = String(req.query?.scope || '').toLowerCase()
-    const scope = req.isAdmin ? (requestedScope === 'assigned' ? 'assigned' : 'all') : 'assigned'
+    const scope = req.canManageOrg ? (requestedScope === 'assigned' ? 'assigned' : 'all') : 'assigned'
     const [orgUsers, recommendations, tasks, threads, allOrgUsers] = await Promise.all([
-      (req.isAdmin && scope === 'all')
+      (req.canManageOrg && scope === 'all')
         ? listOrganizationUsers(req.organizationId)
         : listAssignedUsersForStaff(req.userId, req.organizationId),
-      (req.isAdmin && scope === 'all')
+      (req.canManageOrg && scope === 'all')
         ? listJobRecommendations({ organizationId: req.organizationId, limit: 300 })
         : listJobRecommendations({ organizationId: req.organizationId, staffUserId: req.userId, limit: 300 }),
-      (req.isAdmin && scope === 'all')
+      (req.canManageOrg && scope === 'all')
         ? listStaffTasks({ organizationId: req.organizationId, limit: 300 })
         : listStaffTasks({ organizationId: req.organizationId, assigneeUserId: req.userId, limit: 300 }),
-      (req.isAdmin && scope === 'all')
+      (req.canManageOrg && scope === 'all')
         ? listCandidateThreadsByScope({ organizationId: req.organizationId, limit: 500 })
         : listCandidateThreadsByScope({ organizationId: req.organizationId, staffUserId: req.userId, limit: 500 }),
-      (req.isAdmin && scope === 'assigned') ? listOrganizationUsers(req.organizationId) : Promise.resolve([])
+      (req.canManageOrg && scope === 'assigned') ? listOrganizationUsers(req.organizationId) : Promise.resolve([])
     ])
     const candidates = (orgUsers || []).filter(u => isCandidateRole(u.role))
-    const staffUsers = req.isAdmin
-      ? ((scope === 'all' ? orgUsers : allOrgUsers) || []).filter(u => u.role === 'staff' || u.role === 'admin')
+    const staffUsers = req.canManageOrg
+      ? ((scope === 'all' ? orgUsers : allOrgUsers) || []).filter(u => u.role === 'staff' || isOrgAdminRole(u.role))
       : []
 
     const startOfWeek = new Date()
@@ -1824,7 +1905,7 @@ app.post('/api/staff/tasks', requireAuth, requireStaffOrAdmin, async (req, res) 
     const assigneeUserId = Number(req.body?.assigneeUserId || req.userId)
     const relatedUserId = req.body?.relatedUserId == null ? null : Number(req.body.relatedUserId)
     if (!assigneeUserId) return res.status(400).json({ error: 'assigneeUserId is required' })
-    if (!req.isAdmin && assigneeUserId !== Number(req.userId)) {
+    if (!req.canManageOrg && assigneeUserId !== Number(req.userId)) {
       return res.status(403).json({ error: 'Staff can only create tasks assigned to themselves' })
     }
     if (relatedUserId != null && !await canAccessCandidate(req, relatedUserId)) {
@@ -1882,7 +1963,7 @@ app.patch('/api/staff/tasks/:id', requireAuth, requireStaffOrAdmin, async (req, 
     if (req.body?.notes != null) patch.notes = req.body.notes
     if (req.body?.dueAt !== undefined) patch.dueAt = req.body.dueAt
 
-    if (req.isAdmin && req.body?.assigneeUserId != null) {
+    if (req.canManageOrg && req.body?.assigneeUserId != null) {
       patch.assigneeUserId = Number(req.body.assigneeUserId)
     }
     if (req.body?.relatedUserId !== undefined) {
@@ -1983,7 +2064,7 @@ app.get('/api/staff/candidates/:candidateUserId/support-summary', requireAuth, r
       getDashboardData({ organizationId: req.organizationId, userId: candidateUserId }),
       listCandidateThreadsByScope({
         organizationId: req.organizationId,
-        staffUserId: req.isAdmin ? null : req.userId,
+        staffUserId: req.canManageOrg ? null : req.userId,
         jobSeekerUserId: candidateUserId,
         limit: 200
       })
@@ -2108,12 +2189,12 @@ app.post('/api/staff/threads/:threadId/messages', requireAuth, requireStaffOrAdm
 
 app.get('/api/member/threads', requireAuth, requireJobSeeker, async (req, res) => {
   try {
-    const threads = await listCandidateThreadsForMember({
+    const inbox = await listMemberThreadsWithState({
       organizationId: req.organizationId,
       jobSeekerUserId: req.userId,
       limit: 200
     })
-    res.json({ ok: true, threads })
+    res.json({ ok: true, ...inbox })
   } catch (e) {
     console.error('member.threads.list failed', e)
     res.status(500).json({ error: 'Could not list member threads' })
@@ -2126,10 +2207,18 @@ app.get('/api/member/threads/:threadId/messages', requireAuth, requireJobSeeker,
     if (!thread || thread.organizationId !== req.organizationId || Number(thread.jobSeekerUserId) !== Number(req.userId)) {
       return res.status(404).json({ error: 'Thread not found' })
     }
+    const hiddenUntil = Number(await getAppSetting(
+      memberThreadSettingKey(req.userId, thread.id, MEMBER_THREAD_SETTING_KEYS.hiddenUntilUpdatedAt)
+    ) || 0)
+    if (hiddenUntil > 0 && Number(thread.updatedAt || 0) <= hiddenUntil) {
+      return res.status(404).json({ error: 'Thread not found' })
+    }
     const messages = await listCandidateMessagesForMember(thread.id, req.userId, 500)
     if (!messages.length) {
       return res.status(404).json({ error: 'Thread not found' })
     }
+    const latestMessageAt = messages.reduce((max, message) => Math.max(max, Number(message.createdAt || 0)), 0)
+    await markMemberThreadRead(req.userId, thread.id, latestMessageAt || Date.now())
     res.json({ ok: true, thread, messages })
   } catch (e) {
     console.error('member.messages.list failed', e)
@@ -2172,6 +2261,33 @@ app.post('/api/member/threads/:threadId/messages', requireAuth, requireJobSeeker
   } catch (e) {
     console.error('member.messages.create failed', e)
     res.status(500).json({ error: 'Could not create message' })
+  }
+})
+
+app.delete('/api/member/threads/:threadId', requireAuth, requireJobSeeker, async (req, res) => {
+  try {
+    const thread = await getCandidateThreadById(req.params.threadId)
+    if (!thread || thread.organizationId !== req.organizationId || Number(thread.jobSeekerUserId) !== Number(req.userId)) {
+      return res.status(404).json({ error: 'Thread not found' })
+    }
+    const visibleMessages = await listCandidateMessagesForMember(thread.id, req.userId, 1)
+    if (!visibleMessages.length) {
+      return res.status(404).json({ error: 'Thread not found' })
+    }
+    await archiveMemberThread(req.userId, thread.id, Number(thread.updatedAt || Date.now()))
+    await createAuditLog({
+      organizationId: req.organizationId,
+      actorUserId: req.userId,
+      targetUserId: req.userId,
+      action: 'member.thread.archived',
+      entityType: 'candidate_thread',
+      entityId: thread.id,
+      metadata: { topic: thread.topic || null }
+    })
+    res.json({ ok: true })
+  } catch (e) {
+    console.error('member.threads.delete failed', e)
+    res.status(500).json({ error: 'Could not remove thread' })
   }
 })
 
@@ -2703,7 +2819,7 @@ app.post('/api/internal/cost/snapshot', async (req, res) => {
   }
 })
 
-app.get('/api/admin/cost-snapshots', requireAuth, requireAdmin, async (req, res) => {
+app.get('/api/admin/cost-snapshots', requireAuth, requirePlatformAdmin, async (req, res) => {
   try {
     const limit = Math.max(1, Math.min(50, Number(req.query.limit) || 20))
     const snapshots = await getRecentCostSnapshots(limit)
@@ -2714,7 +2830,7 @@ app.get('/api/admin/cost-snapshots', requireAuth, requireAdmin, async (req, res)
   }
 })
 
-app.post('/api/admin/cost-snapshots/run', requireAuth, requireAdmin, async (_req, res) => {
+app.post('/api/admin/cost-snapshots/run', requireAuth, requirePlatformAdmin, async (_req, res) => {
   try {
     const scriptPath = path.join(__dirname, '../scripts/cost-snapshot.sh')
     const { stdout } = await execFileAsync('bash', [scriptPath], {
@@ -3078,7 +3194,7 @@ app.post('/api/agents/ingest', async (req, res) => {
 
 // ─── Admin Backup ─────────────────────────────────────────────────────────────
 
-app.get('/api/admin/backup/export', requireAuth, requireAdmin, async (_req, res) => {
+app.get('/api/admin/backup/export', requireAuth, requirePlatformAdmin, async (_req, res) => {
   try {
     const snapshot = await exportBackupSnapshot()
     res.json(snapshot)
@@ -3088,7 +3204,7 @@ app.get('/api/admin/backup/export', requireAuth, requireAdmin, async (_req, res)
   }
 })
 
-app.get('/api/admin/backup/export-db', requireAuth, requireAdmin, async (_req, res) => {
+app.get('/api/admin/backup/export-db', requireAuth, requirePlatformAdmin, async (_req, res) => {
   let tempDir = null
   let cleaned = false
   const cleanup = async () => {
@@ -3121,7 +3237,7 @@ app.get('/api/admin/backup/export-db', requireAuth, requireAdmin, async (_req, r
   }
 })
 
-app.post('/api/admin/backup/restore', requireAuth, requireAdmin, async (req, res) => {
+app.post('/api/admin/backup/restore', requireAuth, requirePlatformAdmin, async (req, res) => {
   try {
     const snapshot = req.body?.snapshot ?? req.body
     await restoreBackupSnapshot(snapshot)

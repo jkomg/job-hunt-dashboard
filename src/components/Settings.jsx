@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from '../ui-icons.jsx'
-import { CANDIDATE_ROLE_OPTIONS, OPERATIONAL_ROLE_OPTIONS } from '../roles.js'
+import { roleLabel } from '../roles.js'
 
 const ACCENT_SWATCHES = [
   { name: 'Indigo',  val: 'indigo',  color: 'oklch(0.52 0.22 268)' },
@@ -23,6 +23,21 @@ const ALL_SCHEDULER_JOBS = [
   { name: 'job-hunt-daily-backup-export', cadence: 'daily', purpose: 'Backup export to GCS' }
 ]
 const DEFAULT_CANDIDATE_ROLE = 'accelerator_user'
+const ORG_ROLE_OPTIONS = ['accelerator_user', 'premium_user', 'vip_user', 'job_seeker', 'staff', 'org_admin']
+const PLATFORM_ROLE_OPTIONS = [...ORG_ROLE_OPTIONS, 'admin']
+
+function isOrgAdminRole(role) {
+  return ['admin', 'org_admin'].includes(String(role || '').trim())
+}
+
+function getRoleOptions(me) {
+  return me?.isPlatformAdmin ? PLATFORM_ROLE_OPTIONS : ORG_ROLE_OPTIONS
+}
+
+function getRoleLabel(role) {
+  if (role === 'org_admin') return 'Organization Admin'
+  return roleLabel(role)
+}
 
 function tabsToText(tabs) {
   return (tabs || []).join(', ')
@@ -275,7 +290,10 @@ export default function Settings({ me, onProfileUpdated, onNavigate, settingsMod
   const [membershipOrgId, setMembershipOrgId] = useState('')
   const [membershipRole, setMembershipRole] = useState(DEFAULT_CANDIDATE_ROLE)
   const [savingMembership, setSavingMembership] = useState(false)
-  const canOpenPipelineCleanup = !(me?.role === 'staff' || me?.isAdmin)
+  const canManageOrg = !!me?.canManageOrg
+  const canViewOperationalSettings = !!me?.isPlatformAdmin
+  const roleOptions = getRoleOptions(me)
+  const canOpenPipelineCleanup = !(me?.role === 'staff' || canManageOrg)
   const isAdminOperationsMode = settingsMode === 'admin_operations'
   const isAdminUsersMode = settingsMode === 'admin_users'
   const isAdminAssignmentsMode = settingsMode === 'admin_assignments'
@@ -284,7 +302,6 @@ export default function Settings({ me, onProfileUpdated, onNavigate, settingsMod
   const showUserManagement = settingsMode === 'settings' || isAdminUsersMode
   const showAssignments = settingsMode === 'settings' || isAdminAssignmentsMode
   const showAssignedUsers = settingsMode === 'settings' || isAdminUsersMode || isAdminAssignmentsMode
-  const canViewOperationalSettings = !!me?.isAdmin
   const canUseByoAgent = !!me?.permissions?.canUseByoAgent
 
   const healthState = status?.health?.status || 'unknown'
@@ -301,7 +318,8 @@ export default function Settings({ me, onProfileUpdated, onNavigate, settingsMod
     `server_deploy=${serverDeployVersion || 'unknown'}`,
     `auth_mode=${healthMeta?.authMode || 'unknown'}`,
     `role=${me?.role || 'unknown'}`,
-    `is_admin=${me?.isAdmin ? 'true' : 'false'}`
+    `is_platform_admin=${me?.isPlatformAdmin ? 'true' : 'false'}`,
+    `is_org_admin=${me?.isOrgAdmin ? 'true' : 'false'}`
   ].join('\n')
 
   async function copyDiagnostics() {
@@ -334,7 +352,7 @@ export default function Settings({ me, onProfileUpdated, onNavigate, settingsMod
   }, [adminUsers])
   const adminSummary = useMemo(() => ({
     users: adminUsers.filter(user => !!user.role).length,
-    staff: adminUsers.filter(user => user.role === 'staff' || user.role === 'admin').length,
+    staff: adminUsers.filter(user => user.role === 'staff' || isOrgAdminRole(user.role)).length,
     invites: signupInvites.filter(invite => formatInviteStatus(invite) === 'Active').length,
     orgs: organizations.length
   }), [adminUsers, signupInvites, organizations])
@@ -456,12 +474,12 @@ export default function Settings({ me, onProfileUpdated, onNavigate, settingsMod
       setInterviewsTabsText(tabsToText(cfg.interviewsTabs || ['Interview Tracker']))
       setEventsTabsText(tabsToText(cfg.eventsTabs || ['Events']))
 
-      if (me?.isAdmin) {
+      if (canManageOrg) {
         const [usersRes, assignmentsRes, auditRes, costRes, orgRes, invitesRes] = await Promise.all([
           api('/api/admin/users'),
           api('/api/admin/staff-assignments'),
           api('/api/admin/audit-log?limit=60'),
-          api('/api/admin/cost-snapshots?limit=10'),
+          canViewOperationalSettings ? api('/api/admin/cost-snapshots?limit=10') : Promise.resolve({ snapshots: [] }),
           api('/api/admin/organizations'),
           api('/api/admin/signup-invites')
         ])
@@ -480,7 +498,7 @@ export default function Settings({ me, onProfileUpdated, onNavigate, settingsMod
         setCostSnapshots([])
       }
 
-      if (me?.isAdmin || me?.role === 'staff') {
+      if (canManageOrg || me?.role === 'staff') {
         const assignedRes = await api('/api/staff/assigned-users')
         setAssignedUsers(assignedRes?.users || [])
       } else {
@@ -777,7 +795,11 @@ export default function Settings({ me, onProfileUpdated, onNavigate, settingsMod
   }
 
   async function deleteUser(user) {
-    const confirmed = window.confirm(`Delete user ${user.username}? This removes account data and cannot be undone.`)
+    const confirmed = window.confirm(
+      me?.isPlatformAdmin
+        ? `Delete user ${user.username}? This removes account data and cannot be undone.`
+        : `Remove ${user.username} from this organization? Their account will remain available in any other orgs.`
+    )
     if (!confirmed) return
     setError(null)
     setSuccess('')
@@ -1157,7 +1179,7 @@ export default function Settings({ me, onProfileUpdated, onNavigate, settingsMod
     return <div className="loading"><div className="spin" />Loading settings…</div>
   }
 
-  const staffCandidates = adminUsers.filter(user => user.role === 'staff' || user.role === 'admin')
+  const staffCandidates = adminUsers.filter(user => user.role === 'staff' || isOrgAdminRole(user.role))
   const jobSeekerCandidates = adminUsers.filter(user => CANDIDATE_ROLES.includes(user.role))
   const pageTitle = isAdminOperationsMode
     ? 'Operations'
@@ -1245,7 +1267,8 @@ export default function Settings({ me, onProfileUpdated, onNavigate, settingsMod
             {savingProfile ? 'Saving…' : 'Save Profile'}
           </button>
           <div style={{ fontSize: 12, color: 'var(--text-muted)', alignSelf: 'center' }}>
-            Role: {me?.role || DEFAULT_CANDIDATE_ROLE} {me?.isAdmin ? '• Admin' : ''}
+            Role: {getRoleLabel(me?.role || DEFAULT_CANDIDATE_ROLE)}
+            {me?.isPlatformAdmin ? ' • Platform admin' : me?.isOrgAdmin ? ' • Org admin' : ''}
           </div>
         </div>
         </div>
@@ -1585,7 +1608,7 @@ Body:
       </div>}
 
       {/* ── Assigned Users (staff/admin) ── */}
-      {(me?.isAdmin || me?.role === 'staff') && showAssignedUsers && (
+      {(canManageOrg || me?.role === 'staff') && showAssignedUsers && (
         <div className="settings-card" id="settings-assigned-users">
           <div className="settings-card-head">
             <div className="settings-card-ico"><Icon name="users" /></div>
@@ -1597,7 +1620,7 @@ Body:
           <div className="settings-body">
           {!assignedUsers.length && (
             <div style={{ color: 'var(--text-muted)' }}>
-              {me?.isAdmin ? 'No users in this organization yet.' : 'No users assigned to you yet.'}
+              {canManageOrg ? 'No users in this organization yet.' : 'No users assigned to you yet.'}
             </div>
           )}
           {!!assignedUsers.length && (
@@ -1639,7 +1662,7 @@ Body:
       )}
 
       {/* ── Admin: Team Access ── */}
-      {me?.isAdmin && showUserManagement && (
+      {canManageOrg && showUserManagement && (
         <div className="settings-card" id="settings-users">
           <div className="settings-card-head">
             <div className="settings-card-ico"><Icon name="shield" /></div>
@@ -1649,8 +1672,17 @@ Body:
             </div>
           </div>
           <div className="settings-body">
+          <div className="guide-tip" style={{ marginBottom: 12 }}>
+            <Icon name="book-open" />
+            <span>
+              Need the walkthrough? Open `Guides` for the Staff Operations Guide plus org-admin and platform-admin instructions.
+            </span>
+            <button className="btn btn-ghost btn-sm" onClick={() => onNavigate && onNavigate('guides')} type="button">
+              Open Guides
+            </button>
+          </div>
           <div style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 10 }}>
-            Create users, change roles, reset passwords, and control force-reset policy.
+            Manage people in this organization, reset passwords, and control account access.
           </div>
           <div className="admin-summary-grid">
             <div className="admin-summary-card">
@@ -1658,7 +1690,7 @@ Body:
               <div className="admin-summary-value">{adminSummary.users}</div>
             </div>
             <div className="admin-summary-card">
-              <div className="admin-summary-label">Staff + Admin</div>
+              <div className="admin-summary-label">Staff + Org Admin</div>
               <div className="admin-summary-value">{adminSummary.staff}</div>
             </div>
             <div className="admin-summary-card">
@@ -1699,14 +1731,17 @@ Body:
                     <td>{user.username}</td>
                     <td>{user.email || '—'}</td>
                     <td>
-                      <select
-                        value={user.role || ''}
+                    <select
+                        value={!user.isAdmin && isOrgAdminRole(user.role) ? 'org_admin' : (user.role || '')}
                         disabled={updatingRoleUserId === String(user.id) || user.username === me?.username || !user.role}
                         onChange={(e) => changeUserRole(user.id, e.target.value)}
                       >
                         {!user.role && <option value="">No membership</option>}
-                        {CANDIDATE_ROLE_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-                        {OPERATIONAL_ROLE_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                        {roleOptions.map(role => (
+                          <option key={`edit-role-${role}`} value={role}>
+                            {getRoleLabel(role)}
+                          </option>
+                        ))}
                       </select>
                     </td>
                     <td>{user.mustChangePassword ? 'Required' : 'No'}</td>
@@ -1743,7 +1778,7 @@ Body:
                             style={{ color: 'var(--red)' }}
                             onClick={() => deleteUser(user)}
                           >
-                            Delete User
+                            {me?.isPlatformAdmin ? 'Delete User' : 'Remove from Org'}
                           </button>
                         )}
                       </div>
@@ -1779,8 +1814,11 @@ Body:
                   <div className="field">
                     <label>Role</label>
                     <select value={inviteRole} onChange={e => setInviteRole(e.target.value)}>
-                      {CANDIDATE_ROLE_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-                      {OPERATIONAL_ROLE_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                      {roleOptions.map(role => (
+                        <option key={`invite-role-${role}`} value={role}>
+                          {getRoleLabel(role)}
+                        </option>
+                      ))}
                     </select>
                   </div>
                   <div className="field">
@@ -1815,8 +1853,11 @@ Body:
                 <div className="field">
                     <label>Role</label>
                     <select value={newUserRole} onChange={e => setNewUserRole(e.target.value)}>
-                      {CANDIDATE_ROLE_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-                      {OPERATIONAL_ROLE_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                      {roleOptions.map(role => (
+                        <option key={`new-role-${role}`} value={role}>
+                          {getRoleLabel(role)}
+                        </option>
+                      ))}
                     </select>
                 </div>
                 <div className="field">
@@ -1882,7 +1923,7 @@ Body:
             </div>
           )}
 
-          <div className="admin-block">
+          {canViewOperationalSettings && <div className="admin-block">
             <div className="admin-block-head">
               <div>
                 <div className="admin-block-title">Organizations and Memberships</div>
@@ -1907,7 +1948,7 @@ Body:
                     {creatingOrg ? 'Creating…' : 'Create Organization'}
                   </button>
                 </div>
-                {!!organizations.length && (
+                {canViewOperationalSettings && !!organizations.length && (
                   <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                     {organizations.map(org => `${org.name} (${org.id})`).join(' • ')}
                   </div>
@@ -1934,8 +1975,11 @@ Body:
                   <div className="field">
                     <label>Role</label>
                     <select value={membershipRole} onChange={e => setMembershipRole(e.target.value)}>
-                      {CANDIDATE_ROLE_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-                      {OPERATIONAL_ROLE_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                      {PLATFORM_ROLE_OPTIONS.map(role => (
+                        <option key={`membership-role-${role}`} value={role}>
+                          {getRoleLabel(role)}
+                        </option>
+                      ))}
                     </select>
                   </div>
                 </div>
@@ -1949,13 +1993,13 @@ Body:
                 </div>
               </div>
             </div>
-          </div>
+          </div>}
           </div>
         </div>
       )}
 
       {/* ── Admin: Staff Assignments ── */}
-      {me?.isAdmin && showAssignments && (
+      {canManageOrg && showAssignments && (
         <div className="settings-card" id="settings-assignments">
           <div className="settings-card-head">
             <div className="settings-card-ico"><Icon name="link" /></div>
@@ -2026,7 +2070,7 @@ Body:
       )}
 
       {/* ── Admin: Audit Log ── */}
-      {me?.isAdmin && showOperations && (
+      {canManageOrg && showOperations && (
         <div className="settings-card">
           <div className="settings-card-head">
             <div className="settings-card-ico"><Icon name="scroll-text" /></div>
@@ -2067,7 +2111,7 @@ Body:
         </div>
       )}
 
-      {me?.isAdmin && showOperations && (
+      {canViewOperationalSettings && showOperations && (
         <div className="settings-card">
           <div className="settings-card-head">
             <div className="settings-card-ico"><Icon name="zap" /></div>
@@ -2199,7 +2243,7 @@ Body:
         </div>
       )}
 
-      {me?.isAdmin && showOperations && (
+      {canViewOperationalSettings && showOperations && (
         <div className="settings-card">
           <div className="settings-card-head">
             <div className="settings-card-ico"><Icon name="server" /></div>
@@ -2249,7 +2293,7 @@ Body:
         </div>
       )}
 
-      {me?.isAdmin && showOperations && (
+      {canViewOperationalSettings && showOperations && (
         <div className="settings-card">
           <div className="settings-card-head">
             <div className="settings-card-ico"><Icon name="trending-up" /></div>
@@ -2341,13 +2385,13 @@ Body:
             Export your current app data to a JSON file and restore it later.
           </div>
           <div className="quick-actions" style={{ marginBottom: 14 }}>
-            <button className="btn btn-primary" onClick={exportBackup} disabled={exportingBackup || !me?.isAdmin}>
+            <button className="btn btn-primary" onClick={exportBackup} disabled={exportingBackup || !me?.isPlatformAdmin}>
               {exportingBackup ? 'Exporting…' : 'Export Backup'}
             </button>
-            <button className="btn btn-ghost" onClick={exportDbFile} disabled={exportingDbFile || !me?.isAdmin}>
+            <button className="btn btn-ghost" onClick={exportDbFile} disabled={exportingDbFile || !me?.isPlatformAdmin}>
               {exportingDbFile ? 'Exporting…' : 'Export DB File (.db)'}
             </button>
-            <button className="btn btn-ghost" onClick={chooseBackupFile} disabled={restoringBackup || !me?.isAdmin}>
+            <button className="btn btn-ghost" onClick={chooseBackupFile} disabled={restoringBackup || !me?.isPlatformAdmin}>
               {restoringBackup ? 'Restoring…' : 'Restore Backup'}
             </button>
             <input
@@ -2358,7 +2402,7 @@ Body:
               onChange={restoreBackupFromFile}
             />
           </div>
-          {!me?.isAdmin && (
+          {!me?.isPlatformAdmin && (
             <div style={{ color: 'var(--text-3)', fontSize: 12, marginBottom: 10 }}>
               Backup and restore are available to admin users only.
             </div>

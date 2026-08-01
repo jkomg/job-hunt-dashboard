@@ -1472,6 +1472,13 @@ body {
 .login-note { color: var(--text-3); font-size: 12px; line-height: 1.5; margin-bottom: 14px; }
 .signup-summary-grid { margin-bottom: 16px; }
 .signup-back-btn { margin-top: 12px; }
+.signup-hero { background: linear-gradient(180deg, color-mix(in oklch, var(--accent) 8%, var(--surface)) 0%, var(--surface) 100%); border: 1px solid color-mix(in oklch, var(--accent) 22%, var(--border)); border-radius: 14px; }
+.signup-password-checks { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.signup-password-check { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-3); }
+.signup-password-check span:first-child { width: 12px; text-align: center; color: var(--text-3); }
+.signup-password-check.ok { color: var(--green); }
+.signup-password-check.ok span:first-child { color: var(--green); }
+.signup-empty-state { padding: 6px 0 2px; }
 
 /* Button variants missing from theme */
 .btn-success { background: var(--green); color: #fff; box-shadow: var(--shadow-sm); }
