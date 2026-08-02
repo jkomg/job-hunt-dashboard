@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { JOB_SOURCES } from '../constants/jobSources'
 import { Icon } from '../ui-icons.jsx'
+import { trackEvent } from '../analytics.js'
 
 const STAGE_COLORS = {
   '🔍 Researching':       'oklch(0.58 0.14 220)',
@@ -256,6 +257,7 @@ function AddModal({ onClose, onSave }) {
         body: JSON.stringify(form)
       })
       if (!r.ok) throw new Error((await r.json()).error)
+      trackEvent('pipeline_first_job')
       onSave()
     } catch (e) { setError(e.message) }
     finally { setSaving(false) }

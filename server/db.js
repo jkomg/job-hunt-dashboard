@@ -67,7 +67,8 @@ const BACKUP_TABLES = [
   'sheet_sync_links',
   'entity_sheet_sync_links',
   'sheet_sync_runs',
-  'cost_snapshots'
+  'cost_snapshots',
+  'product_events'
 ]
 
 function normalizeEmail(email) {
@@ -159,6 +160,21 @@ async function ensureEventSchema() {
     await db.execute('ALTER TABLE events ADD COLUMN source_key TEXT')
   }
   await db.execute('CREATE UNIQUE INDEX IF NOT EXISTS events_source_key_unique_idx ON events(source_key) WHERE source_key IS NOT NULL')
+}
+
+async function ensureProductAnalyticsSchema() {
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS product_events (
+      id TEXT PRIMARY KEY,
+      organization_id TEXT NOT NULL,
+      user_id INTEGER,
+      event_name TEXT NOT NULL,
+      metadata_json TEXT,
+      occurred_at INTEGER NOT NULL
+    )
+  `)
+  await db.execute('CREATE INDEX IF NOT EXISTS product_events_org_event_idx ON product_events(organization_id, event_name, occurred_at)')
+  await db.execute('CREATE INDEX IF NOT EXISTS product_events_user_time_idx ON product_events(user_id, occurred_at)')
 }
 
 async function ensureActionSchema() {
@@ -431,7 +447,8 @@ async function runMigrations() {
     { id: '2026-04-30-002-candidate-messaging-schema', description: 'candidate thread and message tables', up: ensureStaffOpsSchema },
     { id: '2026-05-01-001-pipeline-contacts-schema', description: 'pipeline multi-contact JSON field', up: ensureActionSchema },
     { id: '2026-05-12-001-sheet-sync-org-scope', description: 'organization_id for sheet sync run records', up: ensureSheetSyncRunScopeSchema },
-    { id: '2026-07-13-001-signup-invites', description: 'invite-only signup records', up: ensureSignupInviteSchema }
+    { id: '2026-07-13-001-signup-invites', description: 'invite-only signup records', up: ensureSignupInviteSchema },
+    { id: '2026-08-02-001-product-analytics', description: 'privacy-safe activation and retention events', up: ensureProductAnalyticsSchema }
   ]
 
   for (const migration of migrations) {
@@ -1052,6 +1069,30 @@ export async function createAuditLog({
     ]
   })
   return { id }
+}
+
+export async function recordProductEvent({ organizationId, userId = null, eventName, metadata = null } = {}) {
+  if (!organizationId || !eventName) throw new Error('organizationId and eventName are required')
+  const id = crypto.randomUUID()
+  await db.execute({
+    sql: `INSERT INTO product_events (id, organization_id, user_id, event_name, metadata_json, occurred_at) VALUES (?, ?, ?, ?, ?, ?)`,
+    args: [id, String(organizationId), userId == null ? null : Number(userId), String(eventName), metadata == null ? null : JSON.stringify(metadata), now()]
+  })
+  return { id }
+}
+
+export async function getProductEventSummary({ organizationId, since = 0 } = {}) {
+  const res = await db.execute({
+    sql: `SELECT event_name, COUNT(*) AS count, MIN(occurred_at) AS first_at, MAX(occurred_at) AS last_at
+          FROM product_events WHERE organization_id = ? AND occurred_at >= ? GROUP BY event_name ORDER BY event_name`,
+    args: [String(organizationId), Number(since) || 0]
+  })
+  return (res.rows || []).map(row => ({
+    eventName: String(row.event_name),
+    count: Number(row.count || 0),
+    firstAt: Number(row.first_at || 0),
+    lastAt: Number(row.last_at || 0)
+  }))
 }
 
 export async function getAuditLogs({ organizationId = DEFAULT_ORG_ID, limit = 100 } = {}) {

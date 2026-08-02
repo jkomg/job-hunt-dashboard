@@ -258,6 +258,12 @@ body {
   display: flex; align-items: center; gap: 10px;
   padding: 8px;
   border-radius: var(--radius-sm);
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
   cursor: pointer;
   transition: background .14s;
 }
@@ -274,6 +280,40 @@ body {
 .profile-name { font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .profile-role { font-size: 11.5px; color: var(--text-3); }
 .profile .lucide { font-size: 16px; color: var(--text-3); }
+
+.quick-jump-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 12vh 16px 24px;
+  background: rgba(8, 12, 24, .58);
+}
+.quick-jump {
+  width: min(620px, 100%);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+}
+.quick-jump-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 18px 18px 12px; }
+.quick-jump-title { font-weight: 750; font-size: 18px; }
+.quick-jump-sub { color: var(--text-muted); font-size: 12px; margin-top: 3px; }
+.quick-jump-input { display: block; width: calc(100% - 36px); margin: 0 18px 12px; padding: 11px 12px; border: 1px solid var(--border-2); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--text); font: inherit; }
+.quick-jump-input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.quick-jump-list { max-height: min(52vh, 420px); overflow-y: auto; padding: 0 8px 8px; }
+.quick-jump-item { display: flex; align-items: center; gap: 11px; width: 100%; padding: 10px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--text); text-align: left; cursor: pointer; font: inherit; }
+.quick-jump-item:hover, .quick-jump-item:focus-visible { background: var(--surface-2); outline: none; }
+.quick-jump-icon { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; background: var(--accent-soft); color: var(--accent); flex: 0 0 auto; }
+.quick-jump-copy { display: grid; gap: 2px; flex: 1; }
+.quick-jump-copy small { color: var(--text-muted); font-size: 11px; }
+.quick-jump-item > .lucide { color: var(--text-3); font-size: 15px; }
+.quick-jump-empty { padding: 20px 12px; color: var(--text-muted); font-size: 13px; text-align: center; }
+.quick-jump-foot { border-top: 1px solid var(--border); padding: 10px 18px; color: var(--text-muted); font-size: 11px; }
+.quick-jump-foot kbd { padding: 2px 5px; border: 1px solid var(--border-2); border-radius: 4px; background: var(--surface-2); font-family: var(--font-mono); }
 
 /* ─── Main ──────────────────────────────────────────── */
 .main {
@@ -1404,6 +1444,12 @@ body {
 /* Legacy card (staff/admin views) */
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--pad-card); box-shadow: var(--shadow-sm); }
 .card-title { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; margin-bottom: 12px; }
+.next-action-card { display: flex; align-items: center; justify-content: space-between; gap: 18px; border-color: color-mix(in oklch, var(--accent) 45%, var(--border)); background: color-mix(in oklch, var(--accent-soft) 32%, var(--surface)); }
+.next-action-card .card-title { display: flex; align-items: center; gap: 6px; color: var(--accent-strong); }
+.next-action-title { font-size: 17px; font-weight: 700; letter-spacing: -0.015em; }
+.next-action-sub { color: var(--text-muted); font-size: 12px; margin-top: 4px; }
+.next-action-actions { justify-content: flex-end; flex-shrink: 0; }
+@media (max-width: 600px) { .next-action-card { align-items: flex-start; flex-direction: column; } .next-action-actions { justify-content: flex-start; } }
 
 /* Old contact rows (used in staff views) */
 .contact-row { display: flex; align-items: center; gap: 12px; padding: 13px 16px; border-bottom: 1px solid var(--border); transition: background 0.1s; min-height: 64px; }

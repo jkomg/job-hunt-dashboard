@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Icon } from '../ui-icons.jsx'
+import { trackEvent } from '../analytics.js'
 
 const STATUS_OPTIONS = ['Need to reach out', 'Waiting on response', 'In conversation', 'Referred me', 'Gone cold']
 const WARMTH_OPTIONS = ['🔥 Hot — active convo', '☀️ Warm — responded', '❄️ Cold — no contact yet']
@@ -174,6 +175,7 @@ function AddModal({ onClose, onSave }) {
         body: JSON.stringify(form)
       })
       if (!r.ok) throw new Error((await r.json()).error)
+      trackEvent('outreach_first_contact')
       onSave()
     } catch (e) { setError(e.message) }
     finally { setSaving(false) }

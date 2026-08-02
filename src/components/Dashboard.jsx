@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Icon } from '../ui-icons.jsx'
+import { trackEvent } from '../analytics.js'
 
 const WEEKLY_TARGETS = {
   outreach: 25,
@@ -35,6 +36,7 @@ export default function Dashboard({ onNavigate, me }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [doneItems, setDoneItems] = useState({})
+  const [queueAction, setQueueAction] = useState('')
   const canManageOrg = !!me?.canManageOrg
   const isStaffLike = me?.role === 'staff' || canManageOrg
 
@@ -249,6 +251,35 @@ export default function Dashboard({ onNavigate, me }) {
   ]
   const weekActivityTotal = Number(weekStats.outreach || 0) + Number(weekStats.responses || 0) + Number(weekStats.applications || 0) + Number(weekStats.linkedInPosts || 0)
   const needsGettingStartedHelp = !focusTasks.length && followUpsTotal === 0 && upcomingInterviews.length === 0 && Number(health?.staleTotal || 0) === 0 && openMemberThreads.length === 0 && weekActivityTotal === 0
+  const nextBestAction = todayQueue[0] || null
+
+  async function updateNextBestAction(action) {
+    if (!nextBestAction?.entityId || !['pipeline_follow_up', 'contact_follow_up'].includes(nextBestAction.type)) return
+    setQueueAction(action)
+    try {
+      const date = action === 'snooze'
+        ? new Date(Date.now() + 864e5 * 2).toISOString().slice(0, 10)
+        : ''
+      const path = nextBestAction.type === 'pipeline_follow_up'
+        ? `/api/pipeline/${nextBestAction.entityId}/followup`
+        : `/api/contacts/${nextBestAction.entityId}/contacted`
+      const body = nextBestAction.type === 'pipeline_follow_up' ? { date } : { nextFollowUp: date }
+      const response = await fetch(path, {
+        method: nextBestAction.type === 'pipeline_follow_up' ? 'PATCH' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(body)
+      })
+      if (!response.ok) throw new Error('Could not update the follow-up')
+      const refreshed = await fetch('/api/dashboard', { credentials: 'include' })
+      if (refreshed.ok) setData(await refreshed.json())
+      trackEvent(action === 'snooze' ? 'followup_snoozed' : 'followup_resolved', { type: nextBestAction.type })
+    } catch (e) {
+      setError(e.message || 'Could not update the follow-up')
+    } finally {
+      setQueueAction('')
+    }
+  }
 
   return (
     <div className="page">
@@ -286,6 +317,31 @@ export default function Dashboard({ onNavigate, me }) {
             <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('contacts')}>
               <Icon name="users" /> Add first contact
             </button>
+          </div>
+        </div>
+      )}
+
+      {nextBestAction && (
+        <div className="card next-action-card mb-16">
+          <div className="next-action-copy">
+            <div className="card-title"><Icon name="sparkles" /> Next best action</div>
+            <div className="next-action-title">{nextBestAction.title}</div>
+            <div className="next-action-sub">{nextBestAction.subtitle || nextBestAction.reason}</div>
+          </div>
+          <div className="quick-actions next-action-actions">
+            <button className="btn btn-primary btn-sm" onClick={() => onNavigate(nextBestAction.route, { focusId: nextBestAction.entityId })}>
+              {nextBestAction.actionLabel || 'Open'} <Icon name="arrow-right" />
+            </button>
+            {['pipeline_follow_up', 'contact_follow_up'].includes(nextBestAction.type) && (
+              <>
+                <button className="btn btn-ghost btn-sm" onClick={() => updateNextBestAction('done')} disabled={!!queueAction}>
+                  <Icon name="check" /> {queueAction === 'done' ? 'Saving…' : 'Done'}
+                </button>
+                <button className="btn btn-ghost btn-sm" onClick={() => updateNextBestAction('snooze')} disabled={!!queueAction}>
+                  <Icon name="clock" /> {queueAction === 'snooze' ? 'Saving…' : 'Snooze 2 days'}
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}
