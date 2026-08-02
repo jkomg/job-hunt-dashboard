@@ -27,4 +27,4 @@ Start with an opt-in, user-configured daily email digest for due follow-ups and 
 
 Use the existing scheduler only when the reminder profile is enabled. Begin with a low-volume provider or platform SMTP option and set a monthly send cap. Measure opt-in rate, delivery failures, click-through to Briefing, and follow-up resolution before adding per-event notifications.
 
-This decision intentionally does not enable email sending in this change. The implementation issue must first add preferences, consent UX, timezone handling, an idempotent send log, and a dry-run preview.
+The first implementation slice adds preference storage, consent UX, timezone validation, an idempotent delivery-log table, a Today queue preview, and calendar export. Email sending remains disabled until the pilot confirms the destination, consent language, and delivery cost. The next slice can use the existing Gmail profile or a dedicated provider only after those controls are accepted.

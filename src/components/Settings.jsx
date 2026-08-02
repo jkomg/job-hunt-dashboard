@@ -233,6 +233,9 @@ export default function Settings({ me, onProfileUpdated, onNavigate, settingsMod
   const [gmailStatus, setGmailStatus] = useState(null)
   const [gmailConnecting, setGmailConnecting] = useState(false)
   const [gmailImporting, setGmailImporting] = useState(false)
+  const [reminderPreferences, setReminderPreferences] = useState({ enabled: false, channel: 'calendar', timezone: 'UTC', sendHour: '08', destinationEmail: '' })
+  const [savingReminders, setSavingReminders] = useState(false)
+  const [reminderPreview, setReminderPreview] = useState(null)
   const [agentConfig, setAgentConfig] = useState({ enabled: false, provider: 'claude', label: '', endpointUrl: '', hasToken: false, ingestPath: '/api/agents/ingest' })
   const [savingAgentConfig, setSavingAgentConfig] = useState(false)
   const [rotatingAgentToken, setRotatingAgentToken] = useState(false)
@@ -453,16 +456,18 @@ export default function Settings({ me, onProfileUpdated, onNavigate, settingsMod
     setLoading(true)
     setError(null)
     try {
-      const [statusRes, runsRes, gmailRes, agentRes] = await Promise.all([
+      const [statusRes, runsRes, gmailRes, agentRes, reminderRes] = await Promise.all([
         api('/api/sheets/status'),
         api('/api/sheets/sync/runs'),
         canViewOperationalSettings ? api('/api/gmail/status') : Promise.resolve(null),
-        canUseByoAgent ? api('/api/agents/config') : Promise.resolve(null)
+        canUseByoAgent ? api('/api/agents/config') : Promise.resolve(null),
+        api('/api/reminders/preferences')
       ])
       const healthRes = await api('/api/health')
       setStatus(statusRes)
       setRuns(runsRes || [])
       setGmailStatus(gmailRes || null)
+      setReminderPreferences(reminderRes?.preferences || { enabled: false, channel: 'calendar', timezone: 'UTC', sendHour: '08', destinationEmail: '' })
       setAgentConfig(agentRes || { enabled: false, provider: 'claude', label: '', endpointUrl: '', hasToken: false, ingestPath: '/api/agents/ingest' })
       setHealthMeta(healthRes || null)
 
@@ -1033,6 +1038,54 @@ export default function Settings({ me, onProfileUpdated, onNavigate, settingsMod
     }
   }
 
+  async function saveReminderSettings() {
+    setSavingReminders(true)
+    setError(null)
+    setSuccess('')
+    try {
+      const result = await api('/api/reminders/preferences', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(reminderPreferences)
+      })
+      setReminderPreferences(result.preferences)
+      setSuccess('Reminder preferences saved. Email delivery remains off until the pilot channel is enabled.')
+    } catch (e) {
+      setError(e.payload || { error: e.message })
+    } finally {
+      setSavingReminders(false)
+    }
+  }
+
+  async function previewReminders() {
+    setError(null)
+    try {
+      const result = await api('/api/reminders/preview')
+      setReminderPreview(result.preview)
+    } catch (e) {
+      setError(e.payload || { error: e.message })
+    }
+  }
+
+  async function downloadCalendarReminders() {
+    try {
+      const response = await fetch('/api/reminders/calendar.ics', { credentials: 'include' })
+      if (!response.ok) throw new Error('Could not export calendar reminders')
+      const blob = await response.blob()
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = 'job-hunt-reminders.ics'
+      document.body.appendChild(anchor)
+      anchor.click()
+      anchor.remove()
+      URL.revokeObjectURL(url)
+      setSuccess('Calendar reminders downloaded.')
+    } catch (e) {
+      setError({ error: e.message || 'Could not export calendar reminders' })
+    }
+  }
+
   async function exportBackup() {
     setExportingBackup(true)
     setError(null)
@@ -1271,6 +1324,65 @@ export default function Settings({ me, onProfileUpdated, onNavigate, settingsMod
             {me?.isPlatformAdmin ? ' • Platform admin' : me?.isOrgAdmin ? ' • Org admin' : ''}
           </div>
         </div>
+        </div>
+      </div>}
+
+      {/* ── Reminders ── */}
+      {showAccountSettings && <div className="settings-card" id="settings-reminders">
+        <div className="settings-card-head">
+          <div className="settings-card-ico"><Icon name="bell" /></div>
+          <div>
+            <div className="settings-card-title">Reminders</div>
+            <div className="settings-card-sub">Keep the daily loop visible without surprise messages</div>
+          </div>
+        </div>
+        <div className="settings-body">
+          <div style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 12 }}>
+            Calendar export is available now. Email digest preferences are saved for the pilot, but outbound email is not enabled yet.
+          </div>
+          <div className="checkin-grid">
+            <div className="field">
+              <label>Reminder channel</label>
+              <select value={reminderPreferences.channel} onChange={e => setReminderPreferences(prev => ({ ...prev, channel: e.target.value }))}>
+                <option value="calendar">Calendar export</option>
+                <option value="email_digest">Email digest (pilot preview)</option>
+              </select>
+            </div>
+            <div className="field">
+              <label>Timezone</label>
+              <input value={reminderPreferences.timezone} onChange={e => setReminderPreferences(prev => ({ ...prev, timezone: e.target.value }))} placeholder="America/New_York" />
+            </div>
+            <div className="field">
+              <label>Digest email</label>
+              <input type="email" value={reminderPreferences.destinationEmail} onChange={e => setReminderPreferences(prev => ({ ...prev, destinationEmail: e.target.value }))} placeholder="you@example.com" />
+            </div>
+            <div className="field">
+              <label>Preferred send hour</label>
+              <select value={reminderPreferences.sendHour} onChange={e => setReminderPreferences(prev => ({ ...prev, sendHour: e.target.value }))}>
+                {['07', '08', '09', '10', '11'].map(hour => <option key={hour} value={hour}>{hour}:00</option>)}
+              </select>
+            </div>
+            <div className="field">
+              <label>Enable preferences</label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 38 }}>
+                <input type="checkbox" checked={!!reminderPreferences.enabled} onChange={e => setReminderPreferences(prev => ({ ...prev, enabled: e.target.checked }))} />
+                <span>Include me when delivery is enabled</span>
+              </label>
+            </div>
+          </div>
+          <div className="quick-actions">
+            <button className="btn btn-primary" onClick={saveReminderSettings} disabled={savingReminders}>{savingReminders ? 'Saving…' : 'Save reminder settings'}</button>
+            <button className="btn btn-ghost" onClick={previewReminders}>Preview Today queue</button>
+            <button className="btn btn-ghost" onClick={downloadCalendarReminders}>Download calendar</button>
+          </div>
+          {reminderPreview && (
+            <div className="helper-card" style={{ marginTop: 12 }}>
+              <div className="helper-card-title">Preview · {reminderPreview.items.length} item{reminderPreview.items.length === 1 ? '' : 's'}</div>
+              {reminderPreview.items.length
+                ? reminderPreview.items.map(item => <div key={item.id} className="helper-card-copy">{item.title}{item.dueDate ? ` · ${item.dueDate}` : ''}</div>)
+                : <div className="helper-card-copy">Nothing needs attention in the current queue.</div>}
+            </div>
+          )}
         </div>
       </div>}
 

@@ -68,7 +68,8 @@ const BACKUP_TABLES = [
   'entity_sheet_sync_links',
   'sheet_sync_runs',
   'cost_snapshots',
-  'product_events'
+  'product_events',
+  'reminder_deliveries'
 ]
 
 function normalizeEmail(email) {
@@ -175,6 +176,24 @@ async function ensureProductAnalyticsSchema() {
   `)
   await db.execute('CREATE INDEX IF NOT EXISTS product_events_org_event_idx ON product_events(organization_id, event_name, occurred_at)')
   await db.execute('CREATE INDEX IF NOT EXISTS product_events_user_time_idx ON product_events(user_id, occurred_at)')
+}
+
+async function ensureReminderSchema() {
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS reminder_deliveries (
+      id TEXT PRIMARY KEY,
+      organization_id TEXT NOT NULL,
+      user_id INTEGER NOT NULL,
+      channel TEXT NOT NULL,
+      local_date TEXT NOT NULL,
+      destination TEXT,
+      status TEXT NOT NULL,
+      error_text TEXT,
+      created_at INTEGER NOT NULL,
+      sent_at INTEGER
+    )
+  `)
+  await db.execute('CREATE UNIQUE INDEX IF NOT EXISTS reminder_deliveries_once_idx ON reminder_deliveries(user_id, channel, local_date)')
 }
 
 async function ensureActionSchema() {
@@ -448,7 +467,8 @@ async function runMigrations() {
     { id: '2026-05-01-001-pipeline-contacts-schema', description: 'pipeline multi-contact JSON field', up: ensureActionSchema },
     { id: '2026-05-12-001-sheet-sync-org-scope', description: 'organization_id for sheet sync run records', up: ensureSheetSyncRunScopeSchema },
     { id: '2026-07-13-001-signup-invites', description: 'invite-only signup records', up: ensureSignupInviteSchema },
-    { id: '2026-08-02-001-product-analytics', description: 'privacy-safe activation and retention events', up: ensureProductAnalyticsSchema }
+    { id: '2026-08-02-001-product-analytics', description: 'privacy-safe activation and retention events', up: ensureProductAnalyticsSchema },
+    { id: '2026-08-02-002-reminder-deliveries', description: 'idempotent reminder delivery records', up: ensureReminderSchema }
   ]
 
   for (const migration of migrations) {
@@ -1093,6 +1113,23 @@ export async function getProductEventSummary({ organizationId, since = 0 } = {})
     firstAt: Number(row.first_at || 0),
     lastAt: Number(row.last_at || 0)
   }))
+}
+
+export async function claimReminderDelivery({ organizationId, userId, channel, localDate, destination = null } = {}) {
+  const id = crypto.randomUUID()
+  const result = await db.execute({
+    sql: `INSERT OR IGNORE INTO reminder_deliveries (id, organization_id, user_id, channel, local_date, destination, status, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, 'claimed', ?)`,
+    args: [id, String(organizationId), Number(userId), String(channel), String(localDate), destination ? String(destination) : null, now()]
+  })
+  return { claimed: Number(result.rowsAffected || 0) > 0, id }
+}
+
+export async function finishReminderDelivery({ id, status, errorText = null } = {}) {
+  await db.execute({
+    sql: `UPDATE reminder_deliveries SET status = ?, error_text = ?, sent_at = ? WHERE id = ?`,
+    args: [String(status), errorText ? String(errorText) : null, status === 'sent' ? now() : null, String(id)]
+  })
 }
 
 export async function getAuditLogs({ organizationId = DEFAULT_ORG_ID, limit = 100 } = {}) {
