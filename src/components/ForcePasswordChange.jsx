@@ -45,7 +45,7 @@ export default function ForcePasswordChange({ onDone, onLogout }) {
     <div className="login-wrap">
       <div className="login-card">
         <h1>Change Password<span style={{ color: 'var(--accent)' }}>.</span></h1>
-        <p className="sub">This temporary admin account must set a new password before continuing.</p>
+        <p className="sub">For your security, set a new password before continuing.</p>
         {error && <div className="error-msg">{error}</div>}
         <form onSubmit={submit}>
           <div className="field">

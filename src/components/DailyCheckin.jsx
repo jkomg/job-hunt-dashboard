@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Icon } from '../ui-icons.jsx'
+import { trackEvent } from '../analytics.js'
 
 const EXERCISE_OPTIONS = ['Cardio/Run', 'Weights/Strength', 'Yoga/Stretch', 'Walk', 'Sport/Activity', 'Rest Day']
 const CERT_OPTIONS = ['Gainsight', 'HubSpot Inbound', 'HubSpot CRM', 'SuccessHACKER', 'LinkedIn Learning', 'None today']
@@ -122,6 +123,7 @@ export default function DailyCheckin({ navIntent = null }) {
         const d = await r.json()
         setExistingId(d.id)
       }
+      trackEvent('checkin_completed')
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)
     } catch (e) {

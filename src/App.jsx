@@ -1,23 +1,25 @@
-import { useState, useEffect } from 'react'
+import { lazy, Suspense, useState, useEffect } from 'react'
 import Login from './components/Login.jsx'
 import Signup from './components/Signup.jsx'
 import ForcePasswordChange from './components/ForcePasswordChange.jsx'
 import SetupWizard from './components/SetupWizard.jsx'
 import Dashboard from './components/Dashboard.jsx'
-import Pipeline from './components/Pipeline.jsx'
-import Contacts from './components/Contacts.jsx'
-import DailyCheckin from './components/DailyCheckin.jsx'
-import Interviews from './components/Interviews.jsx'
-import Events from './components/Events.jsx'
-import Inbox from './components/Inbox.jsx'
-import Templates from './components/Templates.jsx'
-import Watchlist from './components/Watchlist.jsx'
-import Settings from './components/Settings.jsx'
-import StaffOps from './components/StaffOps.jsx'
-import Guides from './components/Guides.jsx'
+import QuickJump from './components/QuickJump.jsx'
+const Pipeline = lazy(() => import('./components/Pipeline.jsx'))
+const Contacts = lazy(() => import('./components/Contacts.jsx'))
+const DailyCheckin = lazy(() => import('./components/DailyCheckin.jsx'))
+const Interviews = lazy(() => import('./components/Interviews.jsx'))
+const Events = lazy(() => import('./components/Events.jsx'))
+const Inbox = lazy(() => import('./components/Inbox.jsx'))
+const Templates = lazy(() => import('./components/Templates.jsx'))
+const Watchlist = lazy(() => import('./components/Watchlist.jsx'))
+const Settings = lazy(() => import('./components/Settings.jsx'))
+const StaffOps = lazy(() => import('./components/StaffOps.jsx'))
+const Guides = lazy(() => import('./components/Guides.jsx'))
 import { Icon } from './ui-icons.jsx'
 import { useTheme } from './useTheme.js'
 import { roleLabel } from './roles.js'
+import { trackEvent } from './analytics.js'
 
 const JOB_SEEKER_GROUPS = [
   {
@@ -100,7 +102,7 @@ function isOrgAdminRole(role) {
   return ['admin', 'org_admin'].includes(String(role || '').trim())
 }
 
-function Sidebar({ view, go, groups, staffBadges, memberBadges, pipelineBadgeCount, isStaffLike, me, onLogout }) {
+function Sidebar({ view, go, groups, staffBadges, memberBadges, pipelineBadgeCount, isStaffLike, me, onLogout, onQuickJump }) {
   const allItems = groups.flatMap(g => g.items)
   const activeItem = allItems.find(it => it.id === view) || SETTINGS_ITEM
 
@@ -131,7 +133,7 @@ function Sidebar({ view, go, groups, staffBadges, memberBadges, pipelineBadgeCou
         <div className="brand-name">Job Hunt<span> ·</span></div>
       </div>
 
-      <button className="cmdk" onClick={() => {}}>
+      <button className="cmdk" type="button" onClick={onQuickJump} aria-label="Open quick jump">
         <Icon name="search" />
         <span>Quick jump…</span>
         <kbd>⌘K</kbd>
@@ -174,14 +176,14 @@ function Sidebar({ view, go, groups, staffBadges, memberBadges, pipelineBadgeCou
           <span className="nav-ico"><Icon name="settings" /></span>
           <span>Settings</span>
         </button>
-        <div className="profile" onClick={onLogout} title="Sign out">
+        <button className="profile" type="button" onClick={onLogout} aria-label="Sign out">
           <div className="avatar">{initials}</div>
           <div className="profile-info">
             <div className="profile-name">{me?.displayName || me?.username}</div>
             <div className="profile-role">{roleName} · {roleLabel(me?.role)}</div>
           </div>
           <Icon name="log-out" />
-        </div>
+        </button>
       </div>
     </aside>
   )
@@ -227,14 +229,14 @@ function MobileMoreSheet({ open, onClose, go, groups, view }) {
 
   return (
     <div className="mobile-sheet-overlay" onClick={onClose}>
-      <div className="mobile-sheet" onClick={e => e.stopPropagation()}>
+      <div className="mobile-sheet" role="dialog" aria-modal="true" aria-labelledby="mobile-more-title" onClick={e => e.stopPropagation()}>
         <div className="mobile-sheet-handle" />
         <div className="mobile-sheet-head">
           <div>
-            <div className="mobile-sheet-title">More</div>
+            <div id="mobile-more-title" className="mobile-sheet-title">More</div>
             <div className="mobile-sheet-sub">Quick access to the rest of your workspace</div>
           </div>
-          <button className="btn btn-quiet btn-sm" onClick={onClose}>
+          <button type="button" className="btn btn-quiet btn-sm" onClick={onClose} aria-label="Close more menu">
             <Icon name="x" />
           </button>
         </div>
@@ -270,6 +272,7 @@ export default function App() {
   const [navIntent, setNavIntent] = useState(null)
   const [inviteToken, setInviteToken] = useState(initialInviteToken)
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false)
+  const [quickJumpOpen, setQuickJumpOpen] = useState(false)
   const [staffBadges, setStaffBadges] = useState({ tasksOpen: 0, threadsOpen: 0 })
   const [memberBadges, setMemberBadges] = useState({ inboxOpenThreads: 0 })
   const [pipelineBadgeCount, setPipelineBadgeCount] = useState(0)
@@ -306,6 +309,22 @@ export default function App() {
   }
 
   useEffect(() => { refreshMe() }, [])
+
+  useEffect(() => {
+    if (authed === true && me?.onboardingComplete && !me?.mustChangePassword) trackEvent('app_open')
+  }, [authed, me?.onboardingComplete, me?.mustChangePassword])
+
+  useEffect(() => {
+    function onKeyDown(event) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault()
+        setQuickJumpOpen(true)
+      }
+      if (event.key === 'Escape') setQuickJumpOpen(false)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
 
   const isAdminOnly = !!me?.canManageOrg && me?.role !== 'staff'
   const isStaff = me?.role === 'staff'
@@ -465,34 +484,37 @@ export default function App() {
         isStaffLike={isStaffLike}
         me={me}
         onLogout={logout}
+        onQuickJump={() => setQuickJumpOpen(true)}
       />
 
       <main className="main">
-        {view === 'dashboard'      && <Dashboard onNavigate={navigate} me={me} />}
-        {isStaff && view === 'operations'     && <StaffOps me={me} mode="operations" navIntent={navIntent} onNavigate={navigate} />}
-        {isStaff && view === 'staff_tasks'    && <StaffOps me={me} mode="tasks" navIntent={navIntent} onNavigate={navigate} />}
-        {isStaff && view === 'staff_threads'  && <StaffOps me={me} mode="threads" navIntent={navIntent} onNavigate={navigate} />}
-        {!isStaffLike && view === 'checkin'       && <DailyCheckin navIntent={navIntent} />}
-        {!isStaffLike && view === 'pipeline'      && <Pipeline navIntent={navIntent} />}
-        {!isStaffLike && view === 'contacts'      && <Contacts />}
-        {!isStaffLike && view === 'interviews'    && <Interviews />}
-        {!isStaffLike && view === 'inbox'         && <Inbox />}
-        {!isStaffLike && view === 'events'        && <Events />}
-        {!isStaffLike && view === 'templates'     && <Templates />}
-        {!isStaffLike && view === 'watchlist'     && <Watchlist />}
-        {view === 'guides'                        && <Guides />}
-        {(view === 'settings' || view === 'admin_operations' || view === 'admin_users' || view === 'admin_assignments') && (
-          <Settings
-            me={me}
-            onProfileUpdated={() => refreshMe({ resetView: true })}
-            onNavigate={navigate}
-            settingsMode={settingsMode}
-            themeMode={mode}
-            accent={accent}
-            onModeChange={setMode}
-            onAccentChange={setAccent}
-          />
-        )}
+        <Suspense fallback={<div className="loading"><div className="spin" />Loading workspace…</div>}>
+          {view === 'dashboard'      && <Dashboard onNavigate={navigate} me={me} />}
+          {isStaff && view === 'operations'     && <StaffOps me={me} mode="operations" navIntent={navIntent} onNavigate={navigate} />}
+          {isStaff && view === 'staff_tasks'    && <StaffOps me={me} mode="tasks" navIntent={navIntent} onNavigate={navigate} />}
+          {isStaff && view === 'staff_threads'  && <StaffOps me={me} mode="threads" navIntent={navIntent} onNavigate={navigate} />}
+          {!isStaffLike && view === 'checkin'       && <DailyCheckin navIntent={navIntent} />}
+          {!isStaffLike && view === 'pipeline'      && <Pipeline navIntent={navIntent} />}
+          {!isStaffLike && view === 'contacts'      && <Contacts />}
+          {!isStaffLike && view === 'interviews'    && <Interviews />}
+          {!isStaffLike && view === 'inbox'         && <Inbox />}
+          {!isStaffLike && view === 'events'        && <Events />}
+          {!isStaffLike && view === 'templates'     && <Templates />}
+          {!isStaffLike && view === 'watchlist'     && <Watchlist />}
+          {view === 'guides'                        && <Guides />}
+          {(view === 'settings' || view === 'admin_operations' || view === 'admin_users' || view === 'admin_assignments') && (
+            <Settings
+              me={me}
+              onProfileUpdated={() => refreshMe({ resetView: true })}
+              onNavigate={navigate}
+              settingsMode={settingsMode}
+              themeMode={mode}
+              accent={accent}
+              onModeChange={setMode}
+              onAccentChange={setAccent}
+            />
+          )}
+        </Suspense>
       </main>
 
       <MobileNav
@@ -513,6 +535,7 @@ export default function App() {
           view={view}
         />
       )}
+      <QuickJump open={quickJumpOpen} onClose={() => setQuickJumpOpen(false)} onNavigate={navigate} />
     </div>
   )
 }

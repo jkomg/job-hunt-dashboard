@@ -37,8 +37,18 @@ import {
   getWatchlist, createWatchlistEntry, updateWatchlistEntry,
   getDailyLogs, getTodayLog, createDailyLog, updateDailyLog,
   getPipeline, getPipelineEntryById, deletePipelineEntry, updatePipelineEntry, updatePipelineStage, updatePipelineFollowUp, createPipelineEntry,
-  ensureInterviewForPipelineStage, backfillInterviewsFromPipeline, applyPipelineStageAutomation
+  ensureInterviewForPipelineStage, backfillInterviewsFromPipeline, applyPipelineStageAutomation,
+  recordProductEvent, getProductEventSummary
 } from './db.js'
+
+const PRODUCT_EVENTS = new Set([
+  'app_open',
+  'pipeline_first_job',
+  'outreach_first_contact',
+  'checkin_completed',
+  'followup_resolved',
+  'followup_snoozed'
+])
 import { runSheetsSync, testSheetsConnection, getSheetsSyncStatus, normalizeSheetsSyncError, getSheetsSchemaReport } from './sheetsSync.js'
 import { getGmailIntegrationConfig, buildGmailAuthUrl, exchangeGmailCode, importEventsFromGmail } from './gmailEvents.js'
 
@@ -2364,6 +2374,32 @@ app.get('/api/dashboard', requireAuth, async (req, res) => {
   } catch (e) {
     console.error(e)
     res.status(500).json({ error: e.message })
+  }
+})
+
+app.post('/api/analytics/events', requireAuth, async (req, res) => {
+  try {
+    const eventName = String(req.body?.eventName || '').trim()
+    if (!PRODUCT_EVENTS.has(eventName)) return res.status(400).json({ error: 'Unsupported product event' })
+    const rawMetadata = req.body?.metadata && typeof req.body.metadata === 'object' ? req.body.metadata : null
+    const metadata = rawMetadata
+      ? Object.fromEntries(Object.entries(rawMetadata).filter(([key, value]) => /^[a-zA-Z][a-zA-Z0-9_]{0,31}$/.test(key) && ['string', 'number', 'boolean'].includes(typeof value)).slice(0, 8))
+      : null
+    await recordProductEvent({ organizationId: req.organizationId || 'platform', userId: req.userId, eventName, metadata })
+    res.status(202).json({ ok: true })
+  } catch (e) {
+    console.error('product event failed', e)
+    res.status(500).json({ error: 'Could not record event' })
+  }
+})
+
+app.get('/api/admin/analytics/summary', requireAuth, requireOrgAdmin, async (req, res) => {
+  try {
+    const days = Math.max(1, Math.min(365, Number(req.query.days) || 30))
+    const since = Date.now() - days * 864e5
+    res.json({ days, events: await getProductEventSummary({ organizationId: req.organizationId, since }) })
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load analytics summary' })
   }
 })
 
