@@ -75,7 +75,7 @@
 
 ## Verification baseline
 - `npm run build` passes.
-- `npm run smoke:test` passes, including org-admin permission matrix, cross-user isolation reads/writes, staff assignment/audit, member inbox access, and expected sync configuration failure handling.
+- `npm run smoke:test` passes, including health-profile verification, forced-password-change/onboarding, backup export/restore drill, org-admin permission matrix, cross-user isolation reads/writes, staff assignment/audit, member inbox access, and expected sync configuration failure handling.
 - `scripts/release-gate-v2.sh` is the intended hosted release gate; it checks release docs, tenant markers, build, and smoke tests.
 
 ## GCP / Deployment
@@ -93,6 +93,6 @@
 - Codebase quality:
   - minimal tests; no integration test coverage for sync conflict behavior or auth-protected endpoints
 - Pilot operations:
-  - backup is configured in code but restore has not been proven by a recorded drill
+  - local backup restore is now covered by smoke tests; hosted Cloud Storage export and Cloud Run restore still need an operator-recorded drill
   - no repository evidence of a production error-tracking provider or a complete dev/prod promotion boundary
   - reminder foundation exists, but outbound email delivery is intentionally not enabled

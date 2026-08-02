@@ -174,6 +174,12 @@ async function run() {
   await waitForServerReady()
   note('Server is healthy')
 
+  const health = await api('/api/health', { allowStatuses: [200] })
+  if (!health.body?.ok || health.body?.authMode !== 'session' || health.body?.features?.backupExportEnabled !== false) {
+    throw new Error(`Unexpected local health profile: ${JSON.stringify(health.body)}`)
+  }
+  note('Health profile passed')
+
   const login = await api('/api/login', {
     method: 'POST',
     body: { username: TEST_USERNAME, password: DEFAULT_PASSWORD },
@@ -235,6 +241,36 @@ async function run() {
   })
   if (!createPipeline.body?.ok || !createPipeline.body?.id) throw new Error('Pipeline create failed')
   note('Pipeline create passed')
+
+  const backupExport = await api('/api/admin/backup/export', { allowStatuses: [200] })
+  if (backupExport.body?.version !== 1 || !backupExport.body?.tables?.pipeline_entries) {
+    throw new Error(`Backup export payload is invalid: ${JSON.stringify(backupExport.body)}`)
+  }
+  const postBackupPipeline = await api('/api/pipeline', {
+    method: 'POST',
+    body: {
+      Company: 'Restore Drill Co',
+      Role: 'Temporary row removed by restore',
+      Stage: '🔍 Researching'
+    },
+    allowStatuses: [200]
+  })
+  if (!postBackupPipeline.body?.ok || !postBackupPipeline.body?.id) throw new Error('Restore drill mutation failed')
+
+  await api('/api/admin/backup/restore', {
+    method: 'POST',
+    body: { snapshot: backupExport.body },
+    allowStatuses: [200]
+  })
+  const restoredPipeline = await api('/api/pipeline', { allowStatuses: [200] })
+  const restoredRows = Array.isArray(restoredPipeline.body) ? restoredPipeline.body : (restoredPipeline.body?.items || [])
+  if (restoredRows.some(row => row.id === postBackupPipeline.body.id)) {
+    throw new Error('Restore drill did not remove the post-backup row')
+  }
+  if (!restoredRows.some(row => row.id === createPipeline.body.id)) {
+    throw new Error('Restore drill did not preserve the pre-backup row')
+  }
+  note('Backup export and restore drill passed')
 
   const createUser = await api('/api/admin/users', {
     method: 'POST',
