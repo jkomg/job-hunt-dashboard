@@ -23,13 +23,13 @@ Do not compete on “another application tracker.” Keep the solo daily loop us
 - aggregate activity and placement reporting;
 - backup, support, and organization controls.
 
-The existing roles (`job_seeker`, `accelerator_user`, `premium_user`, `vip_user`, `staff`, and `admin`) should remain permission/service roles. They should not become six public pricing tiers.
+The existing roles (`job_seeker`, `accelerator_user`, `premium_user`, `vip_user`, `staff`, `org_admin`, and `admin`) should remain permission/service roles. They should not become public pricing tiers; they are implementation and permission roles.
 
 ## Recommended beta packaging
 
 ### Solo — free
 
-Keep the core promise free: Pipeline, Outreach, Interviews, Briefing, Check-in, follow-ups, export/backup, and the basic daily queue. This removes the strongest adoption barrier and lets solo users become a referral channel.
+Keep the core promise free: Pipeline, Outreach, Interviews, Briefing, Check-in, follow-ups, and the basic daily queue. This removes the strongest adoption barrier and lets solo users become a referral channel. Data backups remain platform-managed in the beta; do not promise global backup/export access to solo users until a user-scoped export exists.
 
 ### Solo Plus — $8/month or $72/year
 
