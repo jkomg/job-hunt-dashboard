@@ -263,7 +263,9 @@ export default function Dashboard({ onNavigate, me }) {
       const path = nextBestAction.type === 'pipeline_follow_up'
         ? `/api/pipeline/${nextBestAction.entityId}/followup`
         : `/api/contacts/${nextBestAction.entityId}/contacted`
-      const body = nextBestAction.type === 'pipeline_follow_up' ? { date } : { nextFollowUp: date }
+      const body = nextBestAction.type === 'pipeline_follow_up'
+        ? { date, nextActionDate: date }
+        : { nextFollowUp: date }
       const response = await fetch(path, {
         method: nextBestAction.type === 'pipeline_follow_up' ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },

@@ -43,11 +43,14 @@ import {
 
 const PRODUCT_EVENTS = new Set([
   'app_open',
-  'pipeline_first_job',
-  'outreach_first_contact',
+  'pipeline_created',
+  'contact_created',
   'checkin_completed',
   'followup_resolved',
-  'followup_snoozed'
+  'followup_snoozed',
+  // Backward compatibility for events emitted before the post-merge fix.
+  'pipeline_first_job',
+  'outreach_first_contact'
 ])
 import { runSheetsSync, testSheetsConnection, getSheetsSyncStatus, normalizeSheetsSyncError, getSheetsSchemaReport } from './sheetsSync.js'
 import { getGmailIntegrationConfig, buildGmailAuthUrl, exchangeGmailCode, importEventsFromGmail } from './gmailEvents.js'
@@ -2436,7 +2439,7 @@ app.patch('/api/pipeline/:id/stage', requireAuth, async (req, res) => {
 
 app.patch('/api/pipeline/:id/followup', requireAuth, async (req, res) => {
   try {
-    await updatePipelineFollowUp(req.params.id, req.body.date, dataScope(req))
+    await updatePipelineFollowUp(req.params.id, req.body.date, dataScope(req), req.body.nextActionDate)
     res.json({ ok: true })
   } catch (e) {
     res.status(500).json({ error: e.message })

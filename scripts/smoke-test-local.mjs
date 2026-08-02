@@ -236,6 +236,45 @@ async function run() {
   if (!createPipeline.body?.ok || !createPipeline.body?.id) throw new Error('Pipeline create failed')
   note('Pipeline create passed')
 
+  const followupDate = '2030-01-10'
+  const nextActionDate = '2030-01-11'
+  await api(`/api/pipeline/${createPipeline.body.id}/followup`, {
+    method: 'PATCH',
+    body: { date: followupDate, nextActionDate },
+    allowStatuses: [200]
+  })
+  const pipelineAfterFollowup = await api('/api/pipeline', { allowStatuses: [200] })
+  const followupPipelineEntry = pipelineAfterFollowup.body?.find(item => item.id === createPipeline.body.id)
+  if (followupPipelineEntry?.['Follow-Up Date'] !== followupDate || followupPipelineEntry?.['Next Action Date'] !== nextActionDate) {
+    throw new Error(`Pipeline follow-up dates were not updated together: ${JSON.stringify(followupPipelineEntry)}`)
+  }
+
+  const createContact = await api('/api/contacts', {
+    method: 'POST',
+    body: { Name: 'Smoke Contact', 'Next Follow-Up': '2030-01-09' },
+    allowStatuses: [200]
+  })
+  if (!createContact.body?.ok || !createContact.body?.id) throw new Error('Contact create failed')
+  await api(`/api/contacts/${createContact.body.id}/contacted`, {
+    method: 'POST',
+    body: {},
+    allowStatuses: [200]
+  })
+  const contactsAfterContacted = await api('/api/contacts', { allowStatuses: [200] })
+  const contactedEntry = contactsAfterContacted.body?.find(item => item.id === createContact.body.id)
+  if (contactedEntry?.['Next Follow-Up']) {
+    throw new Error(`Completed contact still has a follow-up date: ${JSON.stringify(contactedEntry)}`)
+  }
+
+  await api('/api/analytics/events', { method: 'POST', body: { eventName: 'followup_resolved', metadata: { type: 'smoke' } }, allowStatuses: [202] })
+  await api('/api/analytics/events', { method: 'POST', body: { eventName: 'followup_resolved', metadata: { type: 'smoke' } }, allowStatuses: [202] })
+  const analyticsSummary = await api('/api/admin/analytics/summary?days=30', { allowStatuses: [200] })
+  const resolvedEvents = (analyticsSummary.body?.events || []).find(event => event.eventName === 'followup_resolved')
+  if (Number(resolvedEvents?.count || 0) < 2) {
+    throw new Error(`Repeated analytics events were collapsed: ${JSON.stringify(analyticsSummary.body)}`)
+  }
+  note('Follow-up resolution and analytics repetition checks passed')
+
   const createUser = await api('/api/admin/users', {
     method: 'POST',
     body: {

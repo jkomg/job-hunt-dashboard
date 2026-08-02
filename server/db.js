@@ -3025,11 +3025,12 @@ export async function backfillInterviewsFromPipeline(scope = {}) {
   }
 }
 
-export async function updatePipelineFollowUp(id, date, scope = {}) {
+export async function updatePipelineFollowUp(id, date, scope = {}, nextActionDate) {
   const owner = await scopedOwnerWhere(scope)
+  const hasNextActionDate = nextActionDate !== undefined
   await db.execute({
-    sql: `UPDATE pipeline_entries SET follow_up_date = ?, updated_at = ? WHERE id = ? AND ${owner.clause}`,
-    args: [date || null, now(), String(id), ...owner.args]
+    sql: `UPDATE pipeline_entries SET follow_up_date = ?${hasNextActionDate ? ', next_action_date = ?' : ''}, updated_at = ? WHERE id = ? AND ${owner.clause}`,
+    args: [date || null, ...(hasNextActionDate ? [nextActionDate || null] : []), now(), String(id), ...owner.args]
   })
 }
 
@@ -3077,16 +3078,9 @@ export async function getOverdueFollowUps(scope = {}) {
 export async function markContacted(id, nextFollowUp, scope = {}) {
   const today = new Date().toISOString().slice(0, 10)
   const owner = await scopedOwnerWhere(scope)
-  if (nextFollowUp) {
-    await db.execute({
-      sql: `UPDATE contacts SET last_contact = ?, status = ?, next_follow_up = ?, updated_at = ? WHERE id = ? AND ${owner.clause}`,
-      args: [today, 'Waiting on response', nextFollowUp, now(), String(id), ...owner.args]
-    })
-    return
-  }
   await db.execute({
-    sql: `UPDATE contacts SET last_contact = ?, status = ?, updated_at = ? WHERE id = ? AND ${owner.clause}`,
-    args: [today, 'Waiting on response', now(), String(id), ...owner.args]
+    sql: `UPDATE contacts SET last_contact = ?, status = ?, next_follow_up = ?, updated_at = ? WHERE id = ? AND ${owner.clause}`,
+    args: [today, 'Waiting on response', nextFollowUp || null, now(), String(id), ...owner.args]
   })
 }
 

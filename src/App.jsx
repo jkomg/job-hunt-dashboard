@@ -535,7 +535,7 @@ export default function App() {
           view={view}
         />
       )}
-      <QuickJump open={quickJumpOpen} onClose={() => setQuickJumpOpen(false)} onNavigate={navigate} />
+      <QuickJump open={quickJumpOpen} onClose={() => setQuickJumpOpen(false)} onNavigate={navigate} availableIds={[...allNavIds]} />
     </div>
   )
 }
