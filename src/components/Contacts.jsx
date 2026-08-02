@@ -175,7 +175,7 @@ function AddModal({ onClose, onSave }) {
         body: JSON.stringify(form)
       })
       if (!r.ok) throw new Error((await r.json()).error)
-      trackEvent('outreach_first_contact')
+      trackEvent('contact_created')
       onSave()
     } catch (e) { setError(e.message) }
     finally { setSaving(false) }
