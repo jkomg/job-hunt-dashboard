@@ -1,0 +1,35 @@
+name: JobHuntMobile
+options:
+  deploymentTarget:
+    iOS: "26.0"
+  xcodeVersion: "26.0"
+  groupSortPosition: top
+settings:
+  SWIFT_VERSION: "6.0"
+  SWIFT_STRICT_CONCURRENCY: minimal
+  DEVELOPMENT_TEAM: ""
+targets:
+  JobHuntMobile:
+    type: application
+    platform: iOS
+    sources:
+      - path: JobHuntMobile
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: com.jobhunt.mobile
+      GENERATE_INFOPLIST_FILE: YES
+      INFOPLIST_KEY_UILaunchScreen_Generation: YES
+      TARGETED_DEVICE_FAMILY: "1"
+    scheme:
+      testTargets:
+        - JobHuntMobileTests
+  JobHuntMobileTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: JobHuntMobileTests
+    dependencies:
+      - target: JobHuntMobile
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: com.jobhunt.mobile.tests
+      GENERATE_INFOPLIST_FILE: YES
+      TEST_HOST: "$(BUILT_PRODUCTS_DIR)/JobHuntMobile.app/JobHuntMobile"
