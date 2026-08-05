@@ -8,17 +8,29 @@
 
 /* Begin PBXBuildFile section */
 		016BF01765DBE9405061E101 /* PipelineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E3DF76A168CF8C6EB1476ED /* PipelineView.swift */; };
+		0C1D5581A8E7F925F878C094 /* AuthStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7B6BF45A46D341FC5034AE0 /* AuthStore.swift */; };
+		0FA6285AACD2B9D81D9B0E35 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56BA9ABD4DDB4C10E0F771DB /* KeychainStore.swift */; };
 		13B0576ACF53E3C1A2B1E3BF /* JobHuntAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 938C710622F53B1638DCD171 /* JobHuntAPI.swift */; };
 		16FF18AAAF732BE1F6CC7EF1 /* TodayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07E6963059672C71CF345201 /* TodayView.swift */; };
 		1A8694C074DE382FD04DE6CD /* LocalDraftStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D51CAED90A57FB3B723DD17 /* LocalDraftStore.swift */; };
 		45BA69620AACC45E36132A4F /* CaptureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ABE2B43A9C7D7EC317A8EEA /* CaptureView.swift */; };
 		4B432FEA94D907F7816D0237 /* JobHuntMobileApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 496A9B7E0F6577E1AEB8E652 /* JobHuntMobileApp.swift */; };
+		67339835D685DA2A5A47FA7C /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 574C9B61142ACB8FD2B1B64B /* ShareViewController.swift */; };
 		6F01D59E71D2EC4CBEE042F6 /* JobModelsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1CEA63474A4F022848EEFEC /* JobModelsTests.swift */; };
 		B1B585C763DDA4449240E9EB /* JobModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECC39F049BC3E24736E571D2 /* JobModels.swift */; };
+		B7C38C276CAF3B674EA2D040 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A916284CDCE7F7C93A5E479 /* LoginView.swift */; };
+		C19CBEA3ADA0FF58A82DCD7F /* JobHuntMobileShare.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = F0FFB645390A33370E0BC33A /* JobHuntMobileShare.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		EAE7287FD2EEC14F7E0B40C7 /* JobExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80104C2BDAA7A5D0EF5E4896 /* JobExtractor.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		09D16641CE554B0E92C34028 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = BE07D30A0DD6E15C4DD2F072 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 80E8C72F66209AD4EE356A95;
+			remoteInfo = JobHuntMobileShare;
+		};
 		21F4E48914F9657F425C0664 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = BE07D30A0DD6E15C4DD2F072 /* Project object */;
@@ -28,18 +40,37 @@
 		};
 /* End PBXContainerItemProxy section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		DB1A71CD25B6A4E4C6490DA3 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				C19CBEA3ADA0FF58A82DCD7F /* JobHuntMobileShare.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
 		07E6963059672C71CF345201 /* TodayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayView.swift; sourceTree = "<group>"; };
 		1ABE2B43A9C7D7EC317A8EEA /* CaptureView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureView.swift; sourceTree = "<group>"; };
 		1BF4AFE50D7CAA70AD718A90 /* JobHuntMobile.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = JobHuntMobile.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		3A916284CDCE7F7C93A5E479 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
 		496A9B7E0F6577E1AEB8E652 /* JobHuntMobileApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JobHuntMobileApp.swift; sourceTree = "<group>"; };
+		56BA9ABD4DDB4C10E0F771DB /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
+		574C9B61142ACB8FD2B1B64B /* ShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
 		6D51CAED90A57FB3B723DD17 /* LocalDraftStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalDraftStore.swift; sourceTree = "<group>"; };
 		71382A56C23FA74A89F40301 /* JobHuntMobileTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = JobHuntMobileTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		80104C2BDAA7A5D0EF5E4896 /* JobExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JobExtractor.swift; sourceTree = "<group>"; };
 		938C710622F53B1638DCD171 /* JobHuntAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JobHuntAPI.swift; sourceTree = "<group>"; };
 		9E3DF76A168CF8C6EB1476ED /* PipelineView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PipelineView.swift; sourceTree = "<group>"; };
+		B7B6BF45A46D341FC5034AE0 /* AuthStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthStore.swift; sourceTree = "<group>"; };
 		D1CEA63474A4F022848EEFEC /* JobModelsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JobModelsTests.swift; sourceTree = "<group>"; };
 		ECC39F049BC3E24736E571D2 /* JobModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JobModels.swift; sourceTree = "<group>"; };
+		F0FFB645390A33370E0BC33A /* JobHuntMobileShare.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = JobHuntMobileShare.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -52,6 +83,7 @@
 				F82995FE556614AE77EF4D6A /* Features */,
 				E12FC802ED527D595D764BE8 /* Intelligence */,
 				2615839351F740FF722CE050 /* Persistence */,
+				A5853A7BFA9C98FD106A7A6B /* Security */,
 			);
 			path = JobHuntMobile;
 			sourceTree = "<group>";
@@ -60,6 +92,7 @@
 			isa = PBXGroup;
 			children = (
 				0CF202912AA240D85FBF67C0 /* JobHuntMobile */,
+				E3D551B0F76615CBFDEE4DFB /* JobHuntMobileShare */,
 				72983674BAA268D7506426B8 /* JobHuntMobileTests */,
 				273D298FC50726D837F919FB /* Products */,
 			);
@@ -77,6 +110,7 @@
 			isa = PBXGroup;
 			children = (
 				1BF4AFE50D7CAA70AD718A90 /* JobHuntMobile.app */,
+				F0FFB645390A33370E0BC33A /* JobHuntMobileShare.appex */,
 				71382A56C23FA74A89F40301 /* JobHuntMobileTests.xctest */,
 			);
 			name = Products;
@@ -96,6 +130,23 @@
 				D1CEA63474A4F022848EEFEC /* JobModelsTests.swift */,
 			);
 			path = JobHuntMobileTests;
+			sourceTree = "<group>";
+		};
+		A2ED849A20049523461FA422 /* Auth */ = {
+			isa = PBXGroup;
+			children = (
+				3A916284CDCE7F7C93A5E479 /* LoginView.swift */,
+			);
+			path = Auth;
+			sourceTree = "<group>";
+		};
+		A5853A7BFA9C98FD106A7A6B /* Security */ = {
+			isa = PBXGroup;
+			children = (
+				B7B6BF45A46D341FC5034AE0 /* AuthStore.swift */,
+				56BA9ABD4DDB4C10E0F771DB /* KeychainStore.swift */,
+			);
+			path = Security;
 			sourceTree = "<group>";
 		};
 		AAF677763C7E6275295DD59E /* App */ = {
@@ -138,6 +189,14 @@
 			path = Intelligence;
 			sourceTree = "<group>";
 		};
+		E3D551B0F76615CBFDEE4DFB /* JobHuntMobileShare */ = {
+			isa = PBXGroup;
+			children = (
+				574C9B61142ACB8FD2B1B64B /* ShareViewController.swift */,
+			);
+			path = JobHuntMobileShare;
+			sourceTree = "<group>";
+		};
 		F26DD423EEE29769BA9D15FA /* Today */ = {
 			isa = PBXGroup;
 			children = (
@@ -149,6 +208,7 @@
 		F82995FE556614AE77EF4D6A /* Features */ = {
 			isa = PBXGroup;
 			children = (
+				A2ED849A20049523461FA422 /* Auth */,
 				3CF6E08A16A02EF95FF9CD6E /* Capture */,
 				DA3242E7B976C021D1611AE2 /* Pipeline */,
 				F26DD423EEE29769BA9D15FA /* Today */,
@@ -177,15 +237,34 @@
 			productReference = 71382A56C23FA74A89F40301 /* JobHuntMobileTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		80E8C72F66209AD4EE356A95 /* JobHuntMobileShare */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 71B0FE7809B80C306AAFB144 /* Build configuration list for PBXNativeTarget "JobHuntMobileShare" */;
+			buildPhases = (
+				A6C886AEBE592C397C044E92 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = JobHuntMobileShare;
+			packageProductDependencies = (
+			);
+			productName = JobHuntMobileShare;
+			productReference = F0FFB645390A33370E0BC33A /* JobHuntMobileShare.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		BD3E5C955D8007A62B49DA3E /* JobHuntMobile */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 6B4475177C2C4C7D52F6945F /* Build configuration list for PBXNativeTarget "JobHuntMobile" */;
 			buildPhases = (
 				4E0FB2220E066547A67E9C15 /* Sources */,
+				DB1A71CD25B6A4E4C6490DA3 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				2605236EDC2589E9CEC8BABC /* PBXTargetDependency */,
 			);
 			name = JobHuntMobile;
 			packageProductDependencies = (
@@ -204,6 +283,9 @@
 				LastUpgradeCheck = 2600;
 				TargetAttributes = {
 					7B38EE9DFFB96CB75759904F = {
+						DevelopmentTeam = "";
+					};
+					80E8C72F66209AD4EE356A95 = {
 						DevelopmentTeam = "";
 					};
 					BD3E5C955D8007A62B49DA3E = {
@@ -227,6 +309,7 @@
 			targets = (
 				BD3E5C955D8007A62B49DA3E /* JobHuntMobile */,
 				7B38EE9DFFB96CB75759904F /* JobHuntMobileTests */,
+				80E8C72F66209AD4EE356A95 /* JobHuntMobileShare */,
 			);
 		};
 /* End PBXProject section */
@@ -236,12 +319,15 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				0C1D5581A8E7F925F878C094 /* AuthStore.swift in Sources */,
 				45BA69620AACC45E36132A4F /* CaptureView.swift in Sources */,
 				EAE7287FD2EEC14F7E0B40C7 /* JobExtractor.swift in Sources */,
 				13B0576ACF53E3C1A2B1E3BF /* JobHuntAPI.swift in Sources */,
 				4B432FEA94D907F7816D0237 /* JobHuntMobileApp.swift in Sources */,
 				B1B585C763DDA4449240E9EB /* JobModels.swift in Sources */,
+				0FA6285AACD2B9D81D9B0E35 /* KeychainStore.swift in Sources */,
 				1A8694C074DE382FD04DE6CD /* LocalDraftStore.swift in Sources */,
+				B7C38C276CAF3B674EA2D040 /* LoginView.swift in Sources */,
 				016BF01765DBE9405061E101 /* PipelineView.swift in Sources */,
 				16FF18AAAF732BE1F6CC7EF1 /* TodayView.swift in Sources */,
 			);
@@ -255,9 +341,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A6C886AEBE592C397C044E92 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				67339835D685DA2A5A47FA7C /* ShareViewController.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		2605236EDC2589E9CEC8BABC /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 80E8C72F66209AD4EE356A95 /* JobHuntMobileShare */;
+			targetProxy = 09D16641CE554B0E92C34028 /* PBXContainerItemProxy */;
+		};
 		654CF638D9C64FE7169BA5BF /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = BD3E5C955D8007A62B49DA3E /* JobHuntMobile */;
@@ -271,8 +370,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_FILE = AppInfo.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -288,8 +386,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_FILE = AppInfo.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -316,6 +413,21 @@
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/JobHuntMobile.app/JobHuntMobile";
 			};
 			name = Release;
+		};
+		76EE90CE5F5B5E80AF4F41E6 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				INFOPLIST_FILE = ShareInfo.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.jobhunt.mobile.share;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
 		};
 		C6C3D71E522CA6B363117760 /* Release */ = {
 			isa = XCBuildConfiguration;
@@ -457,6 +569,21 @@
 			};
 			name = Debug;
 		};
+		F9914740608DA7DDAE5F297F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				INFOPLIST_FILE = ShareInfo.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.jobhunt.mobile.share;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -483,6 +610,15 @@
 			buildConfigurations = (
 				55546001F3C3B5D4880C062C /* Debug */,
 				2E6F9B027F9B09BE8DE49F79 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		71B0FE7809B80C306AAFB144 /* Build configuration list for PBXNativeTarget "JobHuntMobileShare" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				76EE90CE5F5B5E80AF4F41E6 /* Debug */,
+				F9914740608DA7DDAE5F297F /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

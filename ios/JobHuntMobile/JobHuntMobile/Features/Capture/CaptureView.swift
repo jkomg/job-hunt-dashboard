@@ -3,9 +3,15 @@ import SwiftUI
 struct CaptureView: View {
     @EnvironmentObject private var appModel: AppModel
     @Environment(\.dismiss) private var dismiss
-    @State private var sourceText = ""
+    @State private var sourceText: String
+    private let initialURL: URL?
     @State private var draft: JobDraft?
     @State private var isExtracting = false
+
+    init(initialText: String = "", initialURL: URL? = nil) {
+        _sourceText = State(initialValue: initialText)
+        self.initialURL = initialURL
+    }
 
     var body: some View {
         NavigationStack {
@@ -32,7 +38,7 @@ struct CaptureView: View {
     private func extract() {
         isExtracting = true
         Task {
-            let result = await FallbackJobExtractor().extract(from: sourceText, sharedURL: nil)
+            let result = await FallbackJobExtractor().extract(from: sourceText, sharedURL: initialURL)
             await MainActor.run { draft = result; isExtracting = false }
         }
     }
