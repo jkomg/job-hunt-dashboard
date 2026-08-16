@@ -26,10 +26,12 @@ function timeAgo(iso) {
 }
 
 export default function Dashboard({ onNavigate, me }) {
+  const canManageOrg = !!me?.canManageOrg
+  const staffScopeKey = `staff_scope_${me?.organizationId || 'default'}_${me?.role || 'unknown'}`
   const [data, setData] = useState(null)
   const [staffQueue, setStaffQueue] = useState(null)
   const [staffScope, setStaffScope] = useState(() => {
-    try { return localStorage.getItem('staff_scope') || 'assigned' } catch { return 'assigned' }
+    try { return localStorage.getItem(staffScopeKey) || (canManageOrg ? 'all' : 'assigned') } catch { return canManageOrg ? 'all' : 'assigned' }
   })
   const [memberThreads, setMemberThreads] = useState([])
   const [syncStatus, setSyncStatus] = useState(null)
@@ -37,7 +39,6 @@ export default function Dashboard({ onNavigate, me }) {
   const [error, setError] = useState('')
   const [doneItems, setDoneItems] = useState({})
   const [queueAction, setQueueAction] = useState('')
-  const canManageOrg = !!me?.canManageOrg
   const isStaffLike = me?.role === 'staff' || canManageOrg
 
   useEffect(() => {
@@ -67,8 +68,8 @@ export default function Dashboard({ onNavigate, me }) {
   }, [isStaffLike, canManageOrg, staffScope])
 
   useEffect(() => {
-    try { localStorage.setItem('staff_scope', staffScope) } catch {}
-  }, [staffScope])
+    try { localStorage.setItem(staffScopeKey, staffScope) } catch {}
+  }, [staffScope, staffScopeKey])
 
   if (loading) return <div className="loading"><div className="spin" />Loading your briefing…</div>
   if (error) return <div className="error-msg">{error}</div>
@@ -109,6 +110,7 @@ export default function Dashboard({ onNavigate, me }) {
 
   // ── Staff / Admin view ──────────────────────────────────────────────────────
   if (isStaffLike) {
+    const briefingTitle = me?.isPlatformAdmin ? 'Portfolio Briefing' : canManageOrg ? 'Team Briefing' : 'Coach Briefing'
     const summary = staffQueue?.summary || {}
     const candidates = staffQueue?.candidates || []
     const recommendations = staffQueue?.recommendations || []
@@ -132,8 +134,8 @@ export default function Dashboard({ onNavigate, me }) {
       <div className="page">
         <div className="page-head">
           <div>
-            <h1>Staff Briefing</h1>
-            <div className="sub">{todayDate.toUpperCase()} · @{me?.username || 'unknown'} ({me?.role || 'unknown'})</div>
+            <h1>{briefingTitle}</h1>
+            <div className="sub">{todayDate.toUpperCase()} · {me?.displayName || me?.username || 'Team member'}</div>
           </div>
           {canManageOrg && (
             <div style={{ display: 'flex', gap: 6 }}>

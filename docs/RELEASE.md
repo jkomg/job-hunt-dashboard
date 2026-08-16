@@ -59,6 +59,30 @@ Recently shipped (May 2026):
    - `docs/COMMAND_CENTER_ROADMAP.md` open issue table
    - screenshot checklist status
 
+## Customer Demo / Production Hardening (August 2026)
+
+Before publishing the customer-facing pitch and demo:
+
+1. Use only the sanitized demo dataset in public screenshots, previews, and interactive demo routes.
+2. Confirm the public demo is read-only and cannot mutate authenticated customer records.
+3. Verify browser history, keyboard sign-in, mobile layout, invite signup, and role-specific onboarding.
+4. Run the production build and full local smoke suite.
+5. Verify the permission matrix:
+   - job hunters cannot access staff or admin APIs
+   - staff can access assigned-candidate operations but not admin APIs
+   - organization admins can manage their organization
+   - platform-only controls remain restricted to platform admins
+6. Export a current database backup and confirm the backup artifact is readable before deployment.
+7. Record the current Cloud Run revision as the rollback target.
+8. Deploy with `DEPLOY_VERSION` set to the release commit.
+9. After deployment, verify:
+   - public landing and both demo personas
+   - existing client sign-in
+   - invite signup and forced-password-change flow
+   - portfolio routing, candidate isolation, and admin System permissions
+   - `/api/health` reports the expected release version
+10. If a critical check fails, route traffic back to the recorded previous Cloud Run revision and investigate off-production.
+
 ## Cut Release (v2)
 
 ```bash

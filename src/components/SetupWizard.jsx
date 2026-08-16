@@ -31,6 +31,61 @@ export default function SetupWizard({ me, onComplete, onLogout }) {
   const [interviewsTabsText, setInterviewsTabsText] = useState('Interview Tracker')
   const [eventsTabsText, setEventsTabsText] = useState('Events')
   const [showSheetsDetails, setShowSheetsDetails] = useState(false)
+  const isAdmin = !!me?.canManageOrg || ['admin', 'org_admin'].includes(me?.role)
+  const isStaff = me?.role === 'staff'
+  const setupProfile = isAdmin
+    ? {
+        eyebrow: 'Partner workspace setup',
+        title: 'Welcome to your operations hub',
+        intro: 'Set up your profile, then review the portfolio your team will manage.',
+        steps: [
+          'Finish your profile and land on the portfolio briefing.',
+          'Invite job hunters and staff from User Management.',
+          'Connect coaches to job hunters in Assignments.',
+          'Use Operations to review tasks, threads, and intervention signals.'
+        ],
+        next: [
+          'You land on the portfolio briefing.',
+          'Switch to All Candidates to see program-wide momentum.',
+          'Open User Management to invite your team and job hunters.',
+          'Use Guides for the recommended partner workflow.'
+        ]
+      }
+    : isStaff
+      ? {
+          eyebrow: 'Coach workspace setup',
+          title: 'Welcome to your support workspace',
+          intro: 'Set up your profile, then focus on the people and interventions assigned to you.',
+          steps: [
+            'Finish your profile and land on your coach briefing.',
+            'Review assigned job hunters and their momentum signals.',
+            'Work your task and conversation queues.',
+            'Use Guides for the team’s shared operating rhythm.'
+          ],
+          next: [
+            'You land on your coach briefing.',
+            'Review the candidates assigned to you.',
+            'Open Tasks and Threads for today’s interventions.',
+            'Use Guides whenever you need the team playbook.'
+          ]
+        }
+      : {
+          eyebrow: 'Personal workspace setup',
+          title: 'Welcome to Job Hunt',
+          intro: 'Two quick details, then you can start building momentum.',
+          steps: [
+            'Finish setup and land on your Briefing.',
+            'Add the jobs you are already pursuing in Pipeline.',
+            'Add the people tied to your search in Outreach.',
+            'Use Briefing in the morning and Check-in at the end of the day.'
+          ],
+          next: [
+            'You land on your daily briefing.',
+            'Open Pipeline for jobs and Outreach for people.',
+            'Use Briefing in the morning and Check-in at the end of the day.',
+            'Open Settings later for integrations and preferences.'
+          ]
+        }
 
   async function saveSheetsConfig(enabled) {
     const res = await fetch('/api/sheets/config', {
@@ -118,22 +173,20 @@ export default function SetupWizard({ me, onComplete, onLogout }) {
   }
 
   return (
-    <div className="login-wrap">
-      <div className="login-card">
-        <h1>Welcome to Job Hunt<span style={{ color: 'var(--accent)' }}>.</span></h1>
-        <p className="sub">Quick setup (about 2 minutes)</p>
+    <div className="login-wrap setup-wrap">
+      <div className="login-card setup-card">
+        <div className="setup-eyebrow">{setupProfile.eyebrow}</div>
+        <h1>{setupProfile.title}<span style={{ color: 'var(--accent)' }}>.</span></h1>
+        <p className="sub">{setupProfile.intro}</p>
 
         {error && <div className="error-msg">{error}</div>}
         {success && <div className="success-msg">{success}</div>}
 
         <form onSubmit={completeSetup}>
           <div className="card" style={{ marginBottom: 14 }}>
-            <div className="card-title">Start with these 4 things</div>
+            <div className="card-title">Start with these four things</div>
             <div className="setup-start-list">
-              <div><strong>1.</strong> Finish setup and land on your `Briefing`.</div>
-              <div><strong>2.</strong> Add the jobs you are already actively pursuing in `Pipeline`.</div>
-              <div><strong>3.</strong> Add the people tied to that search in `Outreach`.</div>
-              <div><strong>4.</strong> Use `Briefing` in the morning and `Check-in` at the end of the day.</div>
+              {setupProfile.steps.map((step, index) => <div key={step}><strong>{index + 1}.</strong> {step}</div>)}
             </div>
           </div>
 
@@ -164,9 +217,11 @@ export default function SetupWizard({ me, onComplete, onLogout }) {
           </div>
 
           <div className="card" style={{ marginBottom: 14 }}>
-            <div className="card-title">Google Sheets Sync (optional)</div>
+            <div className="card-title">{isAdmin ? 'Program data sync (optional)' : 'Google Sheets sync (optional)'}</div>
             <div className="setup-optional-note">
-              Skip this if you just want to start using the app. You can always connect Sheets later in `Settings`.
+              {isAdmin
+                ? 'Skip this for now unless your program spreadsheet and service account are already prepared. You can configure it later in Operations.'
+                : 'Skip this if you just want to start using the app. You can always connect Sheets later in Settings.'}
             </div>
             <div className="check-row" style={{ marginBottom: 10 }}>
               <input
@@ -237,12 +292,9 @@ export default function SetupWizard({ me, onComplete, onLogout }) {
           </div>
 
           <div className="card" style={{ marginBottom: 14 }}>
-            <div className="card-title">What happens next</div>
-            <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>
-              <div>1. You land on your daily briefing.</div>
-              <div>2. Open `Pipeline` for jobs and `Outreach` for people.</div>
-              <div>3. Use `Briefing` in the morning and `Check-in` at the end of the day.</div>
-              <div>4. Open `Settings` later if you want to connect Sheets or adjust advanced options.</div>
+            <div className="card-title">Your first five minutes</div>
+            <div className="setup-next-list">
+              {setupProfile.next.map((step, index) => <div key={step}><span>{index + 1}</span>{step}</div>)}
             </div>
           </div>
 

@@ -4,6 +4,7 @@ export const ROLE_LABELS = {
   premium_user: 'Premium Member',
   vip_user: 'VIP Member',
   staff: 'Staff',
+  org_admin: 'Organization Admin',
   admin: 'Admin'
 }
 

@@ -11,7 +11,8 @@ import {
   createJobRecommendation,
   createStaffTask,
   createCandidateThread,
-  createCandidateMessage
+  createCandidateMessage,
+  setAppSetting
 } from '../server/db.js'
 
 function isoPlusDays(days) {
@@ -34,9 +35,16 @@ async function main() {
 
   const users = {
     admin: `qa-admin-${suffix}`,
+    manager: `qa-manager-${suffix}`,
     staff: `qa-staff-${suffix}`,
     seekerA: `qa-seeker-a-${suffix}`,
     seekerB: `qa-seeker-b-${suffix}`
+  }
+
+  async function completeDemoProfile(user, displayName) {
+    if (process.env.QA_COMPLETE_ONBOARDING === '0') return
+    await setAppSetting(`user:${user.id}:app.onboarding.completed`, 'true')
+    await setAppSetting(`user:${user.id}:app.profile.display_name`, displayName)
   }
 
   const admin = await createUserAccount({
@@ -50,6 +58,13 @@ async function main() {
     username: users.staff,
     password: basePassword,
     role: 'staff',
+    organizationId: orgId,
+    mustChangePassword
+  })
+  const manager = await createUserAccount({
+    username: users.manager,
+    password: basePassword,
+    role: 'org_admin',
     organizationId: orgId,
     mustChangePassword
   })
@@ -67,6 +82,12 @@ async function main() {
     organizationId: orgId,
     mustChangePassword
   })
+
+  await completeDemoProfile(admin, 'Demo Admin')
+  await completeDemoProfile(manager, 'Demo Manager')
+  await completeDemoProfile(staff, 'Demo Coach')
+  await completeDemoProfile(seekerA, 'Maya Chen')
+  await completeDemoProfile(seekerB, 'Darius Brooks')
 
   await createStaffAssignment({ organizationId: orgId, staffUserId: staff.id, jobSeekerUserId: seekerA.id })
   await createStaffAssignment({ organizationId: orgId, staffUserId: staff.id, jobSeekerUserId: seekerB.id })
@@ -249,6 +270,7 @@ async function main() {
   process.stdout.write(`org_id: ${orgId}\n`)
   process.stdout.write(`password: ${basePassword}\n`)
   process.stdout.write(`admin_username: ${users.admin}\n`)
+  process.stdout.write(`manager_username: ${users.manager}\n`)
   process.stdout.write(`staff_username: ${users.staff}\n`)
   process.stdout.write(`job_seeker_usernames: ${users.seekerA}, ${users.seekerB}\n`)
   process.stdout.write(`draft_recommendation_id: ${recA.id}\n`)

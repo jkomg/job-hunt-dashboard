@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import MessageMarkdown from './MessageMarkdown.jsx'
 import { JOB_SOURCES } from '../constants/jobSources'
+import { Icon } from '../ui-icons.jsx'
 
 async function api(path, options = {}) {
   const res = await fetch(path, { credentials: 'include', ...options })
@@ -13,6 +14,10 @@ function fmt(ts) {
   if (!ts) return '—'
   const d = new Date(Number(ts))
   return Number.isFinite(d.getTime()) ? d.toLocaleString() : '—'
+}
+
+function candidateName(candidate) {
+  return candidate?.displayName || candidate?.username || 'Candidate'
 }
 
 function rel(ts) {
@@ -503,29 +508,21 @@ export default function StaffOps({ me, mode = 'operations', navIntent = null, on
   const showRecommendations = opsTab === 'jobs'
   const showTasks = opsTab === 'support'
   const showThreads = opsTab === 'support'
-  const title = 'Operations'
+  const title = canManageOrg ? 'Portfolio Operations' : 'Coach Operations'
   const isAllScope = queue.summary?.scope === 'all'
 
   return (
     <div>
-      <div className="page-header">
+      <div className="page-header staff-ops-page-head">
         <div>
           <h1>{title}</h1>
           <div className="subtle">
-            Signed in as @{me?.username || 'unknown'} ({me?.role || 'unknown'})
+            {canManageOrg ? 'Coordinate candidates, recommendations, and support across the team.' : 'Move assigned job hunters forward with focused, timely support.'}
           </div>
         </div>
-      </div>
-      <div className="card mb-16" style={{ borderColor: 'var(--accent)' }}>
-        <div className="card-title">Need a quick walkthrough?</div>
-        <div style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 10 }}>
-          The in-app guides now include a staff workflow guide and admin-specific instructions with examples.
-        </div>
-        <div className="quick-actions">
-          <button className="btn btn-ghost btn-sm" onClick={() => onNavigate && onNavigate('guides')}>
-            Open Guides
-          </button>
-        </div>
+        <button className="btn btn-ghost btn-sm" onClick={() => onNavigate && onNavigate('guides')}>
+          <Icon name="book-open" /> View playbook
+        </button>
       </div>
       <div className="quick-actions mb-16">
         <button className={`btn btn-sm ${opsTab === 'queue' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setOpsTab('queue')}>Queue</button>
@@ -643,7 +640,7 @@ export default function StaffOps({ me, mode = 'operations', navIntent = null, on
                   <tr key={c.id}
                     onClick={() => setSelectedCandidateId(String(c.id))}
                     style={{ cursor: 'pointer', background: isSelected ? 'var(--bg-alt)' : undefined, fontWeight: isSelected ? 600 : undefined }}>
-                    <td>{c.username}</td>
+                    <td>{candidateName(c)}</td>
                     <td>{sum.queueSize ?? '—'}</td>
                     <td>{sum.staleTotal ?? '—'}</td>
                     <td>{sum.duePipelineFollowUps ?? '—'}</td>
@@ -668,7 +665,7 @@ export default function StaffOps({ me, mode = 'operations', navIntent = null, on
       {/* Candidate context — everything below is scoped to selected candidate */}
       {!!selectedCandidate && (
         <div style={{ background: 'var(--bg-alt)', borderRadius: 8, padding: '10px 14px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <span style={{ fontWeight: 700 }}>Working on: {selectedCandidate.username}</span>
+          <span style={{ fontWeight: 700 }}>Working on: {candidateName(selectedCandidate)}</span>
           <SignalBadges signals={selectedCandidateSignals} />
           {candidateSupportSummary && (
             <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
@@ -681,7 +678,7 @@ export default function StaffOps({ me, mode = 'operations', navIntent = null, on
           <div style={{ marginLeft: 'auto' }}>
             <select value={selectedCandidateId} onChange={e => setSelectedCandidateId(e.target.value)}
               style={{ fontSize: 13 }}>
-              {(queue.candidates || []).map(c => <option key={c.id} value={c.id}>{c.username}</option>)}
+              {(queue.candidates || []).map(c => <option key={c.id} value={c.id}>{candidateName(c)}</option>)}
             </select>
           </div>
         </div>
@@ -732,7 +729,7 @@ export default function StaffOps({ me, mode = 'operations', navIntent = null, on
             </button>
           </div>
 
-          {!candidateRecommendations.length && <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>No recommendations yet for {selectedCandidate?.username}.</div>}
+          {!candidateRecommendations.length && <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>No recommendations yet for {candidateName(selectedCandidate)}.</div>}
           {!!candidateRecommendations.length && (
             <>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
@@ -869,7 +866,7 @@ export default function StaffOps({ me, mode = 'operations', navIntent = null, on
 
           <div className="card mb-16" ref={threadsSectionRef}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
-              <div className="card-title" style={{ margin: 0 }}>Tasks — {selectedCandidate?.username}</div>
+              <div className="card-title" style={{ margin: 0 }}>Tasks — {candidateName(selectedCandidate)}</div>
               <select value={taskStatusFilter} onChange={e => setTaskStatusFilter(e.target.value)} style={{ fontSize: 12 }}>
                 <option value="open">Open</option>
                 <option value="all">All</option>
@@ -961,7 +958,7 @@ export default function StaffOps({ me, mode = 'operations', navIntent = null, on
 
           <div className="card mb-16">
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
-              <div className="card-title" style={{ margin: 0 }}>Threads — {selectedCandidate?.username}</div>
+              <div className="card-title" style={{ margin: 0 }}>Threads — {candidateName(selectedCandidate)}</div>
               <select value={threadStatusFilter} onChange={e => setThreadStatusFilter(e.target.value)} style={{ fontSize: 12 }}>
                 <option value="open">Open</option>
                 <option value="all">All</option>
@@ -1008,7 +1005,7 @@ export default function StaffOps({ me, mode = 'operations', navIntent = null, on
             {!!selectedThreadId && (
               <div>
                 <div style={{ color: 'var(--text-muted)', fontSize: 12, marginBottom: 8 }}>
-                  Conversation with <strong>@{selectedCandidate?.username || 'candidate'}</strong> in thread <strong>{selectedThread?.topic || 'untitled'}</strong>.
+                  Conversation with <strong>{candidateName(selectedCandidate)}</strong> in thread <strong>{selectedThread?.topic || 'untitled'}</strong>.
                 </div>
                 <div className="quick-actions" style={{ marginBottom: 10 }}>
                   {selectedThread?.status !== 'closed'

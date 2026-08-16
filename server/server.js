@@ -124,6 +124,7 @@ const ROLE_LABELS = {
   premium_user: 'Premium Member',
   vip_user: 'VIP Member',
   staff: 'Staff',
+  org_admin: 'Organization Admin',
   admin: 'Admin'
 }
 const ORG_ADMIN_ROLES = new Set(['admin', 'org_admin'])
@@ -1515,6 +1516,14 @@ app.get('/api/staff/queue', requireAuth, requireStaffOrAdmin, async (req, res) =
       (req.canManageOrg && scope === 'assigned') ? listOrganizationUsers(req.organizationId) : Promise.resolve([])
     ])
     const candidates = (orgUsers || []).filter(u => isCandidateRole(u.role))
+    if (candidates.length) {
+      const displayNameKeys = candidates.map(candidate => userScopedSettingKey(candidate.id, APP_SETTINGS_KEYS.displayName))
+      const displayNames = await getAppSettings(displayNameKeys)
+      for (const candidate of candidates) {
+        const displayName = String(displayNames[userScopedSettingKey(candidate.id, APP_SETTINGS_KEYS.displayName)] || '').trim()
+        candidate.displayName = displayName || candidate.username
+      }
+    }
     const staffUsers = req.canManageOrg
       ? ((scope === 'all' ? orgUsers : allOrgUsers) || []).filter(u => u.role === 'staff' || isOrgAdminRole(u.role))
       : []

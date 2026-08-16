@@ -2,6 +2,30 @@
 
 All notable changes to this project are documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- Public customer pitch page with interactive solo job-hunter and partner-program demos.
+- Sanitized, reusable demo dataset shared by the landing preview and interactive demo.
+- Real sanitized portfolio screenshot and branded social sharing card.
+- Local QA personas for platform admin, organization manager, coach/staff, and job hunters.
+- Pre-deploy production backup artifact and Cloud Run rollback-revision gate.
+
+### Changed
+
+- Admin navigation now separates candidate Portfolio work from technical System operations.
+- Admin and staff onboarding, briefings, and operations copy are role-aware.
+- Candidate operations show display names instead of QA usernames where available.
+- Public demo role changes are shareable and work with browser Back/Forward navigation.
+
+### Fixed
+
+- Admin briefing actions now route into candidate operations instead of returning to the briefing.
+- Demo actions now explain their read-only behavior instead of appearing broken.
+- Sign-in dialog now supports Escape, focus containment, focus restoration, and background scroll locking.
+- Restored missing navigation and guide icons.
+
 ## [1.0.0] - 2026-04-22
 
 ### Added

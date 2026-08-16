@@ -5,6 +5,7 @@ import ForcePasswordChange from './components/ForcePasswordChange.jsx'
 import SetupWizard from './components/SetupWizard.jsx'
 import Dashboard from './components/Dashboard.jsx'
 import QuickJump from './components/QuickJump.jsx'
+import DemoExperience from './components/DemoExperience.jsx'
 const Pipeline = lazy(() => import('./components/Pipeline.jsx'))
 const Contacts = lazy(() => import('./components/Contacts.jsx'))
 const DailyCheckin = lazy(() => import('./components/DailyCheckin.jsx'))
@@ -69,12 +70,18 @@ const STAFF_GROUPS = [
 
 const ADMIN_GROUPS = [
   {
-    label: 'ADMIN',
+    label: 'OVERVIEW',
     items: [
       { id: 'dashboard',          label: 'Briefing',        icon: 'sunrise',        ico: 'oklch(0.70 0.18 60)'  },
-      { id: 'admin_operations',   label: 'Operations',      icon: 'zap',            ico: 'oklch(0.60 0.18 28)'  },
+      { id: 'operations',         label: 'Portfolio',       icon: 'clipboard-list', ico: 'oklch(0.56 0.21 258)' },
+    ]
+  },
+  {
+    label: 'ADMIN',
+    items: [
       { id: 'admin_users',        label: 'User Mgmt',       icon: 'users',          ico: 'oklch(0.56 0.22 268)' },
       { id: 'admin_assignments',  label: 'Assignments',     icon: 'link',           ico: 'oklch(0.62 0.14 300)' },
+      { id: 'admin_operations',   label: 'System',          icon: 'zap',            ico: 'oklch(0.60 0.18 28)'  },
       { id: 'guides',             label: 'Guides',          icon: 'book-open',      ico: 'oklch(0.62 0.10 220)' },
     ]
   },
@@ -163,11 +170,6 @@ function Sidebar({ view, go, groups, staffBadges, memberBadges, pipelineBadgeCou
       </nav>
 
       <div className="sidebar-foot">
-        <div className="identity-chip" title={`role=${me?.role} org=${me?.organizationId || 'unknown'}`}>
-          <strong>{me?.username || '?'}</strong>
-          <span>{roleLabel(me?.role || 'unknown')}</span>
-          {me?.organizationId && <span>{me.organizationId}</span>}
-        </div>
         <button
           className={'nav-item' + (view === 'settings' ? ' active' : '')}
           style={{ '--ico-color': SETTINGS_ITEM.ico }}
@@ -267,6 +269,12 @@ export default function App() {
     }
   })()
   const [authed, setAuthed] = useState(null)
+  const [demoRole, setDemoRole] = useState(() => {
+    try {
+      const demo = new URLSearchParams(window.location.search).get('demo')
+      return ['solo', 'partner'].includes(demo) ? demo : ''
+    } catch { return '' }
+  })
   const [me, setMe] = useState(null)
   const [view, setView] = useState('dashboard')
   const [navIntent, setNavIntent] = useState(null)
@@ -309,6 +317,19 @@ export default function App() {
   }
 
   useEffect(() => { refreshMe() }, [])
+
+  useEffect(() => {
+    function syncPublicRoute() {
+      try {
+        const params = new URLSearchParams(window.location.search)
+        const nextDemo = params.get('demo')
+        setDemoRole(['solo', 'partner'].includes(nextDemo) ? nextDemo : '')
+        setInviteToken(params.get('invite') || '')
+      } catch { /* ignore invalid browser URL state */ }
+    }
+    window.addEventListener('popstate', syncPublicRoute)
+    return () => window.removeEventListener('popstate', syncPublicRoute)
+  }, [])
 
   useEffect(() => {
     if (authed === true && me?.onboardingComplete && !me?.mustChangePassword) trackEvent('app_open')
@@ -455,6 +476,38 @@ export default function App() {
     setInviteToken('')
   }
 
+  function openDemo(role) {
+    const nextRole = role === 'partner' ? 'partner' : 'solo'
+    setDemoRole(nextRole)
+    try {
+      const url = new URL(window.location.href)
+      url.searchParams.delete('invite')
+      url.searchParams.set('demo', nextRole)
+      window.history.pushState({}, '', `${url.pathname}${url.search}${url.hash}`)
+    } catch { /* ignore URL update errors */ }
+  }
+
+  function closeDemo() {
+    setDemoRole('')
+    try {
+      const url = new URL(window.location.href)
+      url.searchParams.delete('demo')
+      window.history.pushState({}, '', `${url.pathname}${url.search}${url.hash}`)
+    } catch { /* ignore URL update errors */ }
+  }
+
+  function changeDemoRole(role) {
+    const nextRole = role === 'partner' ? 'partner' : 'solo'
+    setDemoRole(nextRole)
+    try {
+      const url = new URL(window.location.href)
+      url.searchParams.set('demo', nextRole)
+      window.history.pushState({}, '', `${url.pathname}${url.search}${url.hash}`)
+    } catch { /* ignore URL update errors */ }
+  }
+
+  if (demoRole) return <DemoExperience key={demoRole} initialRole={demoRole} onExit={closeDemo} onRoleChange={changeDemoRole} />
+
   if (authed === null) {
     return (
       <div className="stage" data-mode={mode} data-accent={accent}>
@@ -467,7 +520,7 @@ export default function App() {
     if (inviteToken) {
       return <Signup inviteToken={inviteToken} onSignup={() => { clearInviteToken(); refreshMe({ resetView: true }) }} onBackToLogin={clearInviteToken} />
     }
-    return <Login onLogin={() => refreshMe({ resetView: true })} />
+    return <Login onLogin={() => refreshMe({ resetView: true })} onDemo={openDemo} />
   }
   if (me?.mustChangePassword) return <ForcePasswordChange onDone={() => refreshMe({ resetView: true })} onLogout={logout} />
   if (!me?.onboardingComplete) return <SetupWizard me={me} onComplete={() => refreshMe({ resetView: true })} onLogout={logout} />
@@ -490,9 +543,9 @@ export default function App() {
       <main className="main">
         <Suspense fallback={<div className="loading"><div className="spin" />Loading workspace…</div>}>
           {view === 'dashboard'      && <Dashboard onNavigate={navigate} me={me} />}
-          {isStaff && view === 'operations'     && <StaffOps me={me} mode="operations" navIntent={navIntent} onNavigate={navigate} />}
-          {isStaff && view === 'staff_tasks'    && <StaffOps me={me} mode="tasks" navIntent={navIntent} onNavigate={navigate} />}
-          {isStaff && view === 'staff_threads'  && <StaffOps me={me} mode="threads" navIntent={navIntent} onNavigate={navigate} />}
+          {isStaffLike && view === 'operations'     && <StaffOps me={me} mode="operations" navIntent={navIntent} onNavigate={navigate} />}
+          {isStaffLike && view === 'staff_tasks'    && <StaffOps me={me} mode="tasks" navIntent={navIntent} onNavigate={navigate} />}
+          {isStaffLike && view === 'staff_threads'  && <StaffOps me={me} mode="threads" navIntent={navIntent} onNavigate={navigate} />}
           {!isStaffLike && view === 'checkin'       && <DailyCheckin navIntent={navIntent} />}
           {!isStaffLike && view === 'pipeline'      && <Pipeline navIntent={navIntent} />}
           {!isStaffLike && view === 'contacts'      && <Contacts />}
