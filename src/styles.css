@@ -2062,7 +2062,7 @@ body {
 .public-signin { justify-self: end; display: flex; align-items: center; gap: 8px; border: 0; background: transparent; color: var(--pitch-ink); font: 600 13px var(--font-sans); cursor: pointer; }
 .public-signin .lucide { transition: transform .2s; }
 .public-signin:hover .lucide { transform: translateX(3px); }
-.public-hero { min-height: 680px; max-width: 1240px; margin: 0 auto; padding: 70px 28px 84px; display: grid; grid-template-columns: .86fr 1.14fr; align-items: center; gap: 58px; position: relative; }
+.public-hero { min-height: calc(100svh - 76px); max-width: 1240px; margin: 0 auto; padding: 70px 28px 84px; display: grid; grid-template-columns: .86fr 1.14fr; align-items: center; gap: 58px; position: relative; }
 .public-hero::before { content: ''; position: absolute; width: 430px; height: 430px; border-radius: 50%; background: var(--pitch-lime); filter: blur(1px); opacity: .32; right: -160px; top: 20px; }
 .public-hero-copy { position: relative; z-index: 1; }
 .public-kicker { display: inline-flex; align-items: center; gap: 8px; color: var(--pitch-green); font: 600 11px var(--font-mono); letter-spacing: .08em; text-transform: uppercase; }
@@ -2108,9 +2108,10 @@ body {
 .public-preview-action strong { display: block; font-size: 12px; }
 .public-preview-action p { color: #bdc8c0; }
 .public-preview-action button { border: 0; color: white; background: transparent; cursor: pointer; }
-.public-audiences { background: var(--pitch-ink); color: white; padding: 96px max(28px, calc((100vw - 1184px) / 2)); }
-.public-section-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 40px; margin-bottom: 46px; }
+.public-audiences { background: var(--pitch-ink); color: white; padding: 84px max(28px, calc((100vw - 1184px) / 2)) 92px; }
+.public-section-head { max-width: 900px; margin-bottom: 42px; }
 .public-section-head > span, .public-bottom-cta > div > span { font: 600 10px var(--font-mono); letter-spacing: .13em; color: #9ab0a0; }
+.public-section-head > span { display: block; margin-bottom: 15px; }
 .public-section-head h2 { font-size: clamp(32px, 4vw, 50px); line-height: 1.08; letter-spacing: -.05em; max-width: 760px; }
 .public-audience-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
 .public-audience-card { padding: 38px; border: 1px solid #ffffff19; border-radius: 22px; position: relative; overflow: hidden; }
