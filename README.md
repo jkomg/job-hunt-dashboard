@@ -127,6 +127,8 @@ From `Settings`:
 - Staff + admin operations: `docs/STAFF_ADMIN_RUNBOOK.md`
 - Staff product scope/spec: `docs/STAFF_OPS_MVP_SPEC.md`
 - Hosted rollout plan: `docs/RR_PLATFORM_RELEASE_PLAN.md`
+- iOS companion blueprint: `docs/IOS_COMPANION_PROJECT_BLUEPRINT.md`
+- iOS companion spike: `ios/JobHuntMobile/README.md`
 - Hosted user handout: `docs/REMOTE_REBELLION_HANDOUT.md`
 - Security checklist: `docs/SECURITY_CHECKLIST.md`
 
