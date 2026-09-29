@@ -13,17 +13,17 @@ Work order:
 5. Distribution for non-technical users
 6. Product polish
 
-## Open Issue Tracker (Phase Alignment)
+## Open Issue Tracker (Phase Alignment; audited August 2026)
 
 | Issue | Title | Phase | Status | Notes |
 | --- | --- | --- | --- | --- |
-| #83 | Phase 0: Hosted v2 platform baseline (DB + tenancy guardrails) | Phase 0 | In Progress | Tenant guards + role boundaries shipped; continue baseline closure items. |
-| #42 | Phase 2: Remote Rebellion staff workspace | Phase 2 | In Progress | Staff briefing/operations/tasks/threads and assignment flow shipped; continue UX refinements. |
-| #43 | Phase 3: DB-first RR integration and Sheets backup | Phase 3 | In Progress | DB-first sync, conflict safety, source observability and cleanup flow shipped. |
-| #44 | Phase 4: Hosted production hardening | Phase 4 | In Progress | Cost controls + ops visibility started; continue production controls. |
-| #45 | Phase 5: Command center product polish | Phase 5 | In Progress | Saved views, source filters, bulk actions, and briefing improvements underway. |
-| #90 | Production readiness: dev/prod split and controlled deployment model | Cross-phase | Open | Not started in this cycle; planned after current usability/ops slices. |
-| #91 | Admin Ops Dashboard: run/schedule/monitor platform jobs from UI | Cross-phase | Open | Next major ops feature (UI scheduling/monitoring). |
+| #83 | Phase 0: Hosted v2 platform baseline (DB + tenancy guardrails) | Phase 0 | Mostly shipped | Verify deployed release-gate evidence before closing. |
+| #42 | Phase 2: Remote Rebellion staff workspace | Phase 2 | MVP shipped | Remaining work is UAT/UX refinement. |
+| #43 | Phase 3: DB-first RR integration and Sheets backup | Phase 3 | Mostly shipped | Remaining work is operational backup/restore proof. |
+| #44 | Phase 4: Hosted production hardening | Phase 4 | Partial | Restore drill, health/error review, and onboarding UAT remain. |
+| #45 | Phase 5: Command center product polish | Phase 5 | Partial | Broader search, review reporting, and polish remain. |
+| #90 | Production readiness: dev/prod split and controlled deployment model | Cross-phase | Partial | Separate environments and promotion boundaries remain. |
+| #91 | Admin Ops Dashboard: run/schedule/monitor platform jobs from UI | Cross-phase | Partial | Scheduler mutation and complete job management remain. |
 
 ## 1) Reliability First (must-have)
 

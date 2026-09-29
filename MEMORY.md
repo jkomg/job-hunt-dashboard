@@ -4,12 +4,14 @@
 - Name: `job-hunt-dashboard`
 - Purpose: multi-role job-search command center — job seekers track their hunt, staff support assigned candidates, admins manage the org. Hosted first; self-host via Docker as secondary.
 - Current operating mode: deployed on Cloud Run with built-in session auth; `hunt.jkomg.us` uses a Cloud Run domain mapping.
-- Latest deployed revision: `job-hunt-dashboard-00062-h27`
+- Latest deployed revision: `job-hunt-dashboard-00127-2dv`
 
 ## Roles
 - `job_seeker`: Briefing, Pipeline, Outreach, Interviews, Events, Check-in, Templates, Watchlist, Settings
 - `staff`: Briefing + Staff Ops (candidate overview, Research & Recommend, Tasks, Threads); can create candidates and self-assign
-- `admin`: all staff capabilities + Team Access, Staff Assignments, Audit Log in Settings
+- `org_admin`: organization administration (users, invites, roles, assignments, audit log) plus staff capabilities
+- `admin`: platform administration; also has organization-admin capabilities where applicable
+- `accelerator_user`, `premium_user`, `vip_user`: organization-sponsored candidate roles; currently permission/service roles, not billing tiers
 
 ## Architecture
 - Frontend: React 18 + Vite (`src/`)
@@ -57,12 +59,30 @@
 ## Settings UI (current)
 - Google Sheets Sync: merged card (health + per-entity status + config + actions + collapsible recent runs)
 - Gmail card is user-scoped, not admin-gated
-- Admin-only: Team Access, Staff Assignments, Audit Log, Backup & Restore
+- Organization-admin-only: Team Access, Staff Assignments, Audit Log, invite/user lifecycle controls
+- Platform-admin-only: global Backup & Restore, cost snapshots, and platform-level organization/membership operations
+
+## Open-issue cross-reference (verified August 2026)
+- #42 Remote Rebellion staff workspace: substantially shipped. Remaining work is UAT/UX refinement, not the original MVP foundation.
+- #43 DB-first RR integration and Sheets backup: substantially shipped. Remaining proof is an operational daily backup plus a documented restore drill and failure-path verification.
+- #44 Hosted production hardening: partially shipped. Remaining pilot gates include production error tracking/health review, restore drill, non-developer onboarding UAT, and any real email delivery path.
+- #83 Hosted v2 platform baseline: largely shipped in code. Reconcile the remaining release-gate documentation and deployed verification before closing.
+- #90 Dev/prod split and controlled deployment: partially shipped as deployment-profile controls; a fully separate promotion process is not evidenced by the repository.
+- #91 Admin Ops Dashboard: partially shipped. Scheduler mutation and complete platform-job management remain open.
+- #114 In-app Action Guide: not implemented as a dedicated DB-backed module; defer for now.
+- #121 User AI credential obfuscation: not implemented; defer unless users will enter provider/API secrets in the pilot.
+- #130 Pricing tiers: intentionally deferred until after the Remote Rebellion pilot.
+
+## Verification baseline
+- `npm run build` passes.
+- `npm run smoke:test` covers health profile, onboarding, backup export/restore, org-admin permissions, cross-user isolation, staff assignment/audit, and sync configuration failure handling.
+- `scripts/release-gate-v2.sh` is the intended hosted release gate.
 
 ## GCP / Deployment
-- Cloud Run revision `job-hunt-dashboard-00062-h27` at 100% traffic
+- Cloud Run revision `job-hunt-dashboard-00127-2dv` at 100% traffic
 - Domain mapping: `hunt.jkomg.us` → CNAME `ghs.googlehosted.com.`
 - Scheduler enabled for daily sync, targets direct Cloud Run URL
+- Backup export is enabled; scheduler job `job-hunt-daily-backup-export` is healthy and writes to `job-hunt-dashboard-backups-494012/job-hunt/`
 - GCP cost controls: Artifact Registry cleanup policy, static asset logging exclusion, $15/month budget alert
 
 ## Notable Risks / Follow-up Areas
@@ -73,3 +93,7 @@
   - add rate limiting + hardening middleware
 - Codebase quality:
   - minimal tests; no integration test coverage for sync conflict behavior or auth-protected endpoints
+- Pilot operations:
+  - hosted Cloud Storage export is verified; Cloud Run restore still needs an operator-recorded drill against a disposable database
+  - no repository evidence of a production error-tracking provider or a complete dev/prod promotion boundary
+  - reminder foundation exists, but outbound email delivery is intentionally not enabled
