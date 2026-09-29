@@ -27,6 +27,45 @@ jobs:
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v2
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Record rollback target
+        run: |
+          revision="$(gcloud run services describe "$SERVICE_NAME" --project "$PROJECT_ID" --region "$REGION" --format='value(status.latestReadyRevisionName)')"
+          test -n "$revision"
+          echo "ROLLBACK_REVISION=$revision" >> "$GITHUB_ENV"
+          echo "Rollback revision: \`$revision\`" >> "$GITHUB_STEP_SUMMARY"
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          REGION: ${{ vars.GCP_REGION }}
+          SERVICE_NAME: ${{ vars.GCP_SERVICE_NAME }}
+
+      - name: Export production backup
+        run: |
+          backup_dir="$RUNNER_TEMP/job-hunt-production-backup"
+          mkdir -p "$backup_dir"
+          export DATABASE_URL="$(gcloud secrets versions access latest --secret=jobhunt-database-url --project "$PROJECT_ID")"
+          export TURSO_AUTH_TOKEN="$(gcloud secrets versions access latest --secret=jobhunt-turso-auth-token --project "$PROJECT_ID")"
+          export BACKUP_OUTPUT_PATH="$backup_dir/backup-before-${GITHUB_SHA}.json"
+          node scripts/export-production-backup.mjs
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Preserve pre-deploy backup
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-backup-before-${{ github.sha }}
+          path: ${{ runner.temp }}/job-hunt-production-backup/*.json
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Deploy to Cloud Run
         env:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}

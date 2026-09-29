@@ -11,10 +11,11 @@ const COMMANDS = [
   { id: 'settings', label: 'Settings', description: 'Manage your workspace', icon: 'settings' },
 ]
 
-export default function QuickJump({ open, onClose, onNavigate }) {
+export default function QuickJump({ open, onClose, onNavigate, availableIds = [] }) {
   const [query, setQuery] = useState('')
   const inputRef = useRef(null)
-  const filtered = COMMANDS.filter(command => {
+  const available = new Set(availableIds)
+  const filtered = COMMANDS.filter(command => available.has(command.id)).filter(command => {
     const haystack = `${command.label} ${command.description}`.toLowerCase()
     return haystack.includes(query.trim().toLowerCase())
   })

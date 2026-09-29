@@ -40,14 +40,18 @@ import {
   ensureInterviewForPipelineStage, backfillInterviewsFromPipeline, applyPipelineStageAutomation,
   recordProductEvent, getProductEventSummary
 } from './db.js'
+import { buildCalendarFeed, buildReminderPreview } from './reminders.js'
 
 const PRODUCT_EVENTS = new Set([
   'app_open',
-  'pipeline_first_job',
-  'outreach_first_contact',
+  'pipeline_created',
+  'contact_created',
   'checkin_completed',
   'followup_resolved',
-  'followup_snoozed'
+  'followup_snoozed',
+  // Backward compatibility for events emitted before the post-merge fix.
+  'pipeline_first_job',
+  'outreach_first_contact'
 ])
 import { runSheetsSync, testSheetsConnection, getSheetsSyncStatus, normalizeSheetsSyncError, getSheetsSchemaReport } from './sheetsSync.js'
 import { getGmailIntegrationConfig, buildGmailAuthUrl, exchangeGmailCode, importEventsFromGmail } from './gmailEvents.js'
@@ -91,6 +95,13 @@ const GMAIL_SETTINGS_KEYS = {
   oauthState: 'gmail.oauth.state',
   oauthStateCreatedAt: 'gmail.oauth.state_created_at'
 }
+const REMINDER_SETTINGS_KEYS = {
+  enabled: 'reminders.enabled',
+  channel: 'reminders.channel',
+  timezone: 'reminders.timezone',
+  sendHour: 'reminders.send_hour',
+  destinationEmail: 'reminders.destination_email'
+}
 const AGENT_SETTINGS_KEYS = {
   enabled: 'agent.enabled',
   provider: 'agent.provider',
@@ -113,6 +124,7 @@ const ROLE_LABELS = {
   premium_user: 'Premium Member',
   vip_user: 'VIP Member',
   staff: 'Staff',
+  org_admin: 'Organization Admin',
   admin: 'Admin'
 }
 const ORG_ADMIN_ROLES = new Set(['admin', 'org_admin'])
@@ -482,6 +494,29 @@ async function clearGmailConnection(organizationId) {
   await setAppSetting(orgScopedSettingKey(organizationId, GMAIL_SETTINGS_KEYS.tokens), '')
   await setAppSetting(orgScopedSettingKey(organizationId, GMAIL_SETTINGS_KEYS.email), '')
   await setAppSetting(orgScopedSettingKey(organizationId, GMAIL_SETTINGS_KEYS.connectedAt), '')
+}
+
+async function getReminderPreferences(userId, fallbackEmail = '') {
+  const keys = Object.values(REMINDER_SETTINGS_KEYS).map(key => userScopedSettingKey(userId, key))
+  const settings = await getAppSettings(keys)
+  const get = key => settings[userScopedSettingKey(userId, key)] ?? ''
+  return {
+    enabled: parseBool(get(REMINDER_SETTINGS_KEYS.enabled), false),
+    channel: get(REMINDER_SETTINGS_KEYS.channel) || 'calendar',
+    timezone: get(REMINDER_SETTINGS_KEYS.timezone) || 'UTC',
+    sendHour: String(get(REMINDER_SETTINGS_KEYS.sendHour) || '08'),
+    destinationEmail: get(REMINDER_SETTINGS_KEYS.destinationEmail) || fallbackEmail || ''
+  }
+}
+
+async function saveReminderPreferences(userId, next = {}) {
+  const prefix = key => userScopedSettingKey(userId, key)
+  if (next.enabled != null) await setAppSetting(prefix(REMINDER_SETTINGS_KEYS.enabled), next.enabled ? 'true' : 'false')
+  if (next.channel != null) await setAppSetting(prefix(REMINDER_SETTINGS_KEYS.channel), String(next.channel))
+  if (next.timezone != null) await setAppSetting(prefix(REMINDER_SETTINGS_KEYS.timezone), String(next.timezone))
+  if (next.sendHour != null) await setAppSetting(prefix(REMINDER_SETTINGS_KEYS.sendHour), String(next.sendHour))
+  if (next.destinationEmail != null) await setAppSetting(prefix(REMINDER_SETTINGS_KEYS.destinationEmail), String(next.destinationEmail).trim().toLowerCase())
+  return getReminderPreferences(userId)
 }
 
 async function saveGmailOauthState(organizationId, state) {
@@ -1481,6 +1516,14 @@ app.get('/api/staff/queue', requireAuth, requireStaffOrAdmin, async (req, res) =
       (req.canManageOrg && scope === 'assigned') ? listOrganizationUsers(req.organizationId) : Promise.resolve([])
     ])
     const candidates = (orgUsers || []).filter(u => isCandidateRole(u.role))
+    if (candidates.length) {
+      const displayNameKeys = candidates.map(candidate => userScopedSettingKey(candidate.id, APP_SETTINGS_KEYS.displayName))
+      const displayNames = await getAppSettings(displayNameKeys)
+      for (const candidate of candidates) {
+        const displayName = String(displayNames[userScopedSettingKey(candidate.id, APP_SETTINGS_KEYS.displayName)] || '').trim()
+        candidate.displayName = displayName || candidate.username
+      }
+    }
     const staffUsers = req.canManageOrg
       ? ((scope === 'all' ? orgUsers : allOrgUsers) || []).filter(u => u.role === 'staff' || isOrgAdminRole(u.role))
       : []
@@ -2377,6 +2420,62 @@ app.get('/api/dashboard', requireAuth, async (req, res) => {
   }
 })
 
+app.get('/api/reminders/preferences', requireAuth, async (req, res) => {
+  try {
+    res.json({ ok: true, preferences: await getReminderPreferences(req.userId, req.userEmail) })
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load reminder preferences' })
+  }
+})
+
+app.put('/api/reminders/preferences', requireAuth, async (req, res) => {
+  try {
+    const body = req.body || {}
+    const channel = String(body.channel || 'calendar').trim()
+    if (!['calendar', 'email_digest'].includes(channel)) return res.status(400).json({ error: 'Unsupported reminder channel' })
+    const timezone = String(body.timezone || 'UTC').trim()
+    try { Intl.DateTimeFormat('en-US', { timeZone: timezone }).format() } catch { return res.status(400).json({ error: 'Invalid timezone' }) }
+    const sendHour = String(body.sendHour ?? '08').padStart(2, '0')
+    if (!/^([01]\d|2[0-3])$/.test(sendHour)) return res.status(400).json({ error: 'Send hour must be between 00 and 23' })
+    const destinationEmail = String(body.destinationEmail ?? req.userEmail ?? '').trim().toLowerCase()
+    if (body.enabled && channel === 'email_digest' && (!destinationEmail || !destinationEmail.includes('@'))) {
+      return res.status(400).json({ error: 'A valid destination email is required for email reminders' })
+    }
+    const preferences = await saveReminderPreferences(req.userId, {
+      enabled: !!body.enabled,
+      channel,
+      timezone,
+      sendHour,
+      destinationEmail
+    })
+    res.json({ ok: true, preferences })
+  } catch (e) {
+    res.status(500).json({ error: 'Could not save reminder preferences' })
+  }
+})
+
+app.get('/api/reminders/preview', requireAuth, async (req, res) => {
+  try {
+    const preferences = await getReminderPreferences(req.userId, req.userEmail)
+    const dashboard = await getDashboardData(dataScope(req))
+    res.json({ ok: true, preferences, preview: buildReminderPreview(dashboard.todayQueue || [], preferences) })
+  } catch (e) {
+    res.status(500).json({ error: 'Could not build reminder preview' })
+  }
+})
+
+app.get('/api/reminders/calendar.ics', requireAuth, async (req, res) => {
+  try {
+    const dashboard = await getDashboardData(dataScope(req))
+    const calendar = buildCalendarFeed({ interviews: dashboard.upcomingInterviews || [], events: dashboard.upcomingEvents || [] })
+    res.setHeader('Content-Type', 'text/calendar; charset=utf-8')
+    res.setHeader('Content-Disposition', 'attachment; filename="job-hunt-reminders.ics"')
+    res.send(calendar)
+  } catch (e) {
+    res.status(500).json({ error: 'Could not export calendar reminders' })
+  }
+})
+
 app.post('/api/analytics/events', requireAuth, async (req, res) => {
   try {
     const eventName = String(req.body?.eventName || '').trim()
@@ -2436,7 +2535,7 @@ app.patch('/api/pipeline/:id/stage', requireAuth, async (req, res) => {
 
 app.patch('/api/pipeline/:id/followup', requireAuth, async (req, res) => {
   try {
-    await updatePipelineFollowUp(req.params.id, req.body.date, dataScope(req))
+    await updatePipelineFollowUp(req.params.id, req.body.date, dataScope(req), req.body.nextActionDate)
     res.json({ ok: true })
   } catch (e) {
     res.status(500).json({ error: e.message })

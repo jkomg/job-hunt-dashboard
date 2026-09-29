@@ -257,7 +257,7 @@ function AddModal({ onClose, onSave }) {
         body: JSON.stringify(form)
       })
       if (!r.ok) throw new Error((await r.json()).error)
-      trackEvent('pipeline_first_job')
+      trackEvent('pipeline_created')
       onSave()
     } catch (e) { setError(e.message) }
     finally { setSaving(false) }

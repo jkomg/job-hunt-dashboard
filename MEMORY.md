@@ -4,7 +4,7 @@
 - Name: `job-hunt-dashboard`
 - Purpose: multi-role job-search command center — job seekers track their hunt, staff support assigned candidates, admins manage the org. Hosted first; self-host via Docker as secondary.
 - Current operating mode: deployed on Cloud Run with built-in session auth; `hunt.jkomg.us` uses a Cloud Run domain mapping.
-- Latest deployed revision: `job-hunt-dashboard-00062-h27`
+- Latest deployed revision: `job-hunt-dashboard-00127-2dv`
 
 ## Roles
 - `job_seeker`: Briefing, Pipeline, Outreach, Interviews, Events, Check-in, Templates, Watchlist, Settings
@@ -79,9 +79,10 @@
 - `scripts/release-gate-v2.sh` is the intended hosted release gate; it checks release docs, tenant markers, build, and smoke tests.
 
 ## GCP / Deployment
-- Cloud Run revision `job-hunt-dashboard-00062-h27` at 100% traffic
+- Cloud Run revision `job-hunt-dashboard-00127-2dv` at 100% traffic
 - Domain mapping: `hunt.jkomg.us` → CNAME `ghs.googlehosted.com.`
 - Scheduler enabled for daily sync, targets direct Cloud Run URL
+- Backup export is enabled; scheduler job `job-hunt-daily-backup-export` is healthy and writes to `job-hunt-dashboard-backups-494012/job-hunt/`
 - GCP cost controls: Artifact Registry cleanup policy, static asset logging exclusion, $15/month budget alert
 
 ## Notable Risks / Follow-up Areas
